@@ -1,0 +1,23 @@
+{
+  "name": "bambi_classic",
+  "method": "normalized embedding average",
+  "mix": [
+    [
+      "af_nicole",
+      0.15
+    ],
+    [
+      "af_bella",
+      0.425
+    ],
+    [
+      "af_heart",
+      0.425
+    ]
+  ],
+  "upstream": "hexgrad/Kokoro-82M v1.0 via thewh1teagle model-files-v1.1",
+  "license": "Apache-2.0 (derived voice embedding)",
+  "sha256": "906e9b9050f2bd38b175298e26b6d255e7db0270570fcc66979f6fbccd1cdf61",
+  "referenceRecordings": [],
+  "description": "Original local blend; no commercial reference voice or recordings used."
+}

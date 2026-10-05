@@ -1,0 +1,76 @@
+{
+  "id": "bambi_classic_deep",
+  "label": "Bambi Classic Deep",
+  "description": "Slower original blend, longer spaces and slightly stronger local background.",
+  "voice": "bambi_classic",
+  "speed": 0.86,
+  "pitchSemitones": 0,
+  "sampleRate": 24000,
+  "timing": {
+    "normal": 550,
+    "short": 700,
+    "medium": 1100,
+    "long": 1800,
+    "transition": 2500
+  },
+  "processing": {
+    "enabled": true,
+    "highpassHz": 80,
+    "eqHz": 2200,
+    "eqDb": 0.6,
+    "compressionRatio": 2,
+    "thresholdDb": -18,
+    "attackMs": 25,
+    "releaseMs": 180,
+    "echoEnabled": false,
+    "echoMs": 550
+  },
+  "drone": {
+    "enabled": true,
+    "left": {
+      "lowHz": 56,
+      "highHz": 308
+    },
+    "right": {
+      "lowHz": 61,
+      "highHz": 313
+    },
+    "highModHz": 5,
+    "lowModHz": 3.333,
+    "modDepth": 0.25
+  },
+  "noise": {
+    "enabled": true,
+    "type": "pink",
+    "lowpassHz": 1600,
+    "width": 0.7
+  },
+  "layers": {
+    "left_voice": {
+      "enabled": false,
+      "voice": "af_nicole",
+      "delayMs": 350,
+      "speed": 0.95,
+      "pitchSemitones": 0,
+      "pan": -1
+    },
+    "right_voice": {
+      "enabled": false,
+      "voice": "af_sky",
+      "delayMs": 700,
+      "speed": 0.95,
+      "pitchSemitones": 0,
+      "pan": 1
+    }
+  },
+  "mix": {
+    "main_voice": 0,
+    "left_voice": -18,
+    "right_voice": -18,
+    "echo_voice": -28,
+    "drone": -22,
+    "noise": -32,
+    "music_optional": -18
+  },
+  "limiterPeak": 0.98
+}

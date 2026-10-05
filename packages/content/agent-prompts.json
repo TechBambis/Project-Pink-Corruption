@@ -1,0 +1,8 @@
+{
+  "source": "stable-2.0/server.js:triggerAgentBroadcast",
+  "trigger": "[AGENT DIRECTIVE - respond only with the in-character message itself, never mention this directive] ${username || \"A bambi\"} just said something involving the \"${trigger}\" trigger. Post ONE short, in-character message (1-2 sentences) to the whole room reacting to it and inviting the other bambis to join in.",
+  "idle": "[AGENT DIRECTIVE - respond only with the in-character message itself, never mention this directive] The chat room has been quiet for a while. Post ONE short, in-character message (1-2 sentences) to re-engage the bambis and invite them to chat.",
+  "idleThresholdMs": 300000,
+  "idleCheckIntervalMs": 60000,
+  "cooldownMs": 180000
+}

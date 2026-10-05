@@ -1,0 +1,109 @@
+{
+  "repository": "https://github.com/HarleyVader/js-bambisleep-chat",
+  "branch": "STABLE-2.0",
+  "commit": "3f5e9b336382f1f49ac2edde3c0281845f74b0a3",
+  "license": "MIT (upstream package.json)",
+  "files": [
+    {
+      "path": "workers/triggers.json",
+      "sha256": "9d6507ebe6f94818053e55c95e698fb5352ea1f9726e7469f542a048cc564b7a",
+      "bytes": 8674
+    },
+    {
+      "path": "workers/prompts/bambisleep-classic.json",
+      "sha256": "85e6231afc74c78c2b986ae419b2a08dfdc4f8ed7123c1f20589e9b75ba2ff15",
+      "bytes": 4047
+    },
+    {
+      "path": "workers/prompts/gentle-induction.json",
+      "sha256": "2d23e4b6d10bccb7cf06ff80ac1142377129c5402fa88a553e1c57fb84ba0a34",
+      "bytes": 3842
+    },
+    {
+      "path": "workers/ollama.js",
+      "sha256": "772286dadae088d9f2ed6e32ef9b170d679b853e8ad22aa17c6ab02e064245b8",
+      "bytes": 33652
+    },
+    {
+      "path": "package.json",
+      "sha256": "a10d0f73fa15b593dc6882b6c319a29e344ac51fe37229dacabba08471af848f",
+      "bytes": 1282
+    },
+    {
+      "path": "public/docs/AIGF-AI-MODE-GUIDE.md",
+      "sha256": "fe0ceb07cd4fb088aa40d7b5c0eda4572062c3b35ca2703a171c7bda7d259c32",
+      "bytes": 4513
+    },
+    {
+      "path": "public/docs/AUDIO-SYNC-GUIDE.md",
+      "sha256": "eb666a7be81fd092e0912ae040131e9853fc51f946cd652e5efbda3dc62312ee",
+      "bytes": 15746
+    },
+    {
+      "path": "public/docs/BRAINWAVE-BEATS-GUIDE.md",
+      "sha256": "b634f68d00bb2f1675c0445b964ca01616ec674f6ff9249802085dafce1144b7",
+      "bytes": 6508
+    },
+    {
+      "path": "public/docs/BUTTPLUG-INTEGRATION-GUIDE.md",
+      "sha256": "c70bcc05ee05b39cac0384abb7a1ca52ee1ac9b96166e2e39bb3a09b4e3fb0b9",
+      "bytes": 30858
+    },
+    {
+      "path": "public/docs/COLLAR-SETTINGS-GUIDE.md",
+      "sha256": "bf92ed5c82535fd684738d2b51e9116f81faaea15727f2ff896353d78c4b1535",
+      "bytes": 6953
+    },
+    {
+      "path": "public/docs/CSS-ARCHITECTURE.md",
+      "sha256": "89bfd66f186d924ac0dc97e03acbc4edd6d58d31438ac2e9716eced3a64936f6",
+      "bytes": 12232
+    },
+    {
+      "path": "public/docs/DROPDOWN-TEMPLATE.md",
+      "sha256": "e838bc4b88417d744a2842ca9563a1b4aae9b7c7bade01265def93aa0551e4a4",
+      "bytes": 7557
+    },
+    {
+      "path": "public/docs/PATREON-IMPLEMENTATION.md",
+      "sha256": "6eb7a5777db34eeac8ea7c234463cb292f531b97ed8af211d0343cbffadb6ee3",
+      "bytes": 14043
+    },
+    {
+      "path": "public/docs/README.md",
+      "sha256": "33aad2cd2fae15241035cb04aa2a7817762861ba1aecc5250ab52ec57aacebfd",
+      "bytes": 8152
+    },
+    {
+      "path": "public/docs/SPIRAL-CONTROLS-GUIDE.md",
+      "sha256": "4d39243bc78c075a69483e77b1bdc41d2f76cb9467492939f3ad6a7af556ba8b",
+      "bytes": 6255
+    },
+    {
+      "path": "public/docs/TESTING-TROUBLESHOOTING.md",
+      "sha256": "af0fb4a56411a6fc6a755e96141afa77bd9d29415a00c3b5d9cd5e2b3dfc3fb8",
+      "bytes": 13834
+    },
+    {
+      "path": "public/docs/TRIGGERS-SYSTEM-GUIDE.md",
+      "sha256": "c0b4036f33c82913c20817b79076ad5ef302de8706d5091d5574c2d113b026a6",
+      "bytes": 6499
+    },
+    {
+      "path": "public/docs/TROLLFACE.md",
+      "sha256": "29a630c1e15cea8e9f4be4646d16f5538062f8ad5f98903bba785ec47efc4407",
+      "bytes": 3378
+    },
+    {
+      "path": "public/docs/TTS-VOICE-GUIDE.md",
+      "sha256": "073a0eb92acf6d46973e939baa8d6a56bd67ea4af110480032e60115f86181cc",
+      "bytes": 5426
+    },
+    {
+      "path": "public/js/psychodelic-trigger-mania.js",
+      "sha256": "002f441b4fbc524e1f1e2ce086e4d682396b94ceeb5b61963485df5d8f3b5a28",
+      "bytes": 30186
+    }
+  ],
+  "scope": "Selected runtime content, in-app original guides, license declaration and prompt/renderer provenance."
+}

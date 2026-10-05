@@ -1,0 +1,8 @@
+[
+  { "phase": "induction", "scene": "soft_pink", "opacity": 0.6, "spiral": { "mode": "breathe", "speed": 0.3, "alpha": 0.6, "colorA": "#df0471", "colorB": "#008080" } },
+  { "phase": "deepening", "scene": "deep_tunnel", "opacity": 0.4, "spiral": { "mode": "drift", "speed": 0.5, "alpha": 0.4, "colorA": "#df0471", "colorB": "#240c3b" } },
+  { "phase": "conditioning", "scene": "minimal_dark", "opacity": 0.3, "spiral": { "mode": "classic", "speed": 0.2, "alpha": 0.3, "colorA": "#df0471", "colorB": "#000000" } },
+  { "phase": "anchor", "scene": "spiral_focus", "opacity": 0.25, "spiral": { "mode": "strobe_pulse", "speed": 0.15, "alpha": 0.25, "colorA": "#df0471", "colorB": "#000000", "pulseHz": 0.7 } },
+  { "phase": "awakening", "scene": "soft_pink", "opacity": 0.6, "spiral": { "mode": "breathe", "speed": 0.3, "alpha": 0.6, "colorA": "#df0471", "colorB": "#008080" } },
+  { "phase": "awakening", "phaseProgress": 0.8, "scene": "audio_only", "opacity": 0.1, "fade": true }
+]

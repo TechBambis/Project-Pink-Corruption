@@ -1,0 +1,53 @@
+{
+  "name": "js-bambisleep-chat",
+  "version": "0.3.0",
+  "description": "Modern Node.js/Express/Socket.io/Vanilla JS chat app with TTS, triggers, spiral animations.",
+  "main": "server.js",
+  "type": "commonjs",
+  "author": "HarleyVader",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HarleyVader/js-bambisleep-chat.git"
+  },
+  "keywords": [
+    "chat",
+    "tts",
+    "websocket",
+    "bambi",
+    "triggers",
+    "hypnosis",
+    "spiral"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev:server": "nodemon server.js",
+    "start": "node server.js",
+    "start:mcp-standalone": "node mcp-server/server.js",
+    "test": "node tests/master.test.js",
+    "clean": "node scripts/clean.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "axios": "^1.12.2",
+    "better-sqlite3": "^13.0.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.3",
+    "worker-thread": "^1.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "nodemon": "^3.1.10",
+    "rimraf": "^6.0.1",
+    "vite": "^7.1.12",
+    "ws": "^8.18.3"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "LLAMA_ARG_MODEL_URL": "https://huggingface.co/bartowski/TheDrummer_Cydonia-24B-v4.3-GGUF/resolve/49d2274b89f91c5e4ea21ff342113e1a6235eaf0/TheDrummer_Cydonia-24B-v4.3-Q5_K_M.gguf",
+  "LLAMA_ARG_MODEL": "/tmp/cydonia-q5.gguf",
+  "LLAMA_ARG_ALIAS": "Cydonia-24B-v4.3",
+  "LLAMA_ARG_HOST": "::",
+  "LLAMA_ARG_PORT": "8080",
+  "LLAMA_ARG_CTX_SIZE": "16384",
+  "LLAMA_ARG_N_PARALLEL": "1",
+  "LLAMA_ARG_N_GPU_LAYERS": "99",
+  "LLAMA_ARG_FLASH_ATTN": "on",
+  "LLAMA_ARG_CACHE_TYPE_K": "q8_0",
+  "LLAMA_ARG_CACHE_TYPE_V": "q8_0",
+  "LLAMA_ARG_CACHE_RAM": "0",
+  "LLAMA_ARG_BATCH": "512",
+  "LLAMA_ARG_UBATCH": "128",
+  "LLAMA_ARG_THREADS": "4",
+  "LLAMA_API_KEY": "REPLACE_WITH_YOUR_PRIVATE_MODEL_KEY"
+}

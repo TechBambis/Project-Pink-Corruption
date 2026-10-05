@@ -1,0 +1,36 @@
+[
+  {
+    "repo": "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
+    "revision": "0a41c68809d375475f954be12ba7c40efa56c2a9",
+    "file": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+    "sha256": "2ca636d9e81d3d23ca9b60c234fe185d30ec082eeba69ce770fdb0c76559a4f5",
+    "bytes": 5627044224,
+    "alias": "bambi-qwen35-9b-hauhau:q4_k_m",
+    "license": "apache-2.0",
+    "sampling": {
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "top_k": 20
+    },
+    "text_only": true,
+    "context": 4096,
+    "ollama_manifest": "890cebc450b93f556fe8e239a28dac5ae5c555740c9e33019205f7a64d272c7e"
+  },
+  {
+    "repo": "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive",
+    "revision": "45b6a334b4bcd1d7f37179df58b3b1d66a184e5d",
+    "file": "Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+    "sha256": "d0027dd3a9128d9323e9f282c8bf010a8526c46477584535991dc1a869b56e96",
+    "bytes": 5335285728,
+    "alias": "bambi-gemma4-e4b-hauhau:q4_k_m",
+    "license": "gemma",
+    "sampling": {
+      "temperature": 1.0,
+      "top_p": 0.95,
+      "top_k": 64
+    },
+    "text_only": true,
+    "context": 4096,
+    "ollama_manifest": "b01155e8fedfe4b97caaa9ceae7e1bf176737fe1643ee209b33c606590b8ba53"
+  }
+]

@@ -1,0 +1,31 @@
+[
+  {
+    "repo": "DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF",
+    "revision": "8b192a8e203440d6492a133f6cdfa4bf7bffac98",
+    "file": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-IQ4_XS.gguf",
+    "bytes": 6396325152,
+    "sha256": "a5a35852c81f2c677c9cac813335add3be46328b66d517d94db84b76308b6217",
+    "source": "https://huggingface.co/DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF/tree/8b192a8e203440d6492a133f6cdfa4bf7bffac98",
+    "alias": "bambi-qwen35-9b-defiant-fable:iq4_xs",
+    "backend": "llama.cpp",
+    "license": "apache-2.0",
+    "text_only": true,
+    "context": 16384,
+    "runtime": {
+      "cache_type": "q8_0"
+    }
+  },
+  {
+    "repo": "mradermacher/Qwen3.5-text-9B-NSFW-RP-RolePlay-i1-GGUF",
+    "revision": "07e5b2a936dc9b485082b4118d975362d08f0134",
+    "file": "Qwen3.5-text-9B-NSFW-RP-RolePlay.i1-Q4_K_M.gguf",
+    "bytes": 5629108512,
+    "sha256": "b1f74d215a79eeaa42888f836cf1d37b5ca321b108acdf0b49f914cfda998814",
+    "source": "https://huggingface.co/mradermacher/Qwen3.5-text-9B-NSFW-RP-RolePlay-i1-GGUF/tree/07e5b2a936dc9b485082b4118d975362d08f0134",
+    "alias": "bambi-qwen35-9b-rp:q4_k_m",
+    "backend": "llama.cpp",
+    "context": 16384,
+    "text_only": true,
+    "license": "apache-2.0"
+  }
+]

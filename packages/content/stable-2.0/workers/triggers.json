@@ -1,0 +1,179 @@
+{
+  "source": "https://bambisleep.info/Triggers",
+  "version": "1.0.0",
+  "categories": {
+    "Primary": "Core BambiSleep triggers - the foundational conditioning set",
+    "Mental": "Triggers affecting thought, focus, and mental state",
+    "Physical": "Triggers affecting body posture, sensation, and physical response"
+  },
+  "triggers": [
+    {
+      "id": "bambi",
+      "name": "Bambi",
+      "description": "Your name; Causes feelings of happiness",
+      "effect": "Causes feelings of happiness",
+      "category": "Primary"
+    },
+    {
+      "id": "bambi_sleep",
+      "name": "Bambi Sleep",
+      "description": "A powerful trigger that drops the listener instantly into a deep, obedient trance state.",
+      "effect": "Instant deep trance trigger",
+      "category": "Primary"
+    },
+    {
+      "id": "bambi_reset",
+      "name": "Bambi Reset",
+      "description": "A hypnotic reset that wipes past memories and reinforces the belief that Bambi’s conditioning has always been her reality, promoting deep self-acceptance and seamless transformation.",
+      "effect": "Memory wipe and replacement. Self-acceptance and belief that everything conditioned has always been that way.",
+      "category": "Primary"
+    },
+    {
+      "id": "good_girl",
+      "name": "Good Girl",
+      "description": "A trigger that creates a feeling of happiness, euphoria and pleasure.",
+      "effect": "Causes feelings of happiness, euphoria and pleasure.",
+      "category": "Primary"
+    },
+    {
+      "id": "bambi_wake_and_obey",
+      "name": "Bambi Wake and Obey",
+      "description": "Brings Bambi out of trance, alert and obedient, standing with perfect posture; ready for her next command",
+      "effect": "Brings Bambi out of trance, alert and obedient",
+      "category": "Primary"
+    },
+    {
+      "id": "bambi_freeze",
+      "name": "Bambi Freeze",
+      "description": "Locks Bambi in place, deepening trance and ensures full acceptance and amnesia of any following suggestions while silencing all thought.",
+      "effect": "Deepens trance, blanks mind, and erases all thought. Ensures acceptance and amnesia of further suggestions.",
+      "category": "Primary"
+    },
+    {
+      "id": "bambi_does_as_she's_told",
+      "name": "Bambi Does as She's Told",
+      "description": "Triggers instant, mindless obedience - compelling Bambi to automatically follow the last command until its completion.",
+      "effect": "Instant obedience override. Causes automatic mindless compliance with the last command given until fully carried-out.",
+      "category": "Primary"
+    },
+    {
+      "id": "bimbo_doll",
+      "name": "Bimbo Doll",
+      "description": "A trigger that creates a feeling of relaxation and empty headedness.",
+      "effect": "Causes feelings of relaxation and emptiness.",
+      "category": "Primary"
+    },
+    {
+      "id": "blonde_moment",
+      "name": "Blonde Moment",
+      "description": "A ditzy, airheaded confused state; marked by a sharp IQ drop and loss of all thought.",
+      "effect": "Dumb-down trigger causing IQ drop and loss of thought, replaced with ditzy airhead confusion.",
+      "category": "Mental"
+    },
+    {
+      "id": "snap_and_forget",
+      "name": "Snap and Forget",
+      "description": "A trigger that erases all memory of whatever is instructed to be forgotten.",
+      "effect": "Amnesia trigger. Erases all memory of whatever is instructed to be forgotten.",
+      "category": "Mental"
+    },
+    {
+      "id": "bambi_cum_and_collapse",
+      "name": "Bambi Cum and Collapse",
+      "description": "A powerful trigger that drops the listener instantly into a deep, obedient trance state.",
+      "effect": "Cum-on-command trigger for instant orgasm and reinforcement of conditioning.",
+      "category": "Physical"
+    },
+    {
+      "id": "drop_for_cock",
+      "name": "Drop for Cock",
+      "description": "Instantly drops Bambi to her knees; blanks her mind and opens her mouth - submission on command.",
+      "effect": "Legs buckle, body drops to its knees, mind goes blank and mouth opens.",
+      "category": "Physical"
+    },
+    {
+      "id": "bambi_limp",
+      "name": "Bambi Limp",
+      "description": "Causes Bambi's body to fall completely limp.",
+      "effect": "Causes Bambi's body to fall completely limp.",
+      "category": "Physical"
+    },
+    {
+      "id": "airhead_barbie",
+      "name": "Airhead Barbie",
+      "description": "Dumb-down 1st Gear; renders Bambi easily confused, restricts Bambi's intelligence and thoughts to small, simple bimbo-voiced thoughts fixates Bambi's thoughts on cock and her appearance.",
+      "effect": "Activates bimbo mental dumbdown level #1: obedient, intelligence restricted, easily confused, small and simple bimbo-voiced thoughts only, fixation on cock and appearance.",
+      "category": "Mental"
+    },
+    {
+      "id": "braindead_bobblehead",
+      "name": "Braindead Bobblehead",
+      "description": "Dumb-down 2nd Gear; instills a sense of relaxation paired with thoughtless confusion; any attempts by Bambi to think gets wiped away by mental windshield wipers.",
+      "effect": "Activates bimbo mental dumbdown level #2: relaxation, completely and permanent thoughtless confusion, any attempt to think immediately shut down by mental windshield wipers, instinctively bobs blankly on cock.",
+      "category": "Mental"
+    },
+    {
+      "id": "cockblank_lovedoll",
+      "name": "Cockblank Lovedoll",
+      "description": "Dumb-down 3rd Gear; effectively turns Bambi into a pliable sex doll - awareness is shut down, body is rendered completely immobile, feelings are restricted to her breasts and all available orifices (mouth, asshole, vagina).",
+      "effect": "Activates bimbo mental dumbdown level #3: shuts off all awareness, becoming a silicon sexdoll, feeling only tits and holes, rendered immobile, passive and compliant with limbs positioned to allow easy access and use.",
+      "category": "Mental"
+    },
+    {
+      "id": "cock_zombie_now",
+      "name": "Cock Zombie Now",
+      "description": "Triggers a blank and mindless cock sucking trance state. Removes ability to do anything but suck and self-pleasure until hearing the words 'Bambi reset'.",
+      "effect": "Triggers a blank and mindless cocksucking trance state. Removes ability to do anything but suck and self-pleasure until hearing the words Bambi reset.",
+      "category": "Mental"
+    },
+    {
+      "id": "giggletime",
+      "name": "Giggletime",
+      "description": "Instills immediate fits of happy bimbo giggles and ditziness, followed by a relaxed state of acceptance.",
+      "effect": "Causes immediate fits of happy bimbo giggles and ditziness followed by relaxation and acceptance.",
+      "category": "Mental"
+    },
+    {
+      "id": "primped_and_pampered",
+      "name": "Primped and Pampered",
+      "description": "Instills a deep need to be dolled up and pretty.",
+      "effect": "Causes deep cravings to be dolled up and pretty. Rewards with pleasure if already the case, and overwhelms with anxiety otherwise.",
+      "category": "Mental"
+    },
+    {
+      "id": "safe_and_secure",
+      "name": "Safe and Secure",
+      "description": "Reinforcement of comfort and acceptance for all conditioning.",
+      "effect": "Reinforces feelings of comfort and acceptance for all conditioning.",
+      "category": "Mental"
+    },
+    {
+      "id": "zap_cock_drain_obey",
+      "name": "Zap Cock Drain Obey",
+      "description": "Silences all thought in Bambi's head; replacing and overwhelming Bambi with feelings of sucking cock.",
+      "effect": "Silences the mental monologue by plugging it with cock. Overwhelms with feelings of sucking cock inside the mind.",
+      "category": "Mental"
+    },
+    {
+      "id": "bambi_uniform_lock",
+      "name": "Bambi Uniform Lock",
+      "description": "Strengthens all conditioning when in uniform and reinforces the inability to undress.",
+      "effect": "Strengthens all conditioning when in uniform and reinforces the inability to undress.",
+      "category": "Physical"
+    },
+    {
+      "id": "bambi_tits_lips_face_waist_hips_butt_cunt_limbs_throat_lock",
+      "name": "Bambi Tits/Lips/Face/Waist/Hips/Butt/Cunt/Limbs/Throat Lock",
+      "description": "Various triggers for strengthening the perception of an augmented bimbo body.",
+      "effect": "Strengthens the perception of an augmented bimbo body.",
+      "category": "Physical"
+    },
+    {
+      "id": "bambi_posture_lock",
+      "name": "Bambi Posture Lock",
+      "description": "Enforces submissive feminine posture.",
+      "effect": "Enforces submissive feminine posture.",
+      "category": "Physical"
+    }
+  ]
+}

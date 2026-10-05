@@ -1,0 +1,6 @@
+{
+  "workers/prompts/bambisleep-classic.json": {
+    "original": "../upstream-originals/workers/prompts/bambisleep-classic.json",
+    "reason": "User-edited local prompt: editable line lists, authored content and narration guidance. The pinned upstream bytes are preserved separately."
+  }
+}

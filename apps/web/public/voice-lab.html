@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bambi Voice Lab</title><link rel="icon" href="/mark.svg"><link rel="stylesheet" href="/voice-lab.css"></head>
+<body>
+<header><a href="/">✧ Bambi Local</a><span>Your little sound studio</span><button id="stop" class="stop">Stop playback</button></header>
+<main>
+<div class="lab-heading"><div><h1>Bambi Voice Lab</h1><p>Find that dreamy voice. Make it yours.</p></div><p id="runtime" role="status">Connecting your local voice …</p></div>
+<div class="lab-layout">
+<section class="editor" aria-label="Shape your voice & sound">
+<div class="two"><label>Preset<select id="preset"></select></label><label>Voice<select id="voice"></select></label></div>
+<p id="description" class="hint"></p>
+<div class="two"><label>Second voice<select id="voice2"><option value="">No blend</option></select></label><label>Her share <output id="weight-label">40 %</output><input id="weight" type="range" min="0" max="1" step="0.05" value="0.4"></label></div>
+<p id="mix-expression" class="hint"></p>
+<label>Your words<textarea id="text" rows="7" maxlength="3000"></textarea></label>
+<div class="tools"><button id="calibration" type="button">Calibration text</button><button data-pause="350" type="button">+ 350 ms</button><button data-pause="900" type="button">+ 900 ms</button><button data-pause="1500" type="button">+ 1500 ms</button></div>
+<div class="three"><label>Tempo<input id="speed" type="number" min="0.5" max="1.5" step="0.01"></label><label>Pitch (semitones)<input id="pitch" type="number" min="-4" max="4" step="0.1"></label><label>Phrase pause (ms)<input id="pause" type="number" min="0" max="10000" step="50"></label></div>
+<p class="hint">Pitch changes duration too. [pause:900] adds exactly 900 ms of digital silence.</p>
+<fieldset><legend>Voice processing</legend><label class="check"><input id="processing" type="checkbox"> Subtle processing</label><div class="three"><label>High-pass (Hz)<input id="highpass" type="number" min="0" max="200" step="5"></label><label>Compression<input id="ratio" type="number" min="1" max="4" step="0.1"></label><label>Echo (ms)<input id="echo-delay" type="number" min="0" max="1500" step="50"></label></div><label class="check"><input id="echo" type="checkbox"> Very soft echo</label></fieldset>
+<fieldset><legend>Background</legend><div class="two"><label class="check"><input id="drone" type="checkbox"> Stereo drone</label><label>Drone (dB)<input id="drone-db" type="number" min="-80" max="6" step="1"></label></div><div class="three"><label class="check"><input id="noise" type="checkbox"> Noise bed</label><label>Color<select id="noise-type"><option value="pink">Pink</option><option value="white">White</option><option value="brown">Brown</option></select></label><label>Noise (dB)<input id="noise-db" type="number" min="-80" max="6" step="1"></label></div><div class="two"><label>Filter (Hz)<input id="noise-filter" type="number" min="100" max="10000" step="100"></label><label>Stereo width<input id="noise-width" type="range" min="0" max="1" step="0.05"></label></div></fieldset>
+<fieldset><legend>Extra voices</legend><div class="two"><label class="check"><input id="left-layer" type="checkbox"> Soft voice on the left</label><label class="check"><input id="right-layer" type="checkbox"> Soft voice on the right</label></div><p class="hint">Adjust each layer voice, delay, pan and level separately in the detailed settings.</p></fieldset>
+<details><summary>Edit all settings</summary><label for="config">Full preset as JSON</label><textarea id="config" rows="18" spellcheck="false"></textarea><button id="apply-config" type="button">Apply settings</button><p class="hint">Experimental starting values, rather than historical recording settings.</p></details>
+<div class="render-actions"><button id="render-a" class="primary">Render & listen to A</button><button id="render-b">Render & listen to B</button><button id="cancel" hidden>Cancel render</button></div>
+<p id="status" role="status" aria-live="polite">Choose a preset and find your favorite sound, sweetie.</p>
+<button id="use-preset" type="button">Save voice & preset for sessions</button>
+</section>
+<aside class="listening" aria-label="Listen to the comparison">
+<h2>Your listening corner</h2><p class="hint">Render A, tweak your settings, then render B. Keep both and find your favorite.</p>
+<article id="slot-a"><div class="slot-title"><h3>A</h3><span id="label-a">No render yet</span></div><canvas id="wave-a" width="700" height="100" aria-label="Waveform A"></canvas><audio id="audio-a" controls preload="metadata"></audio><p id="stats-a" class="hint"></p><a id="download-a" hidden download="bambi-a.wav">Download WAV</a></article>
+<article id="slot-b"><div class="slot-title"><h3>B</h3><span id="label-b">No render yet</span></div><canvas id="wave-b" width="700" height="100" aria-label="Waveform B"></canvas><audio id="audio-b" controls preload="metadata"></audio><p id="stats-b" class="hint"></p><a id="download-b" hidden download="bambi-b.wav">Download WAV</a></article>
+<section class="candidate-section"><h2>Clean voices</h2><p class="hint">Same calibration text, same speed, no effects. Listen and choose your favorite voice.</p><div id="candidates"><p>Loading voice comparisons …</p></div></section>
+<section class="candidate-section"><h2>Trigger sounds</h2><p class="hint">Generated fallback sounds for devices without private files. Your own sounds appear below. Sessions use moan → snap → trigger → effect → pause.</p><div id="trigger-samples"><p>Loading sound files …</p></div></section>
+<section class="candidate-section" id="original-samples"><h2>Your local sound collection</h2><p class="hint">Your selected snap, moan, bell and five-second wipers, plus bubble inflation, squeaks and pop. Bubble plays inflation with soft squeaks → suspense → pop → pause. Levels are matched; the drone stays stereo. Choose files, volume and bubble timing on the main page. These are your local clips, not verified Bambi Prime samples.</p><div id="original-sounds-list">Loading your sound clips …</div></section>
+<p class="footnote">Kokoro-82M runs on your CPU. Words, voice and WAV stay local. No accounts or recurring fees.</p>
+</aside>
+</div>
+</main><script type="module" src="/voice-lab.js"></script></body></html>

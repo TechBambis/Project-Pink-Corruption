@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "private": false,
+  "licenseEvidence": "https://github.com/furrz/hypnospiral/blob/56a1acad9a3eed08d077e8d8293a8afbb7454d05/README.md#license",
+  "assets": [
+    {
+      "name": "tick_main",
+      "file": "tick_main.wav",
+      "duration": 0.09399092970521541,
+      "sampleRate": 44100,
+      "channels": 1,
+      "bits": 16,
+      "normalizedPeakDbfs": -12,
+      "sha256": "77ee4ea68dd7db977c00011bab527957f3373e85a17c0cd53c496480f14807aa",
+      "sourceSha256": "9f1f45495923ecb25fdfea9fa7ab33e86c9187bdb1ce0785e3aef43f98b9679b",
+      "gitBlobSha1": "30772ea56fc1fcc56d6fb41fa8c915bedb39551d",
+      "sourceUrl": "https://github.com/furrz/hypnospiral/blob/56a1acad9a3eed08d077e8d8293a8afbb7454d05/web/audio/click1.ogg",
+      "license": "CC0-1.0",
+      "creator": "Kenney",
+      "processing": "Mono downmix, DC removal, 0.25 ms entry / 3 ms exit fades, peak -12 dBFS; no pitch change or reverb."
+    },
+    {
+      "name": "tick_sub",
+      "file": "tick_sub.wav",
+      "duration": 0.05600907029478458,
+      "sampleRate": 44100,
+      "channels": 1,
+      "bits": 16,
+      "normalizedPeakDbfs": -12,
+      "sha256": "d1da1e58d42b15ef69ca66d995e97cd557bd0cf735f03fc3d4072d7d6e38c548",
+      "sourceSha256": "20ac82c952ae5077e118b4126ad33fd47d360df526af46521f475ac89084fd5e",
+      "gitBlobSha1": "9847b236bb539ee5d5d9b7eccd599351b3591baa",
+      "sourceUrl": "https://github.com/furrz/hypnospiral/blob/56a1acad9a3eed08d077e8d8293a8afbb7454d05/web/audio/click2.ogg",
+      "license": "CC0-1.0",
+      "creator": "Kenney",
+      "processing": "Mono downmix, DC removal, 0.25 ms entry / 3 ms exit fades, peak -12 dBFS; no pitch change or reverb."
+    }
+  ]
+}

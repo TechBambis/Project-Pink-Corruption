@@ -1,0 +1,12 @@
+{
+  "repo": "HauhauCS/Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive",
+  "revision": "f12a584fecbeb5f20001130d8ecd66c9327ae685",
+  "file": "Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-IQ3_M.gguf",
+  "bytes": 15440519296,
+  "sha256": "4dd9a27c68bd778ede351a553680a1a6e4ec62e5d383b549892860ea337be0c0",
+  "alias": "bambi-qwen36-35b-hauhau:iq3_m",
+  "license": "apache-2.0",
+  "text_only": true,
+  "backend": "llama.cpp",
+  "context": 16384
+}

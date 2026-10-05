@@ -1,0 +1,76 @@
+{
+  "id": "bambi_voice_test",
+  "label": "Voice Test",
+  "description": "Raw voice comparison with explicit digital pauses.",
+  "voice": "af_heart",
+  "speed": 0.95,
+  "pitchSemitones": 0,
+  "sampleRate": 24000,
+  "timing": {
+    "normal": 350,
+    "short": 550,
+    "medium": 900,
+    "long": 1500,
+    "transition": 2500
+  },
+  "processing": {
+    "enabled": false,
+    "highpassHz": 80,
+    "eqHz": 2200,
+    "eqDb": 0,
+    "compressionRatio": 1.3,
+    "thresholdDb": -18,
+    "attackMs": 25,
+    "releaseMs": 180,
+    "echoEnabled": false,
+    "echoMs": 550
+  },
+  "drone": {
+    "enabled": false,
+    "left": {
+      "lowHz": 56,
+      "highHz": 308
+    },
+    "right": {
+      "lowHz": 61,
+      "highHz": 313
+    },
+    "highModHz": 5,
+    "lowModHz": 3.333,
+    "modDepth": 0.25
+  },
+  "noise": {
+    "enabled": false,
+    "type": "pink",
+    "lowpassHz": 1600,
+    "width": 0.7
+  },
+  "layers": {
+    "left_voice": {
+      "enabled": false,
+      "voice": "af_nicole",
+      "delayMs": 350,
+      "speed": 0.95,
+      "pitchSemitones": 0,
+      "pan": -1
+    },
+    "right_voice": {
+      "enabled": false,
+      "voice": "af_sky",
+      "delayMs": 700,
+      "speed": 0.95,
+      "pitchSemitones": 0,
+      "pan": 1
+    }
+  },
+  "mix": {
+    "main_voice": 0,
+    "left_voice": -18,
+    "right_voice": -18,
+    "echo_voice": -28,
+    "drone": -24,
+    "noise": -34,
+    "music_optional": -18
+  },
+  "limiterPeak": 0.98
+}

@@ -1,0 +1,2 @@
+bleak==3.0.2
+dbus-fast==5.0.4; sys_platform == 'linux'

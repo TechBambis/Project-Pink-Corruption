@@ -1,0 +1,6 @@
+/* SPDX-FileCopyrightText: 2026 BambiOS
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * Separate commercial permissions: see LICENSING.md.
+ */
+
+.preview-stage{background:#20132b;min-height:170px;padding:24px;border-radius:12px;position:relative}.preview-stage #preview-scene{color:#c0a8c7;font-size:12px;margin:0}.preview-stage #caption{font-family:Georgia,serif;font-size:25px;line-height:1.4;max-width:34ch;margin:24px 0 0}#clock{position:absolute;top:24px;right:24px;font-variant-numeric:tabular-nums}#cues{padding:0;list-style:none}#cues li{display:grid;grid-template-columns:5rem 1fr auto;gap:12px;align-items:start;border-bottom:1px solid #50394f;padding:16px 0}#cues time{color:#62cec7;font-variant-numeric:tabular-nums}#cues p{margin:0;line-height:1.5;overflow-wrap:anywhere}#cues button{font-size:12px;padding:6px 9px}.import-label{margin:0;font-size:12px}.import-label input{max-width:190px}nav{font-size:13px}#timeline{height:130px}#timeline-json{font-family:monospace;font-size:12px}

@@ -1,0 +1,80 @@
+{
+  "id": "bambi_classic",
+  "label": "Bambi Classic",
+  "description": "Original Kokoro blend with restrained synthetic stereo layers. Experimental, not historical parameters.",
+  "voice": "bambi_classic",
+  "speed": 0.78,
+  "pitchSemitones": -2,
+  "sampleRate": 24000,
+  "timing": {
+    "normal": 350,
+    "short": 550,
+    "medium": 900,
+    "long": 1500,
+    "transition": 2500
+  },
+  "trigger": {
+    "speedMultiplier": 0.7,
+    "volumeDb": -4
+  },
+  "processing": {
+    "enabled": true,
+    "highpassHz": 80,
+    "eqHz": 1500,
+    "eqDb": 0.3,
+    "compressionRatio": 2,
+    "thresholdDb": -18,
+    "attackMs": 25,
+    "releaseMs": 180,
+    "echoEnabled": false,
+    "echoMs": 550
+  },
+  "drone": {
+    "enabled": true,
+    "left": {
+      "lowHz": 56,
+      "highHz": 308
+    },
+    "right": {
+      "lowHz": 61,
+      "highHz": 313
+    },
+    "highModHz": 0.8,
+    "lowModHz": 0.5,
+    "modDepth": 0.15
+  },
+  "noise": {
+    "enabled": true,
+    "type": "pink",
+    "lowpassHz": 1200,
+    "width": 0.7
+  },
+  "layers": {
+    "left_voice": {
+      "enabled": false,
+      "voice": "af_nicole",
+      "delayMs": 350,
+      "speed": 0.95,
+      "pitchSemitones": 0,
+      "pan": -1
+    },
+    "right_voice": {
+      "enabled": false,
+      "voice": "af_sky",
+      "delayMs": 700,
+      "speed": 0.95,
+      "pitchSemitones": 0,
+      "pan": 1
+    }
+  },
+  "mix": {
+    "main_voice": 0,
+    "left_voice": -18,
+    "right_voice": -18,
+    "echo_voice": -28,
+    "drone": -28,
+    "noise": -38,
+    "music_optional": -18
+  },
+  "limiterPeak": 0.98
+}   

@@ -1,0 +1,259 @@
+{
+  "version": 1,
+  "timing": "moan_snap_speech_effect_pause",
+  "source": "Generated CC0 fallback assets; user-selected private MP3s take precedence locally.",
+  "sounds": {
+    "snap": {
+      "label": "Finger snap",
+      "file": "finger-snap.wav",
+      "duration": 0.18,
+      "gainDb": 0,
+      "cooldownMs": 700
+    },
+    "wiper": {
+      "label": "Wipers · five seconds",
+      "file": "windshield-wiper.wav",
+      "duration": 5,
+      "gainDb": 0,
+      "cooldownMs": 1800
+    },
+    "pop": {
+      "label": "Balloon pop · generated fallback",
+      "file": "balloon-pop.wav",
+      "duration": 0.35,
+      "gainDb": 0,
+      "cooldownMs": 0
+    },
+    "inflate": {
+      "label": "Balloon inflation · generated fallback",
+      "file": "balloon-inflate.wav",
+      "duration": 2.2,
+      "gainDb": 0,
+      "cooldownMs": 0
+    },
+    "squeak": {
+      "label": "Balloon squeak · generated fallback",
+      "file": "balloon-squeak.wav",
+      "duration": 0.45,
+      "gainDb": 0,
+      "cooldownMs": 0
+    },
+    "tick": {
+      "label": "Metronome tick",
+      "file": "metronome-tick.wav",
+      "duration": 0.1,
+      "gainDb": 0,
+      "cooldownMs": 0
+    },
+    "bell": {
+      "label": "Bell · generated fallback",
+      "file": "bell-chime.wav",
+      "duration": 1.5,
+      "gainDb": 0,
+      "cooldownMs": 0
+    },
+    "beep": {
+      "label": "Original chat beep",
+      "file": "trigger-beep.wav",
+      "duration": 0.1,
+      "gainDb": 0,
+      "cooldownMs": 250
+    }
+  },
+  "mappings": [
+    {
+      "trigger": "IQ LOCK",
+      "sound": "wiper",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "IQ DROP",
+      "sound": "wiper",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "BRAINDEAD BOBBLEHEAD",
+      "sound": "wiper",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "AIRHEAD BARBIE",
+      "sound": "wiper",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "MENTAL WINDSHIELD WIPERS",
+      "sound": "wiper",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "WINDSHIELD WIPERS",
+      "sound": "wiper",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "WIPERS",
+      "sound": "wiper",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "BAMBI POP",
+      "sound": "pop",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "BUBBLE",
+      "sound": "pop",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "BUBBLE INDUCTION",
+      "sound": "pop",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "BLONDE MOMENT",
+      "sound": "pop",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "BLANK MINDLESS DOLL",
+      "sound": "pop",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "SNAP AND FORGET",
+      "sound": "bell",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "BAMBI RESET",
+      "sound": "bell",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "BAMBI AWAKENS",
+      "sound": "bell",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    },
+    {
+      "trigger": "RESTRAINED AND MILKED",
+      "sound": "bell",
+      "basis": "User-defined effect after the universal Snap and spoken trigger."
+    }
+  ],
+  "assets": [
+    {
+      "id": "snap",
+      "label": "Finger snap",
+      "file": "finger-snap.wav",
+      "duration": 0.18,
+      "gainDb": 0,
+      "cooldownMs": 700,
+      "channels": 2,
+      "sampleRate": 48000,
+      "bytes": 34604,
+      "sha256": "408a48aab433e4c77d47979f6bd019d6e0e71b3caad7672f20310fb0927c086d",
+      "license": "CC0-1.0",
+      "origin": "Original mathematical synthesis in packages/audio/trigger-synthesis.ts; no reference recording."
+    },
+    {
+      "id": "wiper",
+      "label": "Wipers · five seconds",
+      "file": "windshield-wiper.wav",
+      "duration": 5,
+      "gainDb": 0,
+      "cooldownMs": 1800,
+      "channels": 2,
+      "sampleRate": 48000,
+      "bytes": 960044,
+      "sha256": "1bda3af7ce2c1f7fda17b065228580ea0b51720a79e2e5188acfa1eb27cae402",
+      "license": "CC0-1.0",
+      "origin": "Original mathematical synthesis in packages/audio/trigger-synthesis.ts; no reference recording."
+    },
+    {
+      "id": "pop",
+      "label": "Balloon pop · generated fallback",
+      "file": "balloon-pop.wav",
+      "duration": 0.35,
+      "gainDb": 0,
+      "cooldownMs": 0,
+      "channels": 2,
+      "sampleRate": 48000,
+      "bytes": 67244,
+      "sha256": "64d989cb2139079e453f7d5af393018fdbc4b5f439b03bfed8acf7f05ab79331",
+      "license": "CC0-1.0",
+      "origin": "Original mathematical synthesis in packages/audio/trigger-synthesis.ts; no reference recording."
+    },
+    {
+      "id": "inflate",
+      "label": "Balloon inflation · generated fallback",
+      "file": "balloon-inflate.wav",
+      "duration": 2.2,
+      "gainDb": 0,
+      "cooldownMs": 0,
+      "channels": 2,
+      "sampleRate": 48000,
+      "bytes": 422444,
+      "sha256": "d506e69e82b35744bd7a4e088bcd776874389783053d7b8e741fe417cff677ff",
+      "license": "CC0-1.0",
+      "origin": "Original mathematical synthesis in packages/audio/trigger-synthesis.ts; no reference recording."
+    },
+    {
+      "id": "squeak",
+      "label": "Balloon squeak · generated fallback",
+      "file": "balloon-squeak.wav",
+      "duration": 0.45,
+      "gainDb": 0,
+      "cooldownMs": 0,
+      "channels": 2,
+      "sampleRate": 48000,
+      "bytes": 86444,
+      "sha256": "046c65fb049596b2315b86c8f27a9296e945ad82472a08272d9e5e4762badb1c",
+      "license": "CC0-1.0",
+      "origin": "Original mathematical synthesis in packages/audio/trigger-synthesis.ts; no reference recording."
+    },
+    {
+      "id": "tick",
+      "label": "Metronome tick",
+      "file": "metronome-tick.wav",
+      "duration": 0.1,
+      "gainDb": 0,
+      "cooldownMs": 0,
+      "channels": 2,
+      "sampleRate": 48000,
+      "bytes": 19244,
+      "sha256": "1eaed756306b3fd7d22ec640436e001f3fbf7a0c166af5a5e789759747acf48d",
+      "license": "CC0-1.0",
+      "origin": "Original mathematical synthesis in packages/audio/trigger-synthesis.ts; no reference recording."
+    },
+    {
+      "id": "bell",
+      "label": "Bell · generated fallback",
+      "file": "bell-chime.wav",
+      "duration": 1.5,
+      "gainDb": 0,
+      "cooldownMs": 0,
+      "channels": 2,
+      "sampleRate": 48000,
+      "bytes": 288044,
+      "sha256": "87411c53a03ea7e1b47b4405f3181bc249809676ae7d453692b85dc2ef7c06f8",
+      "license": "CC0-1.0",
+      "origin": "Original mathematical synthesis in packages/audio/trigger-synthesis.ts; no reference recording."
+    },
+    {
+      "id": "beep",
+      "label": "Original chat beep",
+      "file": "trigger-beep.wav",
+      "duration": 0.1,
+      "gainDb": 0,
+      "cooldownMs": 250,
+      "channels": 2,
+      "sampleRate": 48000,
+      "bytes": 19244,
+      "sha256": "ee45548d8cb3dd41093fa9026e1e30016a8e80e212c2cec08bbade91a04284ce",
+      "license": "CC0-1.0",
+      "origin": "Original mathematical synthesis in packages/audio/trigger-synthesis.ts; no reference recording."
+    }
+  ]
+}
