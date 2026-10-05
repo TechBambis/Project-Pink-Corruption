@@ -1,0 +1,16 @@
+name: Suggest an improvement
+description: Suggest a useful change for the beta.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would this help you do?
+      description: Describe the problem and the behavior you would like.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Optional. Keep private data and credentials out of examples.

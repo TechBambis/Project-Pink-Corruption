@@ -4,6 +4,12 @@ A local Bambi companion for chatting, playing your own media and running synchro
 
 Bambi Local has its own TypeScript server, browser UI and local storage. It uses pinned js-bambisleep-chat STABLE-2.0 prompts, triggers, guides and presets; see [source provenance](docs/STABLE_CONTENT.md).
 
+## Joining the private beta
+
+This is the application code for **Project Pink Corruption**. After receiving repository access, clone the repository and follow the application setup below. Only run native provisioning on the documented Linux environment; Windows and macOS testers should wait for a verified platform setup.
+
+Keep your checkout up to date with `git pull --ff-only`. Use **Issues → Beta bug report** for problems and include the tested commit (`git rev-parse --short HEAD`), platform and reproduction steps. Remove private data from logs and screenshots. Bug reports and suggestions do not need a CLA; code contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Current platform support
 
 The native setup currently targets the documented Fedora/Linux x64 environment. Windows and Apple Silicon macOS installation and service lifecycle have not been verified. The web frontend building successfully does not establish native AI/audio support on those platforms.
@@ -92,6 +98,7 @@ The repository contains application code, setup/lifecycle scripts, runtime asset
 - [ARCHITECTURE.md](ARCHITECTURE.md): application modules, clocks, requests and service lifecycle.
 - [VERSIONS.md](VERSIONS.md): dependency and runtime pins.
 - [LOCAL_SECURITY.md](docs/LOCAL_SECURITY.md): loopback admission, service credentials and remaining limits.
+- [SECURITY.md](SECURITY.md): how to report a vulnerability during the private beta.
 - [LOCAL_AUDIO.md](docs/LOCAL_AUDIO.md) and [LOCAL_AUDIO_LICENSES.md](docs/LOCAL_AUDIO_LICENSES.md): audio setup, voice tools and licensing.
 - [CLOUD_COMPUTE.md](docs/CLOUD_COMPUTE.md): optional cloud connection and provisioning.
 - [DEVICES.md](docs/DEVICES.md): optional BLE setup and controls.

@@ -1,0 +1,45 @@
+name: Beta bug report
+description: Report an installation problem, crash or unexpected behavior.
+labels: [bug, beta]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is a development beta. Native setup currently targets Linux; Windows and macOS are not yet verified.
+        Share only the smallest useful example. Remove tokens, private paths, conversations and recordings from logs and screenshots.
+        For a security vulnerability, follow [SECURITY.md](https://github.com/BambiOS/Project-Pink-Corruption/blob/main/SECURITY.md) instead.
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      description: The commit you tested, or the date of your checkout if unsure.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - Windows (native setup not verified)
+        - macOS (native setup not verified)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS version, Node version and browser; RAM/GPU only if relevant. Avoid identifying details.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What did you do, what happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Optional. Check for private data before submitting.

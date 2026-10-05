@@ -44,6 +44,7 @@ id_ed25519*
 !/LICENSING.md
 !/CLA.md
 !/CONTRIBUTING.md
+!/SECURITY.md
 !/LICENSE*.md
 !/NOTICE*.md
 /docs/*
