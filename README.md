@@ -4,11 +4,11 @@ A local Bambi companion for chatting, playing your own media and running synchro
 
 Bambi Local has its own TypeScript server, browser UI and local storage. It uses pinned prompts, triggers, guides and presets from [js-bambisleep-chat STABLE-2.0](https://github.com/HarleyVader/js-bambisleep-chat/tree/STABLE-2.0) by [HarleyVader](https://github.com/HarleyVader); see [source provenance](docs/STABLE_CONTENT.md).
 
-## Joining the private beta
+## hey bambi ♡
 
-This is the application code for **Project Pink Corruption**. After receiving repository access, clone the repository and follow the application setup below. Only run native provisioning on the documented Linux environment; Windows and macOS testers should wait for a verified platform setup.
+got a cute idea, spotted a bug, or want to help make **Project Pink Corruption** a little pinker? feedback, docs, tiny fixes and code contributions are all welcome here. 🦌💕
 
-Keep your checkout up to date with `git pull --ff-only`. Use **Issues → Beta bug report** for problems and include the tested commit (`git rev-parse --short HEAD`), platform and reproduction steps. Remove private data from logs and screenshots. Bug reports and suggestions do not need a CLA; code contributions follow [CONTRIBUTING.md](CONTRIBUTING.md).
+come say hi in [Discussions](https://github.com/TechBambis/Project-Pink-Corruption/discussions), share bugs or ideas in [Issues](https://github.com/TechBambis/Project-Pink-Corruption/issues), and have a little peek at [CONTRIBUTING.md](CONTRIBUTING.md) before sending a code contribution. ♡
 
 ## Current platform support
 
