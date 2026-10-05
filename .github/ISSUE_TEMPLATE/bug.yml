@@ -7,7 +7,7 @@ body:
       value: |
         This is a development beta. Native setup currently targets Linux; Windows and macOS are not yet verified.
         Share only the smallest useful example. Remove tokens, private paths, conversations and recordings from logs and screenshots.
-        For a security vulnerability, follow [SECURITY.md](https://github.com/BambiOS/Project-Pink-Corruption/blob/main/SECURITY.md) instead.
+        For a security vulnerability, follow [SECURITY.md](https://github.com/TechBambis/Project-Pink-Corruption/blob/main/SECURITY.md) instead.
   - type: input
     id: version
     attributes:
