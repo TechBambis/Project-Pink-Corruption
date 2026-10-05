@@ -2,7 +2,7 @@
 
 A local Bambi companion for chatting, playing your own media and running synchronized voice, visuals and sound. Pink on the outside, quite a bit of timing machinery underneath 🦌💕
 
-Bambi Local has its own TypeScript server, browser UI and local storage. It uses pinned js-bambisleep-chat STABLE-2.0 prompts, triggers, guides and presets; see [source provenance](docs/STABLE_CONTENT.md).
+Bambi Local has its own TypeScript server, browser UI and local storage. It uses pinned prompts, triggers, guides and presets from [js-bambisleep-chat STABLE-2.0](https://github.com/HarleyVader/js-bambisleep-chat/tree/STABLE-2.0) by [HarleyVader](https://github.com/HarleyVader); see [source provenance](docs/STABLE_CONTENT.md).
 
 ## Joining the private beta
 
