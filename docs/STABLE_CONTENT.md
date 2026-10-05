@@ -1,6 +1,6 @@
 # STABLE-2.0 content in Bambi Local
 
-Our UI remains the product UI. The content reference is [HarleyVader/js-bambisleep-chat, STABLE-2.0](https://github.com/HarleyVader/js-bambisleep-chat/tree/STABLE-2.0), pinned at `3f5e9b336382f1f49ac2edde3c0281845f74b0a3`.
+Our UI remains the product UI. The content reference is [HarleyVader/js-bambisleep-chat, STABLE-2.0](https://github.com/HarleyVader/js-bambisleep-chat/tree/STABLE-2.0), pinned at [commit `3f5e9b336382f1f49ac2edde3c0281845f74b0a3`](https://github.com/HarleyVader/js-bambisleep-chat/tree/3f5e9b336382f1f49ac2edde3c0281845f74b0a3).
 
 `packages/content/stable-2.0/manifest.json` records 20 selected upstream files with byte sizes and SHA-256: both prompt JSON files, the 24-trigger database, 14 original guides displayed in the app, the upstream license declaration, the prompt-test reference worker and the renderer reference. The Classic prompt has an explicit local override; its original pinned bytes are preserved under `packages/content/upstream-originals/`, as identified in `packages/content/local-overrides.json`. The other selected files retain their pinned bytes. The old website, unrelated CSS/assets and upstream server/configuration are not shipped. Only the original Markdown guides are served under `/content/stable-2.0/public/docs/`.
 
@@ -21,6 +21,6 @@ Our integration uses one session audio clock, one render loop, our pause/stop co
 
 Community rooms, account/subscription UI, Git watcher, platform-side downloads and camera calibration are not activated by this content migration. Original guides describe the upstream project; Bambi Local setup and support are documented in this repository's own setup guides. Original trigger events remain visible DOM events; no device is automatically connected.
 
-Attribution: upstream `package.json` declares MIT and author HarleyVader. The upstream snapshot has no standalone LICENSE file; the standard MIT notice is recorded in `docs/LICENSE.stable2` with this provenance. Existing backup2 Apache-2.0 attribution/license is retained for the previously imported geometry.
+Attribution: upstream `package.json` declares MIT and author [HarleyVader](https://github.com/HarleyVader). The upstream snapshot has no standalone LICENSE file; the standard [MIT notice](LICENSE.stable2) is retained with this provenance. Existing backup2 Apache-2.0 attribution/license is retained for the previously imported geometry.
 
 Verification: `tests/content.test.ts` verifies the selected file set and pinned hashes, using the separately preserved original for the explicit local override, validates the editable override format, and calls the actual upstream prompt-building code to verify both templates byte-for-byte with fallback/custom triggers and collar settings. Application route tests check that the 14 in-app guides remain available and reference worker/manifest files are not served.

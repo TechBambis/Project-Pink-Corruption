@@ -1,5 +1,7 @@
 // @ts-nocheck
 // Derived from STABLE-2.0, 3f5e9b3; unchanged source is in packages/content/stable-2.0.
+// Upstream: https://github.com/HarleyVader/js-bambisleep-chat/blob/3f5e9b336382f1f49ac2edde3c0281845f74b0a3/public/js/psychodelic-trigger-mania.js
+// Original attribution and MIT notice: docs/LICENSE.stable2.
 // The host supplies its canvas and session clock; this class has no separate RAF.
 // Enhanced Psychedelic Spiral Implementation - WebGL-based with Authentic p5.js Recreation
 // Integrated from js-psychodelic-trigger-mania repository with WebGL optimization

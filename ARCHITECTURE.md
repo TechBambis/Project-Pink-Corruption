@@ -1,6 +1,6 @@
 # Local companion architecture
 
-Bambi Local is a local companion runtime using pinned js-bambisleep-chat STABLE-2.0 content. It has its own UI, server, storage and process lifecycle. Reused prompts, triggers, guides and presets are recorded in [STABLE_CONTENT.md](docs/STABLE_CONTENT.md), including the explicit Classic prompt override and preserved upstream originals.
+Bambi Local is a local companion runtime using pinned [js-bambisleep-chat STABLE-2.0](https://github.com/HarleyVader/js-bambisleep-chat/tree/STABLE-2.0) content. It has its own UI, server, storage and process lifecycle. Reused prompts, triggers, guides and presets are recorded in [STABLE_CONTENT.md](docs/STABLE_CONTENT.md), including the explicit Classic prompt override and preserved upstream originals.
 
 [apps/server/index.ts](apps/server/index.ts) serves a Vite-built HTML/CSS/TypeScript browser app and a localhost WebSocket. The backend uses Node 22.13+, Express 5, `ws` and Zod; persistence uses Node's built-in SQLite API. Shared TypeScript modules support the main app and the optional Firefox content overlay. Python provides the Kokoro service, provisioning utilities and optional BLE bridge.
 

@@ -24,7 +24,7 @@ Existing license notices override the default project license for the identified
 
 | Component | Retained terms and provenance |
 | --- | --- |
-| Pinned `packages/content/stable-2.0/` source/assets and `packages/content/upstream-originals/`, including the locally modified Classic prompt | [STABLE-2.0 MIT notice](docs/LICENSE.stable2), [provenance and modifications](docs/STABLE_CONTENT.md) |
+| Pinned [js-bambisleep-chat STABLE-2.0](https://github.com/HarleyVader/js-bambisleep-chat/tree/STABLE-2.0) source/assets in `packages/content/stable-2.0/` and `packages/content/upstream-originals/`, including the locally modified Classic prompt | [STABLE-2.0 MIT notice](docs/LICENSE.stable2), [provenance and modifications](docs/STABLE_CONTENT.md) |
 | Adapted `packages/visuals/stable-renderer.ts` | STABLE-2.0 MIT notice and provenance above |
 | Kokoro-derived `voices/bambi_classic` embedding | [Apache-2.0 model license](docs/licenses/KOKORO-APACHE-2.0.txt) and [modification notice](docs/licenses/KOKORO-ATTRIBUTION.md) |
 | Public sound assets | Per-asset declarations and provenance in [audio notices](docs/LOCAL_AUDIO_LICENSES.md), including CC0 assets |

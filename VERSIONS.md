@@ -35,7 +35,7 @@ Native provisioning/lifecycle currently targets Linux. Machine-specific kernel, 
 
 ## Reused content and licenses
 
-STABLE-2.0 source is pinned to commit `3f5e9b336382f1f49ac2edde3c0281845f74b0a3`. The manifest identifies 20 selected content/provenance files; the editable Classic prompt has an explicit local override and its original is preserved separately. Regular content tests verify the selected files, pinned hashes and prompt compatibility.
+[js-bambisleep-chat STABLE-2.0](https://github.com/HarleyVader/js-bambisleep-chat/tree/STABLE-2.0) source is pinned to [commit `3f5e9b336382f1f49ac2edde3c0281845f74b0a3`](https://github.com/HarleyVader/js-bambisleep-chat/tree/3f5e9b336382f1f49ac2edde3c0281845f74b0a3). The manifest identifies 20 selected content/provenance files; the editable Classic prompt has an explicit local override and its original is preserved separately. Regular content tests verify the selected files, pinned hashes and prompt compatibility.
 
 [STABLE_CONTENT.md](docs/STABLE_CONTENT.md) records modifications and provenance. Third-party [content notices](docs/LICENSE.stable2), [geometry license](docs/LICENSE.backup2) and [audio licenses](docs/LOCAL_AUDIO_LICENSES.md) remain included. Original project code is licensed under AGPL-3.0-only; [LICENSING.md](LICENSING.md) explains scope and separately negotiated commercial permissions.
 
