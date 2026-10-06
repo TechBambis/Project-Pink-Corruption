@@ -60,7 +60,6 @@ jobs:
       BAMBI_CI_VERSION: ${{ inputs.version }}
       BAMBI_QUOTA_RECORD: ${{ inputs.quota_record }}
       BAMBI_REMAINING_ARTIFACT_MIB: ${{ inputs.remaining_artifact_mib }}
-      BAMBI_WINDOWS_TEST_OUTPUT: ${{ runner.temp }}/Bambi Windows qualification
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -71,6 +70,7 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:BAMBI_QUOTA_RECORD)) { throw 'Record the actual pre-dispatch account/quota check.' }
           if ($env:BAMBI_CI_PHASE -notin @('smoke','alpha') -or $env:BAMBI_CI_VERSION -notmatch ('^0\.1\.0-'+$env:BAMBI_CI_PHASE+'\.[1-9][0-9]*$')) { throw 'Phase/version mismatch.' }
           if ($env:BAMBI_REMAINING_ARTIFACT_MIB -notmatch '^\d+$') { throw 'Use a measured nonnegative artifact allowance.' }
+          'BAMBI_WINDOWS_TEST_OUTPUT='+ (Join-Path $env:RUNNER_TEMP 'Bambi Windows qualification') | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Build with local checksum-pinned tools
         shell: pwsh
         run: |
