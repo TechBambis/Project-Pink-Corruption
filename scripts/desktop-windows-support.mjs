@@ -118,7 +118,7 @@ export function peImports(path){
 }
 export function windowsDependencyReport(root){
  const native=files(root).filter(path=>/\.(?:exe|dll|pyd)$/i.test(path)),bundled=new Set(native.map(path=>logicalPath(path).split('/').at(-1).toLowerCase()));
- const system=new Set(('kernel32 kernelbase ntdll advapi32 bcrypt bcryptprimitives user32 gdi32 gdi32full ucrtbase msvcrt mscoree winmm ole32 oleaut32 shell32 shlwapi ws2_32 wldap32 crypt32 cryptbase secur32 sspicli iphlpapi psapi version normaliz dbghelp imagehlp rpcrt4 setupapi powrprof cfgmgr32 ntmarta wintrust combase comctl32 mswsock netapi32 srvcli wkscli winhttp wininet win32u dwmapi uxtheme d3d11 dxgi dxcore d3d12 d3dcompiler_47 gdiplus msacm32 avrt imm32 nsi winspool propsys wtsapi32 shcore winrnr dnsapi dhcpcsvc dhcpcsvc6').split(' ').map(name=>name+'.dll'));
+ const system=new Set(('kernel32 kernelbase ntdll advapi32 bcrypt bcryptprimitives user32 userenv gdi32 gdi32full ucrtbase msvcrt mscoree winmm ole32 oleaut32 shell32 shlwapi ws2_32 wldap32 crypt32 cryptbase secur32 sspicli iphlpapi psapi version normaliz dbghelp imagehlp rpcrt4 setupapi powrprof cfgmgr32 ntmarta wintrust combase comctl32 mswsock netapi32 srvcli wkscli winhttp wininet win32u dwmapi uxtheme d3d11 dxgi dxcore d3d12 d3dcompiler_47 gdiplus msacm32 avrt imm32 nsi winspool propsys wtsapi32 shcore winrnr dnsapi dhcpcsvc dhcpcsvc6').split(' ').map(name=>name+'.dll'));
  const dependencies=native.map(path=>({path:logicalPath(relative(root,path)),imports:peImports(path)}));
  const unresolved=[],optionalDriver=[];
  for(const file of dependencies)for(const dll of file.imports){

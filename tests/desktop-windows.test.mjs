@@ -77,4 +77,5 @@ test('PE dependency inspection catches omitted DLLs and does not accept a build-
  const path=join(folder,'server.exe');writeFileSync(path,pe('VCRUNTIME140.dll'));assert.deepEqual(peImports(path),['vcruntime140.dll']);
  assert.deepEqual(windowsDependencyReport(folder).unresolved,[{path:'server.exe',dll:'vcruntime140.dll'}]);
  writeFileSync(join(folder,'vcruntime140.dll'),pe('KERNEL32.dll'));assert.equal(windowsDependencyReport(folder).unresolved.length,0);
+ writeFileSync(path,pe('USERENV.dll'));assert.equal(windowsDependencyReport(folder).unresolved.length,0,'Windows user-profile API is an inbox dependency');
 });
