@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
+import {connectVoiceTrack,backgroundVoiceWindow} from './dual-voice';
+import type {VoiceTrack} from '../speech/dual-voice';
 import {MoanVariations} from './moan-variations';
 import {BreathAudio,type BreathEvent} from './breath';
-import type {BreathCue} from '../speech/breath';
+import {breathInstruction,type BreathCue} from '../speech/breath';
 import { BackgroundBed } from './background';
 import type { AudioPreset } from './preset';
 import { clamp } from '../safety/actions';
@@ -14,10 +16,12 @@ import { synthesizeTriggerSound } from './trigger-synthesis';
 import { synthesizeEventCue, type EventCueSound } from './event-cues';
 import { giggleOffset } from './giggle';
 import {scriptCueNames,type PlaybackCue} from '../speech/script';
-import {DeviceCommandSchema,type DeviceCommand} from '../devices/commands';
+import {DeviceCommandSchema,type DeviceCommand,type DeviceCueOrigin} from '../devices/commands';
 import {PhaseSoundDefaults,soundDeviceCommands,validSoundCue,type SoundCue,type SoundDesignSettings} from './sound-design';
 import {SoundRenderer,bufferRms,type SoundDesignEvent} from './sound-renderer';
 import {SpeechDucker} from './ducking';
+import {DeliveryMix} from './delivery-mix';
+import type {DeliveryMode} from '../session-director/delivery';
 import type {SessionPhase} from '../session-director/phases';
 import {TickEngine,tickBpmForPhase,validTickCue,type TickCue} from './tick';
 import {VoiceEchoes} from './voice-echoes';
@@ -32,12 +36,16 @@ function firstAudibleOffset(buffer:AudioBuffer,seconds:number){
  return 0;
 }
 export class AudioEngine {
+ private deliveryMix:DeliveryMix;
+ setNarrationDelivery(mode?:DeliveryMode,at=this.context.currentTime){this.deliveryMix.set(mode,at);}
+ private dualGapStart:number|undefined;
+ private dualVoiceCleanup=new Map<AudioBufferSourceNode,()=>void>();
  private eventMode=false;
  private eventGates:Partial<Record<Bus,GainNode>>={};
  private eventVoiceCleanup=new Map<AudioBufferSourceNode,()=>void>();
  private toneEventGate:GainNode;
  /** Presentation multipliers sit after user gains; even a background preset cannot unmute a blank. */
- setEventMode(enabled:boolean){this.stopEventCues();this.eventMode=enabled;if(enabled){this.tickEngine.stop();this.voiceEchoes.stop();this.designSounds.stop();this.breathAudio.stop();this.clearDesignSilence();}else this.clearEventGains();}
+ setEventMode(enabled:boolean){this.setNarrationDelivery();this.stopEventCues();this.eventMode=enabled;if(enabled){this.tickEngine.stop();this.voiceEchoes.stop();this.designSounds.stop();this.breathAudio.stop();this.clearDesignSilence();}else this.clearEventGains();}
  setEventGains(gains:Partial<Record<Bus,number>>){for(const [bus,node] of Object.entries(this.eventGates)){node!.gain.value=clamp(gains[bus as Bus]??1);}this.toneEventGate.gain.value=clamp(gains.drone??1);}
  clearEventGains(){for(const node of Object.values(this.eventGates))node!.gain.value=1;this.toneEventGate.gain.value=1;}
  private eventCueBuffers=new Map<EventCueSound,AudioBuffer>();
@@ -149,12 +157,6 @@ export class AudioEngine {
    if(cue.operation==='off')this.pulseCommand=undefined;
   }
  }
- private dispatchDeviceCue(command:DeviceCommand){
-  if(command.channel==='vib'||command.channel==='both')this.pulseCommand=command.operation==='pattern'&&command.pattern==='pulse'?command:undefined;
-  const synchronized=command.channel==='vib'&&command.operation==='pattern'&&command.pattern==='pulse'&&this.tickEngine.active?
-    {...command,bpm:this.tickEngine.bpm,phaseMs:this.tickEngine.phaseMs()}:command;
-  this.onDeviceCue?.(synchronized);
- }
  get scheduledDesignSounds(){return this.designSounds.events;}
  get activeDesignSounds(){return this.designSounds.activeCount;}
  configureSoundDesign(settings:Partial<SoundDesignSettings>){
@@ -170,7 +172,7 @@ export class AudioEngine {
  private controlSources=new Set<AudioBufferSourceNode>();
  private effectPlayback=new Map<AudioBufferSourceNode,{start:number;duration:number;offset:number;gain:GainNode;output:AudioNode;eventCue?:boolean;eventTrigger?:boolean}>();
  private pausedEffects:{buffer:AudioBuffer;loop:boolean;duration:number;offset:number;gain:number;output:AudioNode;eventCue?:boolean;eventTrigger?:boolean}[]=[];
- onDeviceCue:((command:DeviceCommand,time?:number)=>void)|undefined;
+ onDeviceCue:((command:DeviceCommand,time?:number,origin?:DeviceCueOrigin)=>void)|undefined;
  private foreground=new Map<AudioScheduledSourceNode,{start:number;end:number;bus:'EFFECTS'|'AI_VOICE'}>();
  /** Playback windows exclude queued future speech and trigger silence. Background beds stay independent. */
  foregroundOutputActive(bus?:'EFFECTS'|'AI_VOICE'){if(this.context.state!=='running'||this.muted||this.levels.MASTER===0||bus&&this.eventGates[bus]?.gain.value===0)return false;const now=this.context.currentTime;return [...this.foreground.values()].some(w=>(!bus||w.bus===bus)&&this.levels[w.bus]>0&&now>=w.start&&now<w.end);}
@@ -187,7 +189,7 @@ export class AudioEngine {
  private localSounds=new Map<string,{buffer:AudioBuffer;gainDb:number}>();
  context:AudioContext; nodes:Record<Bus,GainNode>; analyser:AnalyserNode; meter:Uint8Array<ArrayBuffer>; private voiceSources=new Set<AudioBufferSourceNode>();private voicesEnd=0;private effectSources=new Set<AudioScheduledSourceNode>();private soundCache=new Map<TriggerSound,AudioBuffer>();readonly triggerEvents:{trigger:string;kind:TriggerSound;time:number}[]=[];private ambient:AudioBufferSourceNode|null=null;private tones:{left:OscillatorNode;right:OscillatorNode;merger:ChannelMergerNode;gain:GainNode}|null=null;private elementSources=new WeakMap<HTMLMediaElement,MediaElementAudioSourceNode>();
  levels:Record<Bus,number>={MASTER:.7,SESSION:.8,AI_VOICE:.85,AMBIENCE:0,EFFECTS:.2,MIC_MONITOR:0,main_voice:1,left_voice:10**(-18/20),right_voice:10**(-18/20),echo_voice:10**(-28/20),drone:10**(-24/20),noise:10**(-34/20),music_optional:1};muted=false; voiceEpoch=0;
- constructor(){this.context=new AudioContext({latencyHint:'interactive'});this.nodes=Object.fromEntries(buses.map(b=>[b,this.context.createGain()])) as Record<Bus,GainNode>;this.bedDuck=this.context.createGain();this.sessionDuck=this.context.createGain();this.bedDuck.connect(this.nodes.MASTER);this.sessionDuck.connect(this.nodes.MASTER);this.speechDucker=new SpeechDucker(this.context,this.bedDuck.gain,this.sessionDuck.gain);this.analyser=this.context.createAnalyser();this.analyser.fftSize=512;this.meter=new Uint8Array(256);this.voiceAnalyser=this.context.createAnalyser();this.voiceAnalyser.fftSize=512;this.nodes.AI_VOICE.connect(this.voiceAnalyser);for(const bus of buses){this.nodes[bus].gain.value=this.levels[bus];if(bus!=='MASTER'){const target=['main_voice','left_voice','right_voice','echo_voice'].includes(bus)?this.nodes.AI_VOICE:bus==='music_optional'?this.nodes.SESSION:bus==='SESSION'?this.sessionDuck:['drone','noise'].includes(bus)?this.bedDuck:this.nodes.MASTER;if(bus==='MIC_MONITOR')this.nodes[bus].connect(target);else{const gate=this.context.createGain();this.eventGates[bus]=gate;this.nodes[bus].connect(gate);gate.connect(target);}}}this.toneEventGate=this.context.createGain();this.toneEventGate.connect(this.nodes.MASTER);this.silenceGate=this.context.createGain();this.silenceGate.gain.value=1;this.nodes.MASTER.connect(this.silenceGate);this.silenceGate.connect(this.analyser);this.tickEngine=new TickEngine(this.context,this.nodes.EFFECTS);const limiter=this.context.createDynamicsCompressor();limiter.threshold.value=-1;limiter.knee.value=0;limiter.ratio.value=20;limiter.attack.value=.003;limiter.release.value=.12;this.analyser.connect(limiter);limiter.connect(this.context.destination);this.breathAudio=new BreathAudio(this.context,this.nodes.EFFECTS,(source,start,end)=>this.foreground.set(source,{start,end,bus:'EFFECTS'}),source=>this.foreground.delete(source));this.bed=new BackgroundBed(this.context,this.nodes.drone,this.nodes.noise);this.designSounds=new SoundRenderer(this.context,this.nodes.EFFECTS,(source,start,end)=>this.foreground.set(source,{start,end,bus:'EFFECTS'}),source=>this.foreground.delete(source));for(const kind of [...Object.keys(triggerSoundSettings.sounds),'moan'] as (TriggerSound|'moan')[]){const gain=this.context.createGain();gain.gain.value=1;gain.connect(this.nodes.EFFECTS);this.soundBuses[kind]=gain;}this.voiceEchoes=new VoiceEchoes(this.context,this.nodes.main_voice,(source,start,end)=>{this.voiceSources.add(source);this.foreground.set(source,{start,end,bus:'AI_VOICE'});},source=>{this.voiceSources.delete(source);this.foreground.delete(source);});}
+ constructor(){this.context=new AudioContext({latencyHint:'interactive'});this.nodes=Object.fromEntries(buses.map(b=>[b,this.context.createGain()])) as Record<Bus,GainNode>;this.deliveryMix=new DeliveryMix(this.context);this.bedDuck=this.context.createGain();this.sessionDuck=this.context.createGain();this.bedDuck.connect(this.nodes.MASTER);this.sessionDuck.connect(this.nodes.MASTER);this.speechDucker=new SpeechDucker(this.context,this.bedDuck.gain,this.sessionDuck.gain);this.analyser=this.context.createAnalyser();this.analyser.fftSize=512;this.meter=new Uint8Array(256);this.voiceAnalyser=this.context.createAnalyser();this.voiceAnalyser.fftSize=512;this.nodes.AI_VOICE.connect(this.voiceAnalyser);for(const bus of buses){this.nodes[bus].gain.value=this.levels[bus];if(bus!=='MASTER'){const target=['main_voice','left_voice','right_voice','echo_voice'].includes(bus)?this.nodes.AI_VOICE:bus==='music_optional'?this.nodes.SESSION:bus==='SESSION'?this.sessionDuck:['drone','noise'].includes(bus)?this.bedDuck:this.nodes.MASTER;if(bus==='MIC_MONITOR')this.nodes[bus].connect(target);else{const gate=this.context.createGain();this.eventGates[bus]=gate;this.nodes[bus].connect(gate);gate.connect(this.deliveryMix.input(bus,target));}}}this.toneEventGate=this.context.createGain();this.toneEventGate.connect(this.nodes.MASTER);this.silenceGate=this.context.createGain();this.silenceGate.gain.value=1;this.nodes.MASTER.connect(this.silenceGate);this.silenceGate.connect(this.analyser);this.tickEngine=new TickEngine(this.context,this.nodes.EFFECTS);const limiter=this.context.createDynamicsCompressor();limiter.threshold.value=-1;limiter.knee.value=0;limiter.ratio.value=20;limiter.attack.value=.003;limiter.release.value=.12;this.analyser.connect(limiter);limiter.connect(this.context.destination);this.breathAudio=new BreathAudio(this.context,this.nodes.EFFECTS,(source,start,end)=>this.foreground.set(source,{start,end,bus:'EFFECTS'}),source=>this.foreground.delete(source));this.bed=new BackgroundBed(this.context,this.nodes.drone,this.nodes.noise);this.designSounds=new SoundRenderer(this.context,this.nodes.EFFECTS,(source,start,end)=>this.foreground.set(source,{start,end,bus:'EFFECTS'}),source=>this.foreground.delete(source));for(const kind of [...Object.keys(triggerSoundSettings.sounds),'moan'] as (TriggerSound|'moan')[]){const gain=this.context.createGain();gain.gain.value=1;gain.connect(this.nodes.EFFECTS);this.soundBuses[kind]=gain;}this.voiceEchoes=new VoiceEchoes(this.context,this.nodes.main_voice,(source,start,end)=>{this.voiceSources.add(source);this.foreground.set(source,{start,end,bus:'AI_VOICE'});},source=>{this.voiceSources.delete(source);this.foreground.delete(source);});}
  configurePreset(preset:AudioPreset,running:boolean){this.preset=preset;if(running)this.bed.start(preset);else this.bed.stop();if(this.sessionHeld){this.heldBedGains={...this.bed.gains};this.apply('drone',.015);this.apply('noise',.015);}}
  async init(){await this.context.resume();await Promise.all([this.localSoundsPromise??=this.loadLocalSounds(),this.designSounds.init(),this.tickEngine.init()]);}
  useOriginalDrone(enabled:boolean){this.bed.useOriginalDrone(enabled);}
@@ -260,8 +262,7 @@ export class AudioEngine {
   for(const cue of (cues as readonly PlaybackCue[]).slice(0,32)){
    if(typeof cue!=='string'){
     const parsed=DeviceCommandSchema.safeParse(cue);if(!parsed.success)continue;
-    const source=this.context.createBufferSource();source.buffer=this.context.createBuffer(1,1,this.context.sampleRate);source.connect(this.nodes.main_voice);this.controlSources.add(source);
-    source.onended=()=>{this.controlSources.delete(source);source.disconnect();this.dispatchDeviceCue(parsed.data);};source.start(start+offset);continue;
+    this.scheduleDeviceCommands([parsed.data],start+offset);continue;
    }
    if(!scriptCueNames.includes(cue))continue;
    if(cue==='PAUSE_5'||cue==='PAUSE_10'){offset+=cue==='PAUSE_5'?5:10;continue;}
@@ -282,19 +283,34 @@ export class AudioEngine {
   // Send ahead of playback; the controller schedules locally rather than
   // waiting for a main-thread callback after the word has already started.
   for(const command of valid){
-   if(command.channel==='vib'||command.channel==='both')this.pulseCommand=command.operation==='pattern'&&command.pattern==='pulse'?command:undefined;
+   if(command.operation!=='buzz'&&(command.channel==='vib'||command.channel==='both'))this.pulseCommand=command.operation==='pattern'&&command.pattern==='pulse'?command:undefined;
    const synchronized=command.channel==='vib'&&command.operation==='pattern'&&command.pattern==='pulse'&&this.tickEngine.active?{...command,bpm:this.tickEngine.bpm,phaseMs:this.tickEngine.phaseMs(time)}:command;
    this.onDeviceCue?.(synchronized,time);
   }
  }
  async playScriptCues(cues:readonly PlaybackCue[],onEnd:()=>void,ticks:readonly TickCue[]=[]){
+  this.dualGapStart=undefined;
   const start=Math.max(this.context.currentTime+.035,this.voicesEnd),duration=Math.max(.002,this.scheduleScriptCues(cues,start));
   this.applyTicks(ticks,start);
   const source=this.context.createBufferSource();source.buffer=this.context.createBuffer(1,Math.ceil(duration*this.context.sampleRate),this.context.sampleRate);source.connect(this.nodes.main_voice);this.voiceSources.add(source);this.voicesEnd=start+duration;
   source.onended=()=>{this.voiceSources.delete(source);source.disconnect();if(!this.voiceSources.size)this.voicesEnd=this.context.currentTime;onEnd();};source.start(start);
  }
- async playVoice(bytes:ArrayBuffer,onStart:(start:number,duration:number,wordTime:number)=>void,onEnd:()=>void,trigger?:TriggerSequenceOptions,script?:{before?:PlaybackCue[];after?:PlaybackCue[];spokenSeconds?:number;sounds?:SoundCue[];ticks?:TickCue[];devicesAtWord?:DeviceCommand[];text?:string;phase?:SessionPhase;wordStart?:number;conversation?:boolean;breath?:BreathCue;words?:{word:string;atMs:number}[]}){
+ async playVoice(bytes:ArrayBuffer,onStart:(start:number,duration:number,wordTime:number)=>void,onEnd:()=>void,trigger?:TriggerSequenceOptions,script?:{voiceTrack?:VoiceTrack;before?:PlaybackCue[];after?:PlaybackCue[];spokenSeconds?:number;sounds?:SoundCue[];ticks?:TickCue[];devicesAtWord?:DeviceCommand[];text?:string;phase?:SessionPhase;wordStart?:number;conversation?:boolean;breath?:BreathCue;words?:{word:string;atMs:number}[]}){
   const epoch=this.voiceEpoch;const decoded=await this.context.decodeAudioData(bytes);if(epoch!==this.voiceEpoch){onEnd();return;}
+  if(script?.voiceTrack?.speaker==='bambi'){
+   const spoken=Math.min(decoded.duration,Math.max(0,script.spokenSeconds??decoded.duration));
+   const window=backgroundVoiceWindow(this.context.currentTime,this.voicesEnd,this.dualGapStart,spoken,decoded.duration,script.voiceTrack.reverbMs/1000);
+   this.dualGapStart=undefined;
+   const mono=this.context.createBuffer(1,Math.ceil(window.duration*decoded.sampleRate),decoded.sampleRate),samples=mono.getChannelData(0);
+   for(let ch=0;ch<decoded.numberOfChannels;ch++){const input=decoded.getChannelData(ch);for(let i=0;i<Math.min(input.length,Math.ceil(spoken*decoded.sampleRate));i++)samples[i]+=input[i]/decoded.numberOfChannels;}
+   const node=this.context.createBufferSource();node.buffer=mono;
+   const cleanup=connectVoiceTrack(this.context,node,this.nodes.main_voice,script.voiceTrack);this.dualVoiceCleanup.set(node,cleanup);
+   this.voiceSources.add(node);this.voicesEnd=window.end;this.foreground.set(node,{start:window.start,end:window.start+spoken,bus:'AI_VOICE'});
+   this.speechDucker.schedule(node,window.start,window.start+spoken,false);
+   onStart(window.start,window.duration,window.start+(script.wordStart??0));
+   node.onended=()=>{this.foreground.delete(node);this.voiceSources.delete(node);this.speechDucker.forget(node);cleanup();this.dualVoiceCleanup.delete(node);if(!this.voiceSources.size)this.voicesEnd=this.context.currentTime;onEnd();};node.start(window.start);return;
+  }
+  this.dualGapStart=undefined;
   const triggerEnabled=!!trigger&&trigger.sequenceEnabled!==false;
   const design=!script?.breath&&!(trigger&&isSpokenOneShot(trigger.trigger))&&(!script?.conversation||triggerEnabled)&&this.designSettings.enabled&&!!script?.text?.trim();
   const requested=(Array.isArray(script?.sounds)?script.sounds:[]).filter(validSoundCue).slice(0,8);
@@ -313,7 +329,7 @@ export class AudioEngine {
   const breathEvent=script?.breath?this.breathAudio.schedule(script.breath,wordTime,rms,this.breathSoundEnabled):undefined;
   if(breathEvent)this.onBreath?.(breathEvent);
   this.breathNextWord=breathEvent?wordTime+breathEvent.duration:0;
-  const echoEnd=script?.breath||trigger&&isSpokenOneShot(trigger.trigger)?spokenEnd:this.voiceEchoes.schedule(decoded,wordTime,originalSpoken,wordOffset,script?.phase??this.echoPhase);
+  const echoEnd=script?.voiceTrack||script?.breath||breathInstruction(script?.text??'')||trigger&&isSpokenOneShot(trigger.trigger)?spokenEnd:this.voiceEchoes.schedule(decoded,wordTime,originalSpoken,wordOffset,script?.phase??this.echoPhase);
   let effectsEnd=Math.max(spokenEnd,echoEnd,breathEvent?wordTime+breathEvent.duration:0),automaticPause=trigger?0:Math.max(0,decoded.duration-originalSpoken);
   const handled=new Set<string>();
   if(trigger){
@@ -348,6 +364,7 @@ export class AudioEngine {
    this.onDesignSound?.(this.designSounds.events.at(-1)!);
   }
   if(script?.devicesAtWord?.length)this.scheduleDeviceCommands(script.devicesAtWord,wordTime);
+  else if(triggerEnabled&&!isSpokenOneShot(trigger!.trigger)&&!this.sessionHeld)this.onDeviceCue?.({type:'device',channel:'vib',operation:'buzz',intensity:.1,durationMs:150},wordTime,'speech');
   else if(designCount&&designed.length&&!script?.conversation)this.scheduleDeviceCommands(soundDeviceCommands(designed[0].cue,this.designSettings.bassFallback),wordTime);
   const after=script?.after??[],explicitPause=after.some(cue=>cue==='PAUSE_5'||cue==='PAUSE_10');
   const afterStart=effectsEnd+post,afterDuration=this.scheduleScriptCues(after,afterStart);
@@ -361,13 +378,19 @@ export class AudioEngine {
    this.silenceGate.gain.setValueAtTime(1,Math.max(start,silenceStart-.003));this.silenceGate.gain.linearRampToValueAtTime(0,silenceStart);
    this.silenceGate.gain.setValueAtTime(0,silenceEnd);this.silenceGate.gain.setValueAtTime(1,silenceEnd);
   }
-  const node=this.context.createBufferSource();node.buffer=audio;node.connect(this.nodes.main_voice);this.voicesEnd=start+audio.duration;this.voiceSources.add(node);
+  const node=this.context.createBufferSource();node.buffer=audio;
+  const cleanup=script?.voiceTrack?connectVoiceTrack(this.context,node,this.nodes.main_voice,script.voiceTrack):()=>node.disconnect();
+  if(script?.voiceTrack)this.dualVoiceCleanup.set(node,cleanup);else node.connect(this.nodes.main_voice);
+  this.voicesEnd=start+audio.duration;
+  // Effects and trigger tails finish before the background speaks. Short pauses
+  // remain silent; missing eligible gaps become a new gap after the Owner.
+  if(script?.voiceTrack&&pause>=.9)this.dualGapStart=afterStart+afterDuration;this.voiceSources.add(node);
   this.speechDucker.schedule(node,wordTime,Math.max(spokenEnd,echoEnd),!!trigger);
   this.foreground.set(node,{start:spokenStart,end:spokenEnd,bus:'AI_VOICE'});
-  onStart(spokenStart,audio.duration-(spokenStart-start),wordTime);node.onended=()=>{this.foreground.delete(node);this.voiceSources.delete(node);this.speechDucker.forget(node);node.disconnect();if(!this.voiceSources.size)this.voicesEnd=this.context.currentTime;onEnd();};node.start(start);
+  onStart(spokenStart,audio.duration-(spokenStart-start),wordTime);node.onended=()=>{this.foreground.delete(node);this.voiceSources.delete(node);this.speechDucker.forget(node);cleanup();this.dualVoiceCleanup.delete(node);if(!this.voiceSources.size)this.voicesEnd=this.context.currentTime;onEnd();};node.start(start);
  }
 
- stopVoice(fade=true,preserveSession=false){this.voiceEchoes.stop();this.breathNextWord=0;this.breathAudio.stop();if(preserveSession)this.clearDesignSilence();else this.stopEffects();if(!preserveSession){this.tickEngine.stop();this.tickDefaultBpm=-1;this.pulseCommand=undefined;}for(const source of this.controlSources){source.onended=null;try{source.stop();}catch{}source.disconnect();}this.controlSources.clear();this.voiceEpoch++;const p=this.nodes.AI_VOICE.gain;p.cancelScheduledValues(this.context.currentTime);p.setTargetAtTime(0,this.context.currentTime,.008);for(const node of this.voiceSources){this.foreground.delete(node);node.onended=null;try{node.stop(this.context.currentTime+(fade?.035:0));}catch{}}this.voiceSources.clear();for(const cleanup of this.eventVoiceCleanup.values())cleanup();this.eventVoiceCleanup.clear();this.voicesEnd=this.context.currentTime;this.speechDucker.clear();p.setValueAtTime(this.levels.AI_VOICE,this.context.currentTime+.04);}
+ stopVoice(fade=true,preserveSession=false){this.setNarrationDelivery();this.dualGapStart=undefined;this.voiceEchoes.stop();this.breathNextWord=0;this.breathAudio.stop();if(preserveSession)this.clearDesignSilence();else this.stopEffects();if(!preserveSession){this.tickEngine.stop();this.tickDefaultBpm=-1;this.pulseCommand=undefined;}for(const source of this.controlSources){source.onended=null;try{source.stop();}catch{}source.disconnect();}this.controlSources.clear();this.voiceEpoch++;const p=this.nodes.AI_VOICE.gain;p.cancelScheduledValues(this.context.currentTime);p.setTargetAtTime(0,this.context.currentTime,.008);for(const node of this.voiceSources){this.foreground.delete(node);node.onended=null;try{node.stop(this.context.currentTime+(fade?.035:0));}catch{}}this.voiceSources.clear();for(const cleanup of this.dualVoiceCleanup.values())cleanup();this.dualVoiceCleanup.clear();for(const cleanup of this.eventVoiceCleanup.values())cleanup();this.eventVoiceCleanup.clear();this.voicesEnd=this.context.currentTime;this.speechDucker.clear();p.setValueAtTime(this.levels.AI_VOICE,this.context.currentTime+.04);}
  ambience(on:boolean){if(on&&this.ambient)return;if(this.ambient){try{this.ambient.stop();}catch{}this.ambient=null;}if(!on)return;const buffer=this.context.createBuffer(2,this.context.sampleRate*4,this.context.sampleRate);for(let ch=0;ch<2;ch++){const data=buffer.getChannelData(ch);let smooth=0;for(let i=0;i<data.length;i++){smooth=(smooth+(Math.random()*2-1)*.02)/1.02;data[i]=smooth*.35;}}const node=this.context.createBufferSource();node.buffer=buffer;node.loop=true;const low=this.context.createBiquadFilter();low.type='lowpass';low.frequency.value=650;node.connect(low);low.connect(this.nodes.AMBIENCE);node.start();this.ambient=node;}
  private voiceAnalyser!:AnalyserNode;
  private voiceMeter=new Float32Array(512);

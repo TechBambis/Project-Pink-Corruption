@@ -4,13 +4,14 @@
 
 const views = {
   session: 'Session', voice: 'Voice & AI', sound: 'Sound', visuals: 'Visuals',
-  devices: 'Devices', files: 'Files', extras: 'Extras',
+  devices: 'Devices', files: 'Library', extras: 'Extras',
 } as const;
 type View = keyof typeof views;
 const element = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const normalize = (text: string) => text.toLocaleLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 const aliases: Record<string, string> = {
   'narration-enabled': 'continuous narration auto continue storytelling session',
+  'conversation-style': 'situational adaptive personal questions conversation follow up guided bambi',
   'voice': 'speaker narration tts kokoro heart', 'model': 'llm ai model qwen gemma',
   'speed': 'voice rate tempo speech', 'audio-preset': 'audio preset sound profile',
   'tick-enabled': 'metronome clock heartbeat ticking bpm',
@@ -40,7 +41,7 @@ const experienceDescriptions: Record<string, string> = {
   official: 'Keep an external session in its own tab. Start this clock alongside it; timing is manual.',
 };
 const companionDescriptions: Record<string, string> = {
-  off: 'AI replies are off.', text: 'Bambi replies in the chat without spoken audio.',
+  off: 'AI replies are off.', text: 'Bambi replies in the player without spoken audio.',
   voice: 'Bambi speaks her replies. Type a message to begin.',
   ambient: 'Bambi adds occasional spoken moments during your session. You can also chat.',
   interactive: 'Turn the microphone on to talk. With headphones, speaking can interrupt Bambi.',
@@ -52,8 +53,7 @@ export function initNavigation() {
   const app = element('app'), workspace = element('workspace');
   const dialog = element<HTMLDialogElement>('settings-search'), search = element<HTMLInputElement>('settings-search-input');
   const results = element('settings-search-results');
-  const smallScreen = matchMedia('(max-width: 1199px)');
-  let active: View = 'session', chatOpen = true;
+  let active: View = 'session';
   let resultIndex = 0, matches: SearchEntry[] = [], highlightTimer = 0;
   let searchReturn: HTMLElement | null = null, highlighted: HTMLElement | null = null;
   const scrollPositions = new Map<View, number>();
@@ -92,22 +92,17 @@ export function initNavigation() {
     element<HTMLInputElement>('voice-occasional').disabled = ['off', 'text'].includes(aiMode) || narration;
     element('companion-description').textContent = ['local', 'official'].includes(mode)
       ? 'AI replies are off here. Choose Bambi Chat or turn on “Let Bambi join in” for your files.'
-      : narration ? 'Continuous narration starts with your session, pauses between passages and ends after the chosen duration.' : companionDescriptions[aiMode] ?? '';
-  }
-  function toggleChat(open: boolean, focus = false) {
-    chatOpen = open;
-    app.dataset.chat = String(open);
-    element('chat-panel').hidden = !open;
-    element('chat-backdrop').hidden = true;
-    element('chat-toggle').setAttribute('aria-expanded', String(open));
-    element('chat-toggle').setAttribute('aria-label', open ? 'Close chat' : 'Open chat');
-    if (focus) element(open ? 'chat-input' : 'chat-toggle').focus({preventScroll: true});
+      : narration ? element<HTMLSelectElement>('conversation-style').value==='situational'?'Bambi follows your conversation with short passages and relevant questions, leaving room for your answers.':'Continuous narration starts with your session, pauses between passages and ends after the chosen duration.' : companionDescriptions[aiMode] ?? '';
   }
   function show(target: string, push = true, focus = true, intent: 'tab' | 'jump' | 'history' = 'jump') {
     const targetNode = target in views ? element('view-' + target) : element(target.replace(/^setting-/, ''));
     const page = targetNode?.closest<HTMLElement>('.workspace-view[data-view]') ?? (targetNode?.closest('.session-dock') ? element('view-session') : null);
     const next = page?.dataset.view as View | undefined;
     if (!page || !next || !(next in views)) return false;
+    if(document.fullscreenElement&&!document.fullscreenElement.contains(page)){
+      void document.exitFullscreen().then(()=>show(target,push,focus,intent));
+      return true;
+    }
     if (next !== active) scrollPositions.set(active, scrollY);
     const changed = next !== active;
     const position = scrollY;
@@ -166,15 +161,6 @@ export function initNavigation() {
   const restoreHistory = () => { cancelAnimationFrame(historyFrame); historyFrame = requestAnimationFrame(() => fromHash(true)); };
   window.addEventListener('hashchange', restoreHistory);
   window.addEventListener('popstate', restoreHistory);
-  element('chat-toggle').onclick = () => toggleChat(!chatOpen, true);
-  let chatOutsideFullscreen = chatOpen;
-  document.addEventListener('player-fullscreen', event => {
-    if ((event as CustomEvent).detail.active) { chatOutsideFullscreen = chatOpen; toggleChat(false); }
-    else toggleChat(chatOutsideFullscreen);
-  });
-  for (const id of ['chat-close', 'chat-backdrop']) element(id).onclick = () => toggleChat(false, true);
-  smallScreen.addEventListener('change', () => toggleChat(chatOpen));
-  document.querySelector<HTMLElement>('[data-open-memory]')!.onclick = () => element('memory').click();
   document.querySelector<HTMLElement>('[data-open-performance]')!.onclick = () => { show('session'); element('hud-toggle').click(); };
   function changeSetting(id: string, value: string) {
     const field = element<HTMLSelectElement>(id); field.value = value;
@@ -299,6 +285,6 @@ export function initNavigation() {
   new MutationObserver(syncNotice).observe(notice, {childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class']});
   element('navigation-notice-close').onclick = () => { notice.classList.add('hidden'); };
   syncNotice();
-  syncSummary(); toggleChat(chatOpen); fromHash(false);
+  syncSummary(); fromHash(false);
   return {show, syncSummary};
 }

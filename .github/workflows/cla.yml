@@ -1,40 +1,40 @@
-name: CLA verification
-
+# Build-branch entry point only. The default branch CLA workflow is preserved.
+# An existing default-branch dispatch path is required by GitHub; this branch
+# delegates its authorized manual Windows build to the prepared workflow.
+name: Manual Windows smoke build entry point
 on:
-  pull_request_target:
-    types: [opened, reopened, synchronize, edited]
-  issue_comment:
-    types: [created, edited, deleted]
   workflow_dispatch:
     inputs:
-      pr:
-        description: Pull request number to recheck
-        required: true
+      phase:
+        type: choice
+        options: [smoke]
+        default: smoke
+      version:
         type: string
-
+        required: true
+        default: 0.1.0-smoke.3
+      quota_checked:
+        type: boolean
+        default: false
+      quota_record:
+        type: string
+        required: true
+      upload_packages:
+        type: boolean
+        default: false
+      remaining_artifact_mib:
+        type: string
+        default: '0'
 permissions:
   contents: read
-  pull-requests: read
-  issues: read
-  statuses: write
-
-concurrency:
-  group: cla-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr }}
-  cancel-in-progress: false
-
 jobs:
-  verify:
-    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      # Always use trusted default-branch files, including on fork PRs.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          persist-credentials: false
-      - name: Check recorded maintainer verification
-        run: node scripts/cla-check.mjs
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          CLA_PR_NUMBER: ${{ inputs.pr }}
+  windows:
+    if: inputs.quota_checked && github.actor_id == '337824705'
+    uses: ./.github/workflows/desktop-windows.yml
+    with:
+      phase: ${{ inputs.phase }}
+      version: ${{ inputs.version }}
+      quota_checked: ${{ inputs.quota_checked }}
+      quota_record: ${{ inputs.quota_record }}
+      upload_packages: ${{ inputs.upload_packages }}
+      remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}

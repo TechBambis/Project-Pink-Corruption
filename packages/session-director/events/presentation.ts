@@ -65,11 +65,19 @@ export function presentationAt(snapshot: EngineSnapshot, current: CompiledEvent 
   if (current) {
     // Last authored envelope for each property wins; expired envelopes hold until the next frame.
     const sinceFrame = frame?.atMs ?? current.event.atMs;
-    for (const action of current.event.audio) {
+    const envelopes = new Map<Bus, { start: number; duration: number; from: number; to: number }>();
+    const sample = (envelope: { start: number; duration: number; from: number; to: number }, time: number) => lerp(envelope.from, envelope.to, envelope.duration ? unit((time - envelope.start) / envelope.duration) : 1);
+    for (const action of [...current.event.audio].sort((a, b) => a.offsetMs - b.offsetMs)) {
       const start = current.event.atMs + action.offsetMs;
       if (start > atMs || start < sinceFrame) continue;
-      const t = action.durationMs ? unit((atMs - start) / action.durationMs) : 1;
-      gains[action.bus] = lerp(gains[action.bus] ?? 0, action.gain, t);
+      const prior = envelopes.get(action.bus);
+      let entryP = transition?.durationMs ? unit((start - frame!.atMs) / transition.durationMs) : 1;
+      if (kind === 'audio_first') entryP = unit(entryP * 2);
+      if (kind === 'visual_first') entryP = unit(entryP * 2 - 1);
+      if (kind === 'hard_cut' || kind === 'silence_cut') entryP = 1;
+      const fromGain = prior ? sample(prior, start) : lerp(sourceGains[action.bus] ?? 0, stateGains(target)[action.bus] ?? 0, entryP);
+      const envelope = { start, duration: action.durationMs, from: fromGain, to: action.gain };
+      envelopes.set(action.bus, envelope); gains[action.bus] = sample(envelope, atMs);
     }
     for (const action of current.event.visual) {
       const start = current.event.atMs + action.offsetMs;

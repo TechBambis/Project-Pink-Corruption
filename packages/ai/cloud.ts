@@ -8,6 +8,7 @@ import { z } from 'zod';
 import type { SamplingProfile } from '../../config/sampling';
 import { PrefillEchoFilter } from './prefill';
 
+// Keep the persisted slot ID stable; the UI displays the configured model name.
 export const CLOUD_MODEL_ALIAS = 'cloud:cydonia-24b-v4.3';
 export const CYDONIA_SAMPLING = {temperature:.7,creativeTemperature:1,topP:.95,topK:40,minP:.05,repeatPenalty:1} as const;
 const samplingConfiguration=z.object({
@@ -22,7 +23,7 @@ const configuration = z.object({
   url: z.string().url().refine(value => /^https?:\/\//.test(value) && !new URL(value).username && !new URL(value).password && !new URL(value).search, 'Use an HTTP(S) API base URL without embedded credentials or query parameters'),
   model: z.string().min(1).max(200), key: z.string().default(''), gatewayKey: z.string().optional(),
   context: z.coerce.number().int().min(4096).max(131072).default(32768),
-  kind: z.enum(['llama.cpp', 'openai-compatible']).default('llama.cpp'),
+  kind: z.enum(['llama.cpp', 'openai-compatible', 'ollama']).default('llama.cpp'),
   timeoutMs: z.coerce.number().int().min(5000).max(600000).default(300000),
   sampling:samplingConfiguration.optional(),
   tokenizerUrl:z.string().url().refine(value=>/^https?:\/\//.test(value)&&!new URL(value).username&&!new URL(value).password&&!new URL(value).search,'Use a private tokenizer URL without embedded credentials').optional(),
@@ -42,7 +43,7 @@ export function cloudConfiguration(env: NodeJS.ProcessEnv = process.env): CloudC
 export function cloudSampling(config:CloudConfiguration,profile:SamplingProfile='qwen'){
   const s=config.sampling??CYDONIA_SAMPLING;
   return {temperature:profile==='creative'?s.creativeTemperature:s.temperature,top_p:s.topP,
-    ...(config.kind==='llama.cpp'?{top_k:s.topK,min_p:s.minP,repeat_penalty:s.repeatPenalty,dry_multiplier:0,xtc_probability:0}:{}),
+    ...(config.kind==='llama.cpp'||config.kind==='ollama'?{top_k:s.topK,min_p:s.minP,repeat_penalty:s.repeatPenalty,...(config.kind==='llama.cpp'?{dry_multiplier:0,xtc_probability:0}:{})}:{}),
   };
 }
 /** A fixed, server-configured endpoint. Secrets and arbitrary endpoint selection never reach clients. */
@@ -83,21 +84,30 @@ export class CloudBackend implements LLMBackend {
         signal: AbortSignal.any([signal, AbortSignal.timeout(this.config.timeoutMs)]) });
     } catch (error) {
       if (signal.aborted) throw error;
-      throw Error('Cloud inference is unavailable. Check the GPU workspace and reconnect the cloud connection.');
+      throw Error('Cloud inference is unavailable. Check the inference server and reconnect the cloud connection.');
     }
     // Provider bodies may contain credentials or private prompts; never echo them to the browser.
     if (!response.ok) { await response.body?.cancel(); throw Error(`Cloud inference HTTP ${response.status}`); }
     return response;
   }
   async models() {
-    const response = await fetch(this.config.url.replace(/\/v1$/, '') + '/v1/models', {
+    const response = await fetch(this.config.url.replace(/\/v1$/, '') + (this.config.kind === 'ollama' ? '/api/tags' : '/v1/models'), {
       headers: this.headers(), signal: AbortSignal.timeout(3000) });
     if (!response.ok) throw Error('Cloud inference is unavailable');
     const data = await response.json();
-    if (!Array.isArray(data.data) || !data.data.some((model: { id: string }) => model.id === this.config.model)) throw Error('Configured cloud model is not available');
+    const available = this.config.kind === 'ollama' ? data.models : data.data;
+    if (!Array.isArray(available) || !available.some(model => (this.config.kind === 'ollama' ? model?.name : model?.id) === this.config.model)) throw Error('Configured cloud model is not available');
     return [CLOUD_MODEL_ALIAS];
   }
   async structured(messages: Message[], _model: string, signal: AbortSignal, _context: number, schema: unknown) {
+    if (this.config.kind === 'ollama') {
+      const response = await this.request('/api/chat', {model:this.config.model,messages,stream:false,think:false,format:schema,
+        options:{num_ctx:this.config.context,num_predict:64,temperature:0,top_k:1,top_p:1,repeat_penalty:1,seed:0}}, signal);
+      const data = await response.json();
+      if(data.error)throw Error('Cloud generation failed');
+      try { return JSON.parse(data.message?.content ?? ''); }
+      catch { throw Error('Cloud structured response is invalid'); }
+    }
     const response = await this.request('/v1/chat/completions', { model: this.config.model, messages, stream: false,
       temperature: 0, max_tokens: 64, response_format: this.config.kind === 'llama.cpp' ? { type: 'json_object', schema } : { type: 'json_object' } }, signal);
     const data = await response.json();
@@ -108,6 +118,21 @@ export class CloudBackend implements LLMBackend {
     const requestController = new AbortController();
     const requestSignal = AbortSignal.any([signal, requestController.signal]);
     try {
+      if (this.config.kind === 'ollama') {
+        const response = await this.request('/api/chat', {model:this.config.model,messages,stream:true,think:false,
+          options:{num_ctx:this.config.context,num_predict:maxTokens,...cloudSampling(this.config,sampling)}}, requestSignal);
+        for await(const line of lines(response)){
+          let data;
+          try { data=JSON.parse(line); }
+          catch { throw Error('Cloud streaming response is invalid'); }
+          if(data.error)throw Error('Cloud generation failed');
+          yield {text:typeof data.message?.content==='string'?data.message.content:'',stats:data.done?{
+            eval_count:data.eval_count,eval_duration:data.eval_duration,prompt_ms:typeof data.prompt_eval_duration==='number'?data.prompt_eval_duration/1e6:undefined,
+            prompt_tokens:data.prompt_eval_count,cache_tokens:data.prompt_eval_cached_count,
+          }:undefined};
+        }
+        return;
+      }
       const response = await this.request('/v1/chat/completions', { model: this.config.model, messages, stream: true,
         ...cloudSampling(this.config,sampling),max_tokens: maxTokens,
         ...(this.config.kind === 'llama.cpp' ? { cache_prompt: true } : {}),

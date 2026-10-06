@@ -44,6 +44,16 @@ def read_wav(data):
     return samples.reshape(-1, channels), rate
 
 class AudioTests(unittest.TestCase):
+    def test_formatting_never_reaches_the_speech_provider(self):
+        raw = '*hums softly* *Breathe in.* __And out.__ `Rest.`'
+        self.assertEqual(spoken_input(raw), 'Breathe in. And out. Rest.')
+        self.assertEqual(spoken_input('af_heart ***clear***'), 'af_heart clear')
+        self.assertEqual(phrases('*** ` __'), [])
+        provider = FakeProvider()
+        _, report = Renderer(provider).render(raw, load_preset('bambi_voice_test'))
+        self.assertEqual(provider.spoken, ['Breathe in.', 'And out.', 'Rest.'])
+        self.assertEqual([p['text'] for p in report['timeline']], provider.spoken)
+
     def test_missing_article_alignment_preserves_other_measured_words(self):
         tokenizer = SimpleNamespace(phonemize=lambda word, lang: {'A':'x','quiet':'kw','giggle':'gl'}[word])
         timings = [SimpleNamespace(phoneme=c,start=.2+i*.1,end=.3+i*.1) for i,c in enumerate('kwgl')]
@@ -270,6 +280,14 @@ class OfflineIntegrationTests(unittest.TestCase):
         self.assertGreater(giggle['start_time'],.2)
         self.assertGreater(giggle['end_time'],giggle['start_time'])
         self.assertEqual(timings,self.provider.synthesize_timed(text,'af_heart',.78)[2])
+
+    def test_actual_model_receives_formatted_breath_words_once(self):
+        config = load_preset('bambi_voice_test')
+        with patch.object(self.provider.engine, 'create_timed', wraps=self.provider.engine.create_timed) as create:
+            wav, report = Renderer(self.provider).render('*Breathe in.* __And out.__', config)
+        self.assertEqual([call.args[0] for call in create.call_args_list], ['Breathe in.', 'And out.'])
+        self.assertEqual([item['text'] for item in report['timeline']], ['Breathe in.', 'And out.'])
+        self.assertGreater(len(read_wav(wav)[0]), 2400)
 
     def test_actual_engine_receives_words_without_hums_or_device_metadata(self):
         config = load_preset('bambi_voice_test')

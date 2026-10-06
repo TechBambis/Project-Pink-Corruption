@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 from kokoro_onnx import Kokoro
-from .config import ROOT
+from .config import ROOT, DATA, MODELS
 from .voices import VoiceRegistry
 from .spoken import spoken_input
 from .alignment import word_timings
@@ -20,8 +20,8 @@ class KokoroProvider:
     sample_rate = 24000
 
     def __init__(self, model=None, bundle=None, cache=None):
-        self.model = Path(model or ROOT / 'models/kokoro/kokoro-v1.0.onnx')
-        self.bundle = Path(bundle or ROOT / 'models/kokoro/voices-v1.0.bin')
+        self.model = Path(model or MODELS / 'kokoro/kokoro-v1.0.onnx')
+        self.bundle = Path(bundle or MODELS / 'kokoro/voices-v1.0.bin')
         if not self.model.is_file() or not self.bundle.is_file():
             raise FileNotFoundError('Local Kokoro model missing. Run ./scripts/setup-local-tts.sh once while online.')
         options = ort.SessionOptions()
@@ -36,7 +36,7 @@ class KokoroProvider:
         session = ort.InferenceSession(str(self.model), options, providers=['CPUExecutionProvider'])
         self.engine = Kokoro.from_session(session, str(self.bundle))
         self.registry = VoiceRegistry(self.engine.voices)
-        self.cache = Path(cache or ROOT / 'runtime/tts-cache')
+        self.cache = Path(cache or (DATA / 'cache/tts' if os.environ.get('BAMBI_DATA_ROOT') else ROOT / 'runtime/tts-cache'))
         self.cache.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
         with self.model.open('rb') as source:
@@ -64,7 +64,7 @@ class KokoroProvider:
         with self.lock:
             if path.is_file() and timing_path.is_file():
                 self.cache_hits += 1
-                return np.load(path, allow_pickle=False), self.sample_rate, json.loads(timing_path.read_text())
+                return np.load(path, allow_pickle=False), self.sample_rate, json.loads(timing_path.read_text(encoding='utf-8'))
             self.cache_misses += 1
             samples, rate, timings = self.engine.create_timed(synthesis_text, voice=style, speed=synthesis_speed, lang='en-us', is_phonemes=False, trim=True,
                                                             sentence_pause=0, clause_pause=0)
@@ -76,7 +76,7 @@ class KokoroProvider:
             with temporary.open('wb') as output:
                 np.save(output, samples, allow_pickle=False)
             temporary.replace(path)
-            timing_path.write_text(json.dumps(captions))
+            timing_path.write_text(json.dumps(captions), encoding='utf-8')
             files = list(self.cache.glob('*.npy'))
             if len(files) > 256:
                 for old in sorted(files, key=lambda p: p.stat().st_mtime)[:len(files)-256]:

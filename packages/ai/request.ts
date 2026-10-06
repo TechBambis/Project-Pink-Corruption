@@ -12,9 +12,16 @@ export const audioPresetSchema = z.enum(['bambi_local_clean', 'bambi_classic', '
 export const ReplyIntentSchema = z.enum(['conversation', 'narration', 'continuation', 'clarification']);
 export type ReplyIntent = z.infer<typeof ReplyIntentSchema>;
 export interface ModelConnection { backend: 'ollama' | 'llama.cpp' | 'cloud'; context: number }
+export const InteractionSchema=z.enum(['reactive','situational']);
+export type Interaction=z.infer<typeof InteractionSchema>;
 export const ChatRequestSchema = z.object({
   type: z.literal('chat'), protocolVersion: z.literal(PROTOCOL_VERSION).optional(),
+  requestId: z.string().uuid().optional(),
+  interaction:InteractionSchema.default('reactive'),source:z.enum(['user','engine']).default('user'),
   intent: ReplyIntentSchema.optional(), sampling: z.enum(['qwen', 'creative']).default('qwen'),
+  dualVoice:z.boolean().default(false),
+  adaptiveDelivery: z.boolean().default(false),
+  adaptiveVisuals: z.boolean().default(false),
   soundDesign: z.boolean().default(false), dialogue: z.boolean().default(true),
   text: z.string().trim().min(1).max(4000), model: z.string().min(1).max(100).default(communityQwen),
   backend: z.enum(['ollama', 'llama.cpp', 'cloud']).optional(),

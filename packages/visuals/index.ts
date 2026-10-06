@@ -11,8 +11,12 @@ import { TriggerOverlay } from './trigger-overlay';
 import {DescentVisualState,DescentOverlay,emptyDescentFrame} from './descent';
 import { CanvasRenderer } from './canvas-renderer';
 import { visualResolution } from './resolution';
+import { VisualCadence } from './cadence';
 import { AudioReactivity, silentVisualSignal, type AudioVisualSignal } from './audio-reactivity';
 import { ImmersiveSpiral } from './immersive';
+import { qualityFragment } from './shader-quality';
+import { SceneTransition } from './scene-transition';
+import { SceneBlend } from './scene-blend';
 export type Scene=typeof sceneNames[number];
 const vertex=`attribute vec2 position; varying vec2 uv; void main(){uv=position*.5+.5;gl_Position=vec4(position,0.,1.);}`;
 const fragment=`precision mediump float;varying vec2 uv;uniform vec2 resolution;uniform float time;uniform float intensity;uniform float audio;uniform float scene;uniform float density;uniform float pulse;uniform float effect;
@@ -38,8 +42,16 @@ export class VisualEngine {
  private fallback:CanvasRenderer|null=null;
  private failed=false;
  private slowSamples=0;private fastSamples=0;
+ private cadence=new VisualCadence();
+ private sampledBusy=false;
+ private transition=new SceneTransition();
+ private blend:SceneBlend|null=null;
+ private previousScene: {scene:number;settings:StableSpiralSettings}|null=null;
+ private previousBlendOpacity=0;
  /** Share GPU time with local inference without changing the session/audio clocks. */
  busy=false;
+ /** Explicit event programs/imported timelines supply their own transition grammar. */
+ sceneTransitions=true;
  get backend(){return this.failed?'unavailable':this.fallback?'canvas2d':'webgl';}
  constructor(public canvas:HTMLCanvasElement, effectHost?:HTMLElement){
   this.breathOverlay=new BreathOverlay(canvas);
@@ -64,6 +76,7 @@ export class VisualEngine {
   canvas.addEventListener('webglcontextlost',e=>{e.preventDefault();if(!this.fallback&&!this.failed)this.useFallback('WebGL context lost');});
  }
  private useFallback(reason:unknown){
+  this.blend?.clear();this.transition.reset();this.previousScene=null;
   // A canvas with a WebGL context cannot subsequently acquire a 2D context.
   const previous=this.canvas,next=previous.cloneNode(false) as HTMLCanvasElement;
   try{
@@ -73,13 +86,13 @@ export class VisualEngine {
    this.enabled=this.visible;this.resize();
   }catch(error){this.failed=true;previous.dataset.renderer='unavailable';previous.dataset.rendererReason=String(error);this.enabled=false;}
  }
- private create(vs:string,fs:string){const gl=this.gl;const shader=(type:number,code:string)=>{const s=gl.createShader(type)!;gl.shaderSource(s,code);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s)||'Shader error');return s;};const p=gl.createProgram()!;gl.attachShader(p,shader(gl.VERTEX_SHADER,vs));gl.attachShader(p,shader(gl.FRAGMENT_SHADER,fs));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p)||'Shader link failed');return p;}
- resize(){const rect=this.canvas.getBoundingClientRect();const limit=this.backend==='webgl'?Math.min(8192,...this.gl.getParameter(this.gl.MAX_VIEWPORT_DIMS)):8192;const size=visualResolution(rect.width,rect.height,devicePixelRatio,this.quality,limit);if(this.canvas.width!==size.width||this.canvas.height!==size.height){this.canvas.width=size.width;this.canvas.height=size.height;}if(this.backend==='webgl')this.gl.viewport(0,0,this.canvas.width,this.canvas.height);}
+ private create(vs:string,fs:string){const gl=this.gl;const shader=(type:number,code:string)=>{const s=gl.createShader(type)!;gl.shaderSource(s,type===gl.FRAGMENT_SHADER?qualityFragment(gl,code):code);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s)||'Shader error');return s;};const p=gl.createProgram()!;gl.attachShader(p,shader(gl.VERTEX_SHADER,vs));gl.attachShader(p,shader(gl.FRAGMENT_SHADER,fs));gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p)||'Shader link failed');return p;}
+ resize(){const rect=this.canvas.getBoundingClientRect();const limit=this.backend==='webgl'?Math.min(8192,...this.gl.getParameter(this.gl.MAX_VIEWPORT_DIMS)):8192;const size=visualResolution(rect.width,rect.height,devicePixelRatio,this.quality,limit);if(this.canvas.width!==size.width||this.canvas.height!==size.height){this.blend?.clear();this.transition.reset();this.previousScene=null;this.canvas.width=size.width;this.canvas.height=size.height;}if(this.backend==='webgl')this.gl.viewport(0,0,this.canvas.width,this.canvas.height);}
  private wasFullscreen=false;
  private visible=true;
  get enabled(){return this.visible;}
- set enabled(value:boolean){value=value&&!this.failed;if(value!==this.visible||!value){this.pulse=0;this.clearVoiceReaction();this.clearTrigger();this.clearDescent();this.clearBreath();}this.visible=value;this.canvas.style.visibility=value?'visible':'hidden';if(!value){this.fixationLayer.style.display='none';this.focusWell.style.display='none';if(this.canvas.parentElement)this.canvas.parentElement.dataset.centerFocus='none';this.canvas.style.maskImage='none';this.canvas.style.setProperty('-webkit-mask-image','none');}}
- render(time:number,intensity:number,audio:number,wall:number,effectTime=time,descentTime=effectTime,signal:AudioVisualSignal=silentVisualSignal){const fullscreen=!!document.fullscreenElement&&document.fullscreenElement===this.canvas.parentElement;if(fullscreen!==this.wasFullscreen){this.wasFullscreen=fullscreen;this.resize();}if(!this.enabled){this.lastPulseTime=time;this.last=wall;this.sample=wall;this.frames=0;this.slowSamples=this.fastSamples=0;return;}const targetFps=this.busy?30:60;if(wall-this.last<1000/targetFps-1)return;const breathing=this.breath.frame(descentTime,this.reduced);this.breathOverlay.update(breathing);this.descentOverlay.update(this.descent.frame(descentTime,this.reduced));const trigger=this.triggers.frame(effectTime,this.reduced);this.overlay.update(trigger);const decay=Math.exp(-Math.max(0,time-this.lastPulseTime)*3.7);this.lastPulseTime=time;this.pulse*=decay;this.canvas.style.setProperty('--visual-opacity',String(clamp(this.opacity)));this.frameMs=this.frameMs*.95+(wall-this.last)*.05;this.last=wall;if(!this.sample)this.sample=wall;this.frames++;if(wall-this.sample>=1000){this.fps=this.frames*1000/(wall-this.sample);this.frames=0;this.sample=wall;this.slowSamples=this.fps<targetFps*.7?this.slowSamples+1:0;this.fastSamples=this.fps>=targetFps*.92?this.fastSamples+1:0;if(this.slowSamples>=3&&this.quality>.5){this.quality=Math.max(.5,this.quality-.15);this.slowSamples=0;this.resize();}else if(this.fastSamples>=5&&this.quality<1){this.quality=Math.min(1,this.quality+.15);this.fastSamples=0;this.resize();}}
+ set enabled(value:boolean){value=value&&!this.failed;if(value!==this.visible||!value){this.blend?.clear();this.transition.reset();this.previousScene=null;this.pulse=0;this.clearVoiceReaction();this.clearTrigger();this.clearDescent();this.clearBreath();}this.visible=value;this.canvas.style.visibility=value?'visible':'hidden';if(!value){this.fixationLayer.style.display='none';this.focusWell.style.display='none';if(this.canvas.parentElement)this.canvas.parentElement.dataset.centerFocus='none';this.canvas.style.maskImage='none';this.canvas.style.setProperty('-webkit-mask-image','none');}}
+ render(time:number,intensity:number,audio:number,wall:number,effectTime=time,descentTime=effectTime,signal:AudioVisualSignal=silentVisualSignal){const fullscreen=!!document.fullscreenElement&&document.fullscreenElement===this.canvas.parentElement;if(fullscreen!==this.wasFullscreen){this.wasFullscreen=fullscreen;this.resize();}if(!this.enabled){this.lastPulseTime=time;this.last=wall;this.sample=wall;this.frames=0;this.slowSamples=this.fastSamples=0;this.cadence.reset();return;}if(!this.fallback&&this.quality!==1){this.quality=1;this.resize();}if(this.sampledBusy!==this.busy){this.sampledBusy=this.busy;this.sample=wall;this.frames=0;this.slowSamples=this.fastSamples=0;}if(!this.cadence.frame(wall,this.busy))return;const targetFps=this.cadence.targetFps(this.busy);const breathing=this.breath.frame(descentTime,this.reduced);this.breathOverlay.update(breathing);this.descentOverlay.update(this.descent.frame(descentTime,this.reduced));const trigger=this.triggers.frame(effectTime,this.reduced);this.overlay.update(trigger);const decay=Math.exp(-Math.max(0,time-this.lastPulseTime)*3.7);this.lastPulseTime=time;this.pulse*=decay;this.canvas.style.setProperty('--visual-opacity',String(clamp(this.opacity)));this.frameMs=this.frameMs*.95+(wall-this.last)*.05;this.last=wall;if(!this.sample)this.sample=wall;this.frames++;if(wall-this.sample>=1000){this.fps=this.frames*1000/(wall-this.sample);this.frames=0;this.sample=wall;this.adaptFallbackResolution(targetFps);}
  const gl=this.gl;const t=this.reduced?0:time*this.motion;const scene=sceneNames.indexOf(this.scene);const combinedPulse=this.reduced?0:Math.max(this.pulse,trigger.impulse);
  this.reactiveAmount=this.reactivity.frame(signal,this.reactionStrength,this.voiceSync,this.tickSync,this.reduced);
  const visualAmount=scene===0&&this.stableSettings.style==='orb'?this.reactiveAmount:this.reactivity.voiceAmount;
@@ -102,13 +115,43 @@ export class VisualEngine {
  if(this.failed)return;
  if(this.fallback){this.fallback.render(this.scene,scene===0?time:t,this.stableSettings,this.reduced,this.density*this.quality,scene===0?combinedPulse:scenePulse,clamp(audio),reaction);return;}
  try{
- if(scene===1||scene===0&&this.stableSettings.style&&this.stableSettings.style!=='original'){this.immersive.render(this.canvas.width,this.canvas.height,this.reduced?0:time,scene===1?{...this.stableSettings,style:'tunnel'}:this.stableSettings,this.reduced,reaction,this.quality);return;}
- if(scene===0){this.stable.configure(this.stableSettings,this.reduced,reaction);this.stable.frame(this.reduced?0:time+combinedPulse*.5);return;}gl.useProgram(this.program);gl.bindBuffer(gl.ARRAY_BUFFER,this.quad);let attr=gl.getAttribLocation(this.program,'position');gl.enableVertexAttribArray(attr);gl.vertexAttribPointer(attr,2,gl.FLOAT,false,0,0);gl.uniform2f(gl.getUniformLocation(this.program,'resolution'),this.canvas.width,this.canvas.height);for(const [key,value] of Object.entries({time:t,intensity:clamp(intensity),audio:clamp(audio),scene,density:this.reduced?0:this.density*this.quality,pulse:scenePulse,effect:scenePulse>0?['pulse','spiral','particles'].indexOf(this.effect):-1}))gl.uniform1f(gl.getUniformLocation(this.program,key),value);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+ const change=this.transition.frame(`${scene}:${scene===0?this.stableSettings.style??'original':''}`,time,this.sceneTransitions&&!this.reduced&&scene<4&&this.opacity>0);
+ if(change.capture&&this.previousScene){
+  // The browser may discard the previous drawing buffer between RAF callbacks.
+  // Render the outgoing background now; never enable preserveDrawingBuffer.
+  this.drawScene(this.previousScene.scene,time,intensity,audio,reaction,scenePulse,combinedPulse,this.previousScene.settings);
+  this.blend?.draw(this.previousBlendOpacity);
+  this.blend??=new SceneBlend(gl);this.blend.capture(this.canvas.width,this.canvas.height);
+ }
+ this.drawScene(scene,time,intensity,audio,reaction,scenePulse,combinedPulse,this.stableSettings);
+ this.blend?.draw(change.opacity);
+ this.previousBlendOpacity=change.opacity;
+ this.previousScene={scene,settings:{...this.stableSettings}};
  }catch(error){this.useFallback(error);const renderer=this.fallback as CanvasRenderer|null;renderer?.render(this.scene,scene===0?time:t,this.stableSettings,this.reduced,this.density*this.quality,scene===0?combinedPulse:scenePulse,clamp(audio),reaction);}
 
  }
+ /** RAF delays include AI/CPU stalls; they do not establish a GPU pixel bottleneck.
+  * Keep WebGL sharp and let cadence sharing provide inference headroom. */
+ private adaptFallbackResolution(targetFps:number){
+  if(!this.fallback){this.slowSamples=this.fastSamples=0;return;}
+  this.slowSamples=this.fps<targetFps*.6?this.slowSamples+1:0;
+  this.fastSamples=this.fps>=targetFps*.9?this.fastSamples+1:0;
+  // Canvas2D retains a conservative escape hatch for prolonged low frame rates.
+  if(this.slowSamples>=8&&this.quality>.85){this.quality=Math.max(.85,this.quality-.05);this.slowSamples=0;this.resize();}
+  else if(this.fastSamples>=3&&this.quality<1){this.quality=Math.min(1,this.quality+.05);this.fastSamples=0;this.resize();}
+ }
+ private drawScene(scene:number,time:number,intensity:number,audio:number,reaction:number,scenePulse:number,combinedPulse:number,settings:StableSpiralSettings){
+ const gl=this.gl;gl.disable(gl.BLEND);
+ if(scene===1||scene===0&&settings.style&&settings.style!=='original'){this.immersive.render(this.canvas.width,this.canvas.height,this.reduced?0:time,scene===1?{...settings,style:'tunnel'}:settings,this.reduced,reaction,this.quality);return;}
+ if(scene===0){this.stable.configure(settings,this.reduced,reaction);this.stable.frame(this.reduced?0:time+combinedPulse*.5);return;}
+ gl.useProgram(this.program);gl.bindBuffer(gl.ARRAY_BUFFER,this.quad);const attr=gl.getAttribLocation(this.program,'position');gl.enableVertexAttribArray(attr);gl.vertexAttribPointer(attr,2,gl.FLOAT,false,0,0);
+ gl.uniform2f(gl.getUniformLocation(this.program,'resolution'),this.canvas.width,this.canvas.height);
+ for(const [key,value] of Object.entries({time:this.reduced?0:time*this.motion,intensity:clamp(intensity),audio:clamp(audio),scene,density:this.reduced?0:this.density*this.quality,pulse:scenePulse,effect:scenePulse>0?['pulse','spiral','particles'].indexOf(this.effect):-1}))gl.uniform1f(gl.getUniformLocation(this.program,key),value);
+ gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+ }
  startBreath(cue:BreathCue,time:number){if(this.enabled)this.breath.schedule(cue,time);}
  clearBreath(){this.breath.clear();this.breathOverlay.update({...emptyBreathFrame});}
+ clearSceneTransition(){this.blend?.clear();this.transition.reset();this.previousScene=null;this.previousBlendOpacity=0;}
  startDescent(time:number,duration=6){if(this.enabled&&!this.reduced)this.descent.start(time,duration);}
  clearDescent(){this.descent.clear();this.descentOverlay.update({...emptyDescentFrame});}
  triggerPulse(time:number,effect:TriggerEffect=triggerEffectFor('')){if(this.enabled)this.triggers.start(time,effect,this.reduced);}

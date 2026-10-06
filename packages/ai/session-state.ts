@@ -14,6 +14,7 @@ export const SessionStateSchema = z.object({
   scene: z.enum(sceneNames),
   intensity: z.number().int().min(1).max(5),
   intensityPercent: z.number().finite().min(0).max(100),
+  deliveryIntensityPercent: z.number().finite().min(0).max(100).optional(),
   elapsedMin: z.number().finite().min(0).max(1440),
   totalMin: z.number().finite().gt(0).max(1440),
   activeTriggers: z.array(z.string().max(100)).max(100),
@@ -48,7 +49,7 @@ export function buildSessionState(session: SessionState): string {
 - Phase: ${session.phase}
 - Phase progress: ${session.phaseProgress}%
 - Scene: ${JSON.stringify(session.scene)}
-- Intensity: ${session.intensity}/5 (${session.intensityPercent}/100 in the UI)
+- Intensity: ${session.intensity}/5 (${session.intensityPercent}/100 in the UI)${session.deliveryIntensityPercent===undefined?'':`\n- Current audiovisual envelope: ${session.deliveryIntensityPercent}%; this is separate from the selected language intensity.`}
 - Elapsed: ${session.elapsedMin} min / ${session.totalMin} min planned
 - Active triggers: ${JSON.stringify(session.activeTriggers)}
 - Last trigger detected: ${session.lastTrigger === null ? 'none' : JSON.stringify(session.lastTrigger)}`;

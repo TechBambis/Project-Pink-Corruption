@@ -1,0 +1,136 @@
+name: Manual Windows desktop build
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Packaging smoke first; alpha only after native smoke acceptance
+        type: choice
+        options: [smoke, alpha]
+        default: smoke
+      version:
+        description: Immutable matching phase version (0.1.0-smoke.N or 0.1.0-alpha.N)
+        required: true
+        default: 0.1.0-smoke.3
+      quota_checked:
+        description: Actual remaining Free Actions allowance checked before dispatch; no extra paid quota
+        type: boolean
+        default: false
+      quota_record:
+        description: Check time/account and remaining allowance; no credentials
+        required: true
+      upload_packages:
+        description: Explicitly retain private packages within confirmed remaining storage (no public release)
+        type: boolean
+        default: false
+      remaining_artifact_mib:
+        description: Confirmed remaining shared artifact allowance, required for upload
+        default: '0'
+  workflow_call:
+    inputs:
+      phase:
+        type: string
+        default: smoke
+      version:
+        type: string
+        required: true
+      quota_checked:
+        type: boolean
+        default: false
+      quota_record:
+        type: string
+        required: true
+      upload_packages:
+        type: boolean
+        default: false
+      remaining_artifact_mib:
+        type: string
+        default: '0'
+permissions:
+  contents: read
+concurrency:
+  group: desktop-windows-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native:
+    if: inputs.quota_checked && github.actor_id == '337824705'
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      BAMBI_CI_PHASE: ${{ inputs.phase }}
+      BAMBI_CI_VERSION: ${{ inputs.version }}
+      BAMBI_QUOTA_RECORD: ${{ inputs.quota_record }}
+      BAMBI_REMAINING_ARTIFACT_MIB: ${{ inputs.remaining_artifact_mib }}
+      BAMBI_WINDOWS_TEST_OUTPUT: ${{ runner.temp }}/Bambi Windows qualification
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate recorded preflight and immutable version
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:BAMBI_QUOTA_RECORD)) { throw 'Record the actual pre-dispatch account/quota check.' }
+          if ($env:BAMBI_CI_PHASE -notin @('smoke','alpha') -or $env:BAMBI_CI_VERSION -notmatch ('^0\.1\.0-'+$env:BAMBI_CI_PHASE+'\.[1-9][0-9]*$')) { throw 'Phase/version mismatch.' }
+          if ($env:BAMBI_REMAINING_ARTIFACT_MIB -notmatch '^\d+$') { throw 'Use a measured nonnegative artifact allowance.' }
+      - name: Build with local checksum-pinned tools
+        shell: pwsh
+        run: |
+          & .\scripts\desktop-windows-build.cmd $env:BAMBI_CI_PHASE $env:BAMBI_CI_VERSION
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Check source and native portable regression cases
+        shell: pwsh
+        run: |
+          $node = Join-Path $PWD '.runtime/desktop-windows-tools/node-v24.18.1-win-x64/node.exe'
+          & $node node_modules/typescript/bin/tsc --noEmit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $node --import ./node_modules/tsx/dist/loader.mjs --test tests/desktop-windows.test.mjs tests/desktop-setup.test.ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install, launch, verify, reinstall and uninstall the actual NSIS package
+        timeout-minutes: 16
+        shell: pwsh
+        run: |
+          $node = Join-Path $PWD '.runtime/desktop-windows-tools/node-v24.18.1-win-x64/node.exe'
+          $output = Join-Path $PWD ('dist/desktop-windows/'+$env:BAMBI_CI_VERSION)
+          & $node scripts/desktop-windows-install-check.mjs $output
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Assemble notices and native evidence without profiles or logs
+        if: always()
+        shell: pwsh
+        run: |
+          $output = Join-Path $PWD ('dist/desktop-windows/'+$env:BAMBI_CI_VERSION)
+          if (!(Test-Path -LiteralPath $output)) { exit 0 }
+          $notices = Join-Path $output 'win-unpacked/resources/notices'
+          if (Test-Path -LiteralPath $notices) { & tar -czf (Join-Path $output 'NOTICES.tar.gz') -C $notices .; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
+          if (Test-Path -LiteralPath $env:BAMBI_WINDOWS_TEST_OUTPUT) {
+            $runs = @(Get-ChildItem -LiteralPath $env:BAMBI_WINDOWS_TEST_OUTPUT -Directory)
+            if ($runs.Count -ne 1) { throw 'Expected exactly one qualification evidence directory.' }
+            $evidence = Join-Path $runs[0].FullName 'evidence.json'
+            if (Test-Path -LiteralPath $evidence) { Copy-Item -LiteralPath $evidence -Destination (Join-Path $output 'WINDOWS-PACKAGING-CHECK.json') }
+          }
+          $sums = Get-ChildItem -LiteralPath $output -File | Where-Object Name -ne 'SHA256SUMS' | Sort-Object Name | ForEach-Object { '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name }
+          [IO.File]::WriteAllText((Join-Path $output 'SHA256SUMS'), ($sums -join "`n")+"`n", [Text.UTF8Encoding]::new($false))
+      - name: Enforce confirmed shared artifact allowance
+        id: storage
+        if: always() && inputs.upload_packages
+        shell: pwsh
+        run: |
+          $output = Join-Path $PWD ('dist/desktop-windows/'+$env:BAMBI_CI_VERSION)
+          if (!(Test-Path -LiteralPath $output)) { throw 'No versioned native package output to retain.' }
+          $total = (Get-ChildItem -LiteralPath $output -File | Measure-Object -Property Length -Sum).Sum
+          if ($total -gt ([long]$env:BAMBI_REMAINING_ARTIFACT_MIB * 1MB * 0.95)) { throw 'Packages exceed the confirmed remaining shared allowance (including 5% reserve). No upload attempted.' }
+      - name: Retain only requested private packages
+        if: always() && inputs.upload_packages && steps.storage.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bambi-windows-${{ inputs.version }}
+          path: |
+            dist/desktop-windows/${{ inputs.version }}/*.exe
+            dist/desktop-windows/${{ inputs.version }}/*-source.tar.gz
+            dist/desktop-windows/${{ inputs.version }}/RUNTIME-MANIFEST.json
+            dist/desktop-windows/${{ inputs.version }}/TESTER-GUIDE.md
+            dist/desktop-windows/${{ inputs.version }}/SHA256SUMS
+            dist/desktop-windows/${{ inputs.version }}/NOTICES.tar.gz
+            dist/desktop-windows/${{ inputs.version }}/WINDOWS-PACKAGING-CHECK.json
+            dist/desktop-windows/${{ inputs.version }}/INSTALLER-CHECK.json
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error

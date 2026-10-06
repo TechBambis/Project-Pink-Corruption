@@ -11,6 +11,6 @@ export const devicePhaseDefaults:Record<SessionPhase,{vibration:number;vibration
  deepening:{vibration:.25,vibrationPattern:'wave',rotation:.2,rotationPattern:'slow'},
  conditioning:{vibration:.3,vibrationPattern:'constant',rotation:0,rotationPattern:'slow'},
  anchor:{vibration:.25,vibrationPattern:'pulse',rotation:0,rotationPattern:'slow'},
- awakening:{vibration:.15,vibrationPattern:'breathe',rotation:.2,rotationPattern:'slow'},
+ awakening:{vibration:0,vibrationPattern:'constant',rotation:0,rotationPattern:'slow'},
 };
 export const deviceTiming={tickMs:10,heartbeatTimeoutMs:2000,bridgeTimeoutMs:2000,randomMinSeconds:30,randomMaxSeconds:90,rotationMinSeconds:5,rotationMaxSeconds:10,randomRotationIntensity:.3,awakeningFadeSeconds:10} as const;

@@ -94,6 +94,20 @@ test('Bambi Sleep closes softly, holds fully black for five seconds, then opens 
   assert.equal(strongestTriggerEffect(['Bambi Sleep','Good Girl']),effect);
 });
 
+test('Reset is a finite presentation fade, clears a previous Sleep hold and cancels on the next cue or seek',()=>{
+ const state=new TriggerVisualState();state.start(0,triggerEffectFor('Bambi Sleep'));
+ state.start(1,triggerEffectFor('Bambi Reset'));
+ assert.equal(state.frame(1).eyeOpening,1);
+ assert.ok(Math.abs(state.frame(1.125).black-.5)<1e-8);
+ assert.equal(state.frame(1.4).black,1);
+ assert.ok(state.frame(1.95).black>0&&state.frame(1.95).black<1);
+ assert.deepEqual(state.frame(2.301),emptyTriggerFrame);
+ state.start(3,triggerEffectFor('Bambi Reset'));state.start(3.4,triggerEffectFor('Good Girl'));
+ assert.equal(state.frame(3.45).black,0);
+ state.start(4,triggerEffectFor('Bambi Reset'));state.clear();assert.deepEqual(state.frame(4.4),emptyTriggerFrame);
+ state.start(5,triggerEffectFor('Bambi Reset'),true);assert.deepEqual(state.frame(5.4,true),emptyTriggerFrame);
+});
+
 test('Sleep hold survives the next narration/other cue; full cancellation and reduced motion remain authoritative',()=>{
   const state=new TriggerVisualState();state.start(0,triggerEffectFor('Bambi Sleep'));
   state.clear(true);state.start(2,triggerEffectFor('Good Girl'));

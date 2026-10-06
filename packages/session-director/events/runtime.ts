@@ -3,6 +3,7 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import { EventSchema, ProgramSchema, eventDurationMs, type BambiEvent, type BambiProgram, type PresentationState, type SpeechSpec, type Transition } from './contract';
+import { deliveryProfiles, eventDelivery } from '../delivery';
 
 export type EngineMarker = '[frac:on]' | '[frac:off]' | '[mindwipe:start]' | '[mindwipe:blank]' | '[mindwipe:reanchor]' | '[reset:begin]' | '[reset:complete]' | '[self:original]' | '[blink:start]' | '[silence:break]' | '[motif:recall]' | '[peak:layer]' | '[soft:return]' | `[mantra:loop:${number}]`;
 export function parseEngineMarker(value: string): EngineMarker | undefined {
@@ -75,6 +76,10 @@ export function compileEvent(raw: BambiEvent): CompiledEvent {
     const states = [frames.filter(f => f.atMs <= window.atMs).at(-1), ...frames.filter(f => f.atMs > window.atMs && f.atMs < window.endMs)].filter(Boolean);
     if (states.some(f => f!.state.narrationState === 'paused' || !f!.state.activeLayers.some(l => ['main_voice', 'mantra_voice', 'left_voice', 'right_voice', 'echo_voice'].includes(l)))) throw Error('Speech window overlaps an engine-only interval');
   }
+  for (const action of event.haptics.filter(a => a.speechSlotId)) {
+    const window = speech.find(s => s.id === action.speechSlotId), atMs = event.atMs + action.offsetMs;
+    if (!window || atMs < window.atMs || atMs + (action.command.durationMs ?? 0) > window.endMs) throw Error('Speech-bound haptic must fit its speech window');
+  }
   return { event, frames, speech };
 }
 
@@ -116,6 +121,38 @@ export class EventRuntime {
     }
   }
   get slots() { return this.compiled.flatMap(c => c.speech); }
+  /** Append a bounded adaptive window without replacing delivered history or the clock. */
+  append(event: BambiEvent, motifs: BambiProgram['motifs'] = []) {
+    if (this.stopped) throw Error('Cannot append to a stopped runtime');
+    const previous = this.compiled.at(-1);
+    if (event.atMs < Math.max(this.lastMs, previous ? previous.event.atMs + eventDurationMs(previous.event) : 0)) throw Error('Adaptive event overlaps committed playback');
+    const retained = this.compiled.filter(c => c.event.atMs + eventDurationMs(c.event) >= this.lastMs - 60000).slice(-63);
+    const known = new Map(this.program.motifs.map(m => [m.id, m]));
+    for (const motif of motifs) if (!known.has(motif.id)) known.set(motif.id, motif);
+    const checked = ProgramSchema.parse({ ...this.program, motifs: [...known.values()], events: [...retained.map(c => c.event), event] });
+    const compiled = compileEvent(event);
+    compiled.entryState = structuredClone(previous?.frames.at(-1)?.state ?? this.program.baseline);
+    const reservations = new Map<string, { atMs: number; cooldownMs: number }>();
+    for (const slot of [...this.slots, ...compiled.speech]) if (slot.speech.requiredTrigger) {
+      const phrase = slot.speech.requiredTrigger, atMs = slot.atMs + slot.speech.triggerAtMs!, prior = reservations.get(phrase);
+      if (prior && atMs - prior.atMs < prior.cooldownMs) throw Error('Adaptive trigger violates cooldown');
+      reservations.set(phrase, { atMs, cooldownMs: slot.speech.triggerCooldownMs! });
+    }
+    this.program.events = checked.events; this.program.motifs = checked.motifs;
+    this.compiled.splice(0, this.compiled.length, ...retained, compiled);
+    const liveSlots = new Set(this.slots.map(s => s.id));
+    for (const id of this.delivered) if (!liveSlots.has(id)) this.delivered.delete(id);
+    for (const motif of motifs) if (!this.motifs.has(motif.id)) this.motifs.set(motif.id, { ...motif, lastUsedAtMs: null, useCount: 0 });
+    for (const slot of compiled.speech) if (slot.speech.requiredTrigger) this.triggers.plan(slot.speech.requiredTrigger, slot.speech.triggerCooldownMs!, slot.phase);
+  }
+  /** A readiness fallback may replace only an episode that has not started. */
+  replacePending(event: BambiEvent) {
+    const index = this.compiled.findIndex(c => c.event.id === event.id), old = this.compiled[index];
+    if (this.stopped || !old || event.atMs <= this.lastMs || event.atMs !== old.event.atMs || eventDurationMs(event) !== eventDurationMs(old.event)) throw Error('Cannot replace delivered event timing');
+    const checked = ProgramSchema.parse({ ...this.program, events: this.program.events.map(e => e.id === event.id ? event : e) });
+    const compiled = compileEvent(event); compiled.entryState = old.entryState;
+    this.compiled[index] = compiled; this.program.events = checked.events;
+  }
   get revision() { return this.generation; }
   pause() { this.paused = true; }
   resume() { if (!this.stopped) this.paused = false; }
@@ -158,7 +195,8 @@ export class EventRuntime {
       return atMs - slot.atMs <= 150 && atMs < slot.endMs && snapshot.state.narrationState !== 'paused';
     });
     const due = <T extends { offsetMs: number }>(items: T[]) => current ? items.filter(a => current.event.atMs + a.offsetMs > this.lastMs && current.event.atMs + a.offsetMs <= atMs && atMs - current.event.atMs - a.offsetMs <= 150) : [];
-    const result = { snapshot, speech, frames, audio: due(current?.event.audio ?? []), visual: due(current?.event.visual ?? []), haptics: due(current?.event.haptics ?? []) };
+    // Bound cues are dispatched only by successful speech playback, never by timeline ticks alone.
+    const result = { snapshot, speech, frames, audio: due(current?.event.audio ?? []), visual: due(current?.event.visual ?? []), haptics: due(current?.event.haptics.filter(a => !a.speechSlotId) ?? []) };
     this.lastMs = atMs; return result;
   }
 }
@@ -171,6 +209,7 @@ export function speechInstruction(slot: SpeechSlot, motif?: MotifState, frame?: 
     frame ? `Engine-selected narration context: ${JSON.stringify({ intensity: frame.state.density.intensity, effectDensity: frame.state.density.effectDensity, visualState: frame.state.visualState, narrationState: frame.state.narrationState, ambientState: frame.state.ambientState })}. Match its narrative intensity and speech mode; do not read technical settings aloud.` : '',
     slot.speech.wordTarget ? `Word budget: at most ${slot.speech.wordTarget} words in total.` : '',
     slot.speech.instruction,
+    `Engine delivery: ${slot.speech.delivery ?? eventDelivery(slot.speech.mode, slot.phase)}. ${deliveryProfiles[slot.speech.delivery ?? eventDelivery(slot.speech.mode, slot.phase)].syntax} Speed and pauses remain engine-controlled.`,
     motif ? `Established original motif: ${JSON.stringify(motif.textAnchor)}. Preserve its identity.` : '',
     slot.speech.requiredTrigger ? `Required phrase: ${JSON.stringify(slot.speech.requiredTrigger)}. Use exactly once, as the final clause. Do not use any other trigger.` : 'Do not introduce or use named triggers.',
     'No markers, stage directions, sound/device metadata, timing decisions or instructions to change application settings. Fictional states are not factual changes to the listener.',

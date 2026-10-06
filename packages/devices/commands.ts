@@ -39,8 +39,12 @@ export const DeviceSettingsSchema=z.object({
  vibrationChannel:z.number().int().min(1).max(4).default(2),rotationChannel:z.number().int().min(0).max(4).default(1),
  vibrationMax:z.number().finite().min(0).max(1).default(.3),rotationMax:z.number().finite().min(0).max(1).default(.3),
  phaseDefaults:z.boolean().default(true),randomRotation:z.boolean().default(false),
+ speechAccents:z.boolean().default(true),accentIntensity:z.number().finite().min(0).max(1).default(.1),accentDurationMs:z.number().int().min(100).max(2000).default(150),
+ vibrationLeadMs:z.number().int().min(0).max(1000).default(0),rotationLeadMs:z.number().int().min(0).max(1000).default(0),
+ transitionMs:z.number().int().min(0).max(2000).default(250),
 }).strict().refine(s=>!s.rotationChannel||s.rotationChannel!==s.vibrationChannel,{message:'Actuator channels must differ'});
 export type DeviceSettings=z.infer<typeof DeviceSettingsSchema>;
+export type DeviceCueOrigin='speech';
 
 export const DeviceSessionSchema=z.object({running:z.boolean(),paused:z.boolean(),elapsed:z.number().finite().min(0).max(86400),duration:z.number().finite().min(1).max(86400),tickBpm:z.number().finite().min(0).max(120).optional(),tickPhaseMs:z.number().finite().min(0).max(3000).optional()}).strict();
 export type DeviceSession=z.infer<typeof DeviceSessionSchema>;

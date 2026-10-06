@@ -4,25 +4,26 @@
 
 import type {AudioEngine} from '../../../packages/audio';
 import {DeviceSettingsSchema,type DeviceSettings} from '../../../packages/devices/commands';
+import {devicePlaybackPlan} from '../../../packages/devices/playback';
 
-export const devicePreferenceIds=['device-bridge','device-address','device-write-char','device-auto-connect','device-vib-channel','device-rot-channel','device-vib-max','device-rot-max','device-phase-defaults','device-random-rotation'];
-export const deviceBooleanPreferenceIds=['device-auto-connect','device-phase-defaults','device-random-rotation'];
+export const devicePreferenceIds=['device-bridge','device-address','device-write-char','device-auto-connect','device-vib-channel','device-rot-channel','device-vib-max','device-rot-max','device-phase-defaults','device-random-rotation','device-speech-accents','device-accent-intensity','device-accent-duration','device-vib-lead','device-rot-lead','device-transition'];
+export const deviceBooleanPreferenceIds=['device-auto-connect','device-phase-defaults','device-random-rotation','device-speech-accents'];
 export function initDeviceControls(send:(message:unknown)=>void,audio:()=>AudioEngine|null,session:()=>{running:boolean;paused:boolean;elapsed:number;duration:number},engineEvents:()=>boolean=()=>false){
  const element=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
  const value=(id:string)=>element<HTMLInputElement>(id).value;
  let configuredEventMode=false;
  let enabled=false,lastBeat=-Infinity,lastPoll=-Infinity,lastStatus:any={};
- const bindAudio=()=>{const engine=audio();if(engine)engine.onDeviceCue=(command,time)=>{const state=session();if(!enabled||!state.running||state.paused)return;send({type:'device-session',session:state});send({type:'device-command',command,delayMs:time===undefined?0:engine.outputDelayMs(time)});};};
- const settings=():DeviceSettings=>DeviceSettingsSchema.parse({enabled,bridge:value('device-bridge'),vibrationChannel:Number(value('device-vib-channel')),rotationChannel:Number(value('device-rot-channel')),vibrationMax:Number(value('device-vib-max')),rotationMax:Number(value('device-rot-max')),phaseDefaults:!engineEvents()&&element<HTMLInputElement>('device-phase-defaults').checked,randomRotation:!engineEvents()&&element<HTMLInputElement>('device-random-rotation').checked});
+ const bindAudio=()=>{const engine=audio();if(engine)engine.onDeviceCue=(command,time,origin)=>{const state=session();if(!enabled||!state.running||state.paused)return;let config:DeviceSettings;try{config=settings();}catch{return;}send({type:'device-session',session:state});for(const cue of devicePlaybackPlan(command,time===undefined?0:engine.outputDelayMs(time),config,origin))send({type:'device-command',...cue});};};
+ const settings=():DeviceSettings=>DeviceSettingsSchema.parse({enabled,bridge:value('device-bridge'),vibrationChannel:Number(value('device-vib-channel')),rotationChannel:Number(value('device-rot-channel')),vibrationMax:Number(value('device-vib-max')),rotationMax:Number(value('device-rot-max')),phaseDefaults:!engineEvents()&&element<HTMLInputElement>('device-phase-defaults').checked,randomRotation:!engineEvents()&&element<HTMLInputElement>('device-random-rotation').checked,speechAccents:element<HTMLInputElement>('device-speech-accents').checked,accentIntensity:Number(value('device-accent-intensity')),accentDurationMs:Number(value('device-accent-duration')),vibrationLeadMs:Number(value('device-vib-lead')),rotationLeadMs:Number(value('device-rot-lead')),transitionMs:Number(value('device-transition'))});
  const labels=()=>{element('device-vib-label').textContent=Math.round(Number(value('device-vib-max'))*100)+'%';element('device-rot-label').textContent=Math.round(Number(value('device-rot-max'))*100)+'%';};
  const message=(text:string)=>{element('device-message').textContent=text;};
- const configure=()=>{labels();try{send({type:'device-config',settings:settings()});configuredEventMode=engineEvents();send({type:'device-session',session:session()});}catch{message('Choose two different motor channels.');}};
+ const configure=(restart=false)=>{labels();try{send({type:'device-config',settings:settings(),restart});configuredEventMode=engineEvents();send({type:'device-session',session:session()});}catch{message('Check motor channels and calibration values.');}};
  const stop=()=>{enabled=false;element<HTMLInputElement>('device-enabled').checked=false;send({type:'device-stop'});};
  element<HTMLInputElement>('device-enabled').onchange=()=>{enabled=element<HTMLInputElement>('device-enabled').checked;configure();};
- for(const id of devicePreferenceIds.filter(id=>!['device-address','device-write-char','device-auto-connect'].includes(id)))element(id).addEventListener('change',configure);
- for(const id of ['device-vib-max','device-rot-max'])element(id).addEventListener('input',configure);
+ for(const id of devicePreferenceIds.filter(id=>!['device-address','device-write-char','device-auto-connect'].includes(id)))element(id).addEventListener('change',()=>configure());
+ for(const id of ['device-vib-max','device-rot-max'])element(id).addEventListener('input',()=>configure());
  element('device-stop').onclick=stop;
- element('device-resume').onclick=()=>{if(enabled)configure();else element('device-message').textContent='Enable device control first.';};
+ element('device-resume').onclick=()=>{if(enabled)configure(true);else element('device-message').textContent='Enable device control first.';};
  element('device-scan').onclick=async()=>{const button=element<HTMLButtonElement>('device-scan');button.disabled=true;element('device-message').textContent='Looking for Bluetooth devices …';
   try{const response=await fetch('/api/devices/scan');const data=await response.json();if(!response.ok)throw Error(data.error);const list=element<HTMLSelectElement>('device-discovered');list.replaceChildren();
    for(const device of [...data.devices].sort((a:any,b:any)=>Number(/pearlconch|joyhub/i.test(b.name))-Number(/pearlconch|joyhub/i.test(a.name)))){const option=document.createElement('option');option.value=device.address;option.textContent=(device.name||'Unnamed device')+' · '+device.address+' · '+device.rssi+' dBm';list.append(option);}
@@ -39,6 +40,13 @@ export function initDeviceControls(send:(message:unknown)=>void,audio:()=>AudioE
  element('device-test').onclick=()=>test(Number(value('device-test-channel')));
  element('device-test-vibration').onclick=()=>test(Number(value('device-vib-channel')));
  element('device-test-rotation').onclick=()=>test(Number(value('device-rot-channel')));
+ element('device-test-cue').onclick=async()=>{
+  const engine=audio();if(!engine||!enabled||!session().running||session().paused){message('Enable control and run an unpaused session to compare cue timing.');return;}
+  try{if(!settings().speechAccents){message('Enable brief vibration at spoken cues before comparing timing.');return;}await engine.context.resume();if(!enabled||!session().running||session().paused)return;bindAudio();const time=engine.context.currentTime+1.1;
+   if(!engine.playEventCue('blink',time,time+.3)){message('The sound is muted or unavailable. Check the Effects audio level.');return;}
+   engine.onDeviceCue?.({type:'device',channel:'vib',operation:'buzz',intensity:.1,durationMs:150},time,'speech');message('Compare the sound and vibration after one second. Adjust vibration lead if movement arrives later.');
+  }catch{message('Check audio and calibration values.');}
+ };
  element('device-command-run').onclick=()=>{if(!enabled){element('device-message').textContent='Enable device control first.';return;}send({type:'device-session',session:session()});send({type:'device-command',command:{type:'device',channel:value('device-manual-channel'),operation:'pattern',pattern:value('device-manual-pattern')}});};
  const updateStatus=(data:any)=>{
   lastStatus=data;if(data.owned!==undefined){enabled=data.owned===true;element<HTMLInputElement>('device-enabled').checked=enabled;}
@@ -51,6 +59,7 @@ export function initDeviceControls(send:(message:unknown)=>void,audio:()=>AudioE
  };
  labels();
  return {
+  get enabled(){return enabled;},
   tick(wall:number){bindAudio();
    if(wall-lastBeat>=500){lastBeat=wall;if(enabled)send({type:'device-session',session:session()});}
    if(wall-lastPoll>=1000){lastPoll=wall;send({type:'device-status'});}

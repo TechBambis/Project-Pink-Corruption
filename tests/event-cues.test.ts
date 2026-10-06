@@ -25,5 +25,5 @@ test('giggle cues use the spoken topic word and ignore negated instructions or m
   assert.equal(giggleOffset(words,'A giggle.'),350);
   assert.equal(giggleOffset(words,'Do not giggle.'),undefined);
   assert.equal(giggleOffset([],'A giggle.'),undefined);
-  assert.equal(giggleOffset([{word:'kichern',atMs:500}],'Leises Kichern.'),500);
+  assert.equal(giggleOffset([{word:'chuckle',atMs:500}],'A quiet chuckle.'),500);
 });

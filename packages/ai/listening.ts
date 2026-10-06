@@ -22,4 +22,4 @@ export async function decideListening(input:z.infer<typeof ListeningInputSchema>
  return ListeningDecisionSchema.parse(await backend.structured(listeningMessages(input),input.model,signal,input.context,listeningDecisionFormat));
 }
 /** Only explicit standalone commands bypass planning. Negated/quoted phrases do not. */
-export function isStopRequest(text:string){return /^(?:(?:please|bitte)\s+)?(?:stop(?:\s+(?:everything|the session|talking))?|stopp|hör auf|hoer auf|aufhören)(?:\s+(?:please|bitte|now|jetzt))?[.!\s]*$/iu.test(text.trim());}
+export function isStopRequest(text:string){return /^(?:please\s+)?stop(?:\s+(?:everything|the session|talking))?(?:\s+(?:please|now))?[.!\s]*$/iu.test(text.trim());}

@@ -9,6 +9,7 @@
   </head>
   <body>
     <div id="app">
+      <aside id="desktop-smoke" hidden aria-label="Desktop smoke build"><span>Packaging smoke build · AI and speech unavailable</span> <button id="offline-sample" type="button">Load offline sample</button> <a href="/desktop-guide.html">Build guide and source</a></aside>
       <div class="app-shell">
         <main id="workspace">
           <div id="session-space" class="session-space">
@@ -19,88 +20,67 @@
                 <p id="media-name">Bring your favorite sounds, or have a little chat with Bambi.</p>
               </div>
             </div>
-            <div id="stage" class="stage" tabindex="-1" aria-label="Session visuals and playback">
+            <div id="stage" class="stage" tabindex="0" aria-label="Session visuals and playback">
               <video id="media" playsinline preload="metadata" class="hidden">
               </video>
               <canvas id="visual" aria-label="Audio-reactive Bambi visuals">
               </canvas>
-              <div id="caption" class="caption" aria-live="off">
+              <div id="caption" class="caption hidden" aria-live="off" aria-hidden="true">
               </div>
               <div id="word" class="word">
               </div>
-              <div class="stage-top">
+              <div class="stage-top" hidden>
                 <span id="stage-state">Preview</span>
                 <span id="stage-clock">00:00</span>
               </div>
               <p id="immersive-notice" class="immersive-notice hidden" role="status"></p>
               <pre id="hud" class="hidden">
               </pre>
-<div class="stage-toolbar"><button id="fullscreen" class="quiet">⛶ Full screen</button></div>
 <a class="settings-cue" href="#session-basics" data-target="session-basics">Settings <span aria-hidden="true">↓</span></a>
             </div>
           </section>
-        <aside class="companion" id="chat-panel" aria-label="Bambi Chat">
-          <div class="companion-title">
-            <button id="chat-close" type="button" class="quiet" aria-label="Close chat">✕</button>
-            <span class="avatar">✧</span>
-            <div>
-              <h2>Bambi</h2>
-              <span id="ai-status">Your Bambi companion</span>
-            </div>
-            <button id="interrupt" class="quiet" title="Interrupt reply">■</button>
-          </div>
-          <button id="new-conversation" class="quiet" title="Start fresh chat context; keep saved memories">Fresh chat</button>
-          <button id="memory" class="quiet" type="button">Memories</button>
-          <div id="messages" class="messages">
-            <div class="message assistant">
-              <p>You came back. Settle in. I'll take it from here.</p>
-            </div>
-          </div>
-          <div id="notice" class="notice hidden">
-          </div>
-          <form id="chat-form">
-            <label class="sr-only" for="chat-input">Message Bambi</label>
-            <textarea id="chat-input" placeholder="I already know." rows="2" maxlength="4000"></textarea>
-            <div class="chat-actions">
-              <button type="submit" class="send" aria-label="Send message">↑</button>
-            </div>
-          </form>
-
-        </aside>
+        <div id="messages" hidden aria-hidden="true"></div>
+        <div id="notice" class="notice hidden"></div>
             <div id="session-control-anchor" class="session-control-anchor">
               <div class="session-dock" aria-label="Session controls">
-                <div id="player-details" class="player-details" hidden>
+                <div id="player-details" class="player-details">
                   <div class="transport">
-                    <div class="seek-wrap">
-            <input id="seek" type="range" min="0" max="1200" value="0" step="0.1" aria-label="Session Position">
+                    <div id="media-seek" class="seek-wrap" hidden>
+            <div id="seek-timeline" class="seek-timeline">
+              <canvas id="seek-cue-lines" class="seek-cue-lines" aria-hidden="true" hidden></canvas>
+              <input id="seek" type="range" min="0" max="1200" value="0" step="0.1" aria-label="Session Position" aria-describedby="seek-cue-preview">
+              <span id="seek-cue-preview" class="seek-cue-preview" role="tooltip" hidden></span>
+            </div>
             <div class="seek-labels">
               <span id="elapsed">00:00</span>
               <span id="length">20:00</span>
             </div>
           </div>
-          <button id="mute" class="quiet" aria-label="Mute audio">♫</button>
-          <label class="master">Volume<input id="master" type="range" min="0" max="1" step="0.01" value="0.7"></label>
 </div>
-                  <div class="player-options">
-                    <button id="player-visuals" type="button" aria-pressed="true">Visuals on</button>
-                    <button id="player-interrupt" type="button">Interrupt voice</button>
-                    <select id="player-mic-mode" aria-label="Microphone playback mode">
-                      <option value="speakers">Speakers</option>
-                      <option value="headphones">Headphones</option>
-                    </select>
-                  </div>
                 </div>
                 <div class="session-essentials">
                   <button id="start" hidden>Begin your session</button>
-                  <button id="pause" class="session-play" aria-label="Start session"><span id="play-icon" aria-hidden="true">▶</span><span id="play-label">Start</span></button>
-                  <span id="session-time" class="session-time" aria-hidden="true">00:00</span>
-                  <div class="dock-actions">
-                    <button id="player-controls-toggle" type="button" class="quiet" aria-label="Show playback controls" aria-controls="player-details" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6M16 14v6"/></svg><span>Controls</span></button>
-                    <button id="chat-toggle" type="button" class="quiet" aria-controls="chat-panel" aria-expanded="true" aria-label="Close chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v13H9l-5 4z"/></svg><span>Chat</span></button>
-                    <button id="player-exit-fullscreen" type="button" class="quiet fullscreen-only" aria-label="Exit fullscreen" title="Exit fullscreen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4"/></svg></button>
-                    <button id="panic" class="stop" aria-label="Stop everything"><span aria-hidden="true">■</span> Stop</button>
+                  <button id="pause" class="session-play" aria-label="Start session" aria-keyshortcuts="Space"><span id="play-icon" aria-hidden="true">▶</span><span id="play-label">Start</span></button>
+                <form id="chat-form" class="player-composer" aria-label="Talk to Bambi">
+                  <button id="mic" type="button" class="quiet" title="Turn microphone on" aria-pressed="false" aria-label="Turn microphone on">Unmute</button>
+                  <div class="composer-body">
+                    <span id="ai-status" hidden aria-hidden="true"></span>
+                    <div class="composer-field">
+                      <div id="composer-reply" class="composer-reply">Message Bambi, or turn on your mic.</div>
+                      <label class="sr-only" for="chat-input">Message Bambi</label>
+                      <textarea id="chat-input" placeholder="Message Bambi…" rows="2" maxlength="4000" aria-describedby="composer-help"></textarea>
+                    </div>
                   </div>
-              <button id="mic" type="button" class="quiet" title="Turn microphone on" aria-pressed="false" aria-label="Turn microphone on">Unmute</button>
+                  <button type="submit" class="send" aria-label="Send message" title="Send message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+                  <span id="composer-help" class="sr-only">When empty, this field shows Bambi's latest reply. Type to respond. Enter sends; Shift Enter adds a line.</span>
+                </form>
+                  <div class="dock-actions">
+                    <button id="mute" type="button" class="quiet" aria-label="Mute audio" aria-pressed="false" title="Mute audio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m11 5-6 4H2v6h3l6 4z"/><path class="speaker-waves" d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/><path class="speaker-cross" d="m16 9 6 6m0-6-6 6"/></svg></button>
+                    <label class="master"><span class="sr-only">Volume</span><input id="master" type="range" min="0" max="1" step="0.01" value="0.7" aria-label="Volume"></label>
+                    <span class="cue-marker-option" hidden><input id="player-cue-markers" type="checkbox" checked hidden><button id="player-cue-toggle" type="button" class="quiet" aria-label="Trigger markers" aria-pressed="true" title="Hide trigger markers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M6 5v14M12 8v8M18 5v14"/></svg></button></span>
+                    <button id="panic" type="button" class="quiet" hidden aria-label="End session" title="End session · stop audio, AI, microphone and devices"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button>
+                    <button id="fullscreen" type="button" class="quiet" aria-label="Enter fullscreen" aria-pressed="false" aria-keyshortcuts="F" title="Enter fullscreen (F)"><svg class="fullscreen-enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><svg class="fullscreen-exit" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M15 4v5h5M20 15h-5v5M9 20v-5H4"/></svg></button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -112,7 +92,7 @@
               <a href="#sound" class="nav-item" data-nav="sound"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M8 5v14M12 2v20M16 6v12M20 9v6"></path></svg><span>Sound<small>Mix & rhythm</small></span></a>
               <a href="#visuals" class="nav-item" data-nav="visuals"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c5 0 10 4 10 10s-4 10-10 10S2 18 2 12s4-7 8-7 7 3 7 7-2 5-5 5-4-2-4-4 2-3 3-3 2 1 2 2"></path></svg><span>Visuals<small>Scenes & spirals</small></span></a>
               <a href="#devices" class="nav-item" data-nav="devices"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4M16 2v4M6 6h12v5a6 6 0 0 1-12 0zM12 17v5"></path></svg><span>Devices<small>Connection & patterns</small></span></a>
-              <a href="#files" class="nav-item" data-nav="files"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h9l5 5v13H5zM14 3v6h5M9 13h6M9 17h6"></path></svg><span>Files<small>Sessions &amp; timelines</small></span></a>
+              <a href="#files" class="nav-item" data-nav="files"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h9l5 5v13H5zM14 3v6h5M9 13h6M9 17h6"></path></svg><span>Library<small>Sessions &amp; playlists</small></span></a>
               <a href="#extras" class="nav-item" data-nav="extras"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg><span>Extras<small>Sources & tools</small></span></a>
               <button id="settings-search-open" type="button" class="search-open nav-search" aria-haspopup="dialog" aria-controls="settings-search" aria-label="Find a setting"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"></circle><path d="m15 15 6 6"></path></svg><span>Search</span></button>
             </nav>
@@ -131,7 +111,7 @@
 Choose your session
                     </legend>
                     <button type="button" class="experience-choice" data-experience="conversation" aria-pressed="true"><span>Bambi Chat</span><small>Talk, type &amp; listen</small></button>
-                    <button type="button" class="experience-choice" data-experience="files" aria-pressed="false"><span>Play my files</span><small>Your favorite sessions</small></button>
+                    <button type="button" class="experience-choice" data-experience="files" aria-pressed="false"><span>Session library</span><small>Files &amp; playlists</small></button>
                     <select id="mode" hidden aria-hidden="true" tabindex="-1">
                       <option value="local">Play my files</option>
                       <option value="conversation" selected>Bambi Chat</option>
@@ -144,7 +124,7 @@ Choose your session
                 </div>
                 <div class="experience-help">
                   <p id="experience-description"></p>
-                  <a id="experience-files-link" href="#files" data-target="files" hidden>Choose your files</a>
+                  <a id="experience-files-link" href="#files" data-target="files" hidden>Open your library</a>
                 </div>
                 <label id="experience-join-label" class="check experience-join" hidden><input id="experience-join" type="checkbox"> Let Bambi join in</label>
                 <div id="official-note" class="hint hidden">
@@ -186,6 +166,7 @@ Open your official session in its own tab, then start the local clock alongside 
               <nav class="section-nav" aria-label="Within Voice &amp; AI">
                 <a href="#voice-basics" data-jump="voice-basics">Voice</a>
                 <a href="#microphone-settings" data-jump="microphone-settings">Microphone</a>
+                <a href="#conversation-settings" data-jump="conversation-settings">Conversation</a>
                 <a href="#content-settings" data-jump="content-settings">Trigger</a>
                 <a href="#trigger-timing-settings" data-jump="trigger-timing-settings">Phases</a>
                 <a href="#ai-advanced-settings" data-jump="ai-advanced-settings">AI model</a>
@@ -203,6 +184,7 @@ Open your official session in its own tab, then start the local clock alongside 
                   </select>
                   <label>Voice <select id="voice"><option value="af_heart">Heart</option><option value="af_bella">Bella</option><option value="af_sarah">Sarah</option><option value="af_nicole">Nicole</option><option value="af_sky">Sky</option><option value="af_river">River</option><option value="af_aoede">Aoede</option><option value="bambi_classic">Bambi Classic (custom blend)</option></select></label>
                   <label>Speaking speed <input id="speed" type="number" min="0.5" max="1.5" step="0.01" value="0.78"></label>
+                  <label class="check"><input id="adaptive-delivery" type="checkbox" checked> Adaptive narration: pace, pauses &amp; mix</label>
                   <label>Companion / prompt <select id="prompt-template"><option value="bambisleep-classic">BambiSleep Classic</option><option value="gentle-induction">Gentle Induction</option><option value="custom">Your own companion</option></select></label>
                   <label>Your name <input id="bambi-name" maxlength="50" value="Bambi"></label>
                 </div>
@@ -213,6 +195,8 @@ Open your official session in its own tab, then start the local clock alongside 
               </section>
               <details id="microphone-settings" data-section="Microphone &amp; conversation">
                 <summary>Microphone &amp; conversation</summary>
+                <label>Recognition<select id="mic-recognizer"><option value="auto" selected>Automatic · streaming when installed</option><option value="whisper">Whisper · complete speech segments</option><option value="streaming">Streaming · English, local CPU</option></select></label>
+                <p class="hint">Recognition changes take effect when you next unmute the microphone. Streaming shows words while you speak; Whisper is the fallback when available.</p>
                 <label>Playback<select id="mic-playback-mode"><option value="speakers">Speakers · filter Bambi playback</option><option value="headphones" selected>Headphones · listen while speaking</option></select></label>
                 <input id="mic-interruptible" type="checkbox" checked hidden>
                 <label>Conversation behavior<select id="conversation-policy"><option value="adapt" selected>Listen &amp; adapt · finish the sentence</option><option value="interrupt">Interrupt immediately</option></select></label>
@@ -223,6 +207,17 @@ Open your official session in its own tab, then start the local clock alongside 
                 <p id="listening-status" class="hint" role="status" aria-live="polite"></p>
                 <p id="mic-status" class="hint" role="status">Microphone muted</p>
               </details>
+              <section id="conversation-settings" class="settings-group" data-section="Conversation &amp; memories">
+                <h2>Conversation &amp; memories</h2>
+                <label>Conversation style<select id="conversation-style"><option value="situational" selected>Situational · follow the conversation</option><option value="reactive">Classic · replies &amp; continuous narration</option></select></label>
+                <p class="hint">Situational follows your words, asks when an answer matters and builds the next passage from your reply. Real questions leave room for you to answer.</p>
+                <p class="hint">Type directly in the player. Your latest reply stays there until the next one.</p>
+                <div class="conversation-tools">
+                  <button id="memory" type="button" class="quiet">Memories</button>
+                  <button id="new-conversation" type="button" class="quiet" title="Start a new conversation; keep saved preferences and older memories">New conversation</button>
+                </div>
+                <p class="hint">New conversation clears the current conversational context. Saved preferences and searchable earlier chats remain available.</p>
+              </section>
               <details id="voice-blend-settings" class="settings-fold" data-section="Voice blend &amp; persona">
                 <summary>Voice blend & persona</summary>
                 <div class="fold-content">
@@ -230,6 +225,8 @@ Open your official session in its own tab, then start the local clock alongside 
                     <label>Second voice <select id="voice2"><option value="">No blend</option></select></label>
                     <label>Blend amount <input id="voice-mix" type="range" min="0" max="1" step="0.05" value="0.25"></label>
                   </div>
+                  <label class="check"><input id="dual-voice" type="checkbox"> Dual Voice</label>
+                  <p class="hint">During guided passages, a softer Bambi voice speaks in the main voice’s pauses and grows more present through the session.</p>
                   <label class="check"><input id="voice-echoes" type="checkbox" checked> Soft voice echoes in induction and awakening</label>
                   <label>Custom persona <input id="persona" maxlength="300" value="Soft, playful, dreamy and affectionate"></label>
                 </div>
@@ -275,6 +272,7 @@ Open your official session in its own tab, then start the local clock alongside 
                 <div class="fold-content">
                   <div class="settings-grid">
                     <label>AI model <select id="model"><option value="bambi-qwen35-9b-hauhau:q4_k_m">Qwen3.5 9B · HauhauCS · Q4_K_M</option></select></label>
+                    <p id="model-context-status" class="hint" role="status">Preparation checks the complete selected prompt and available conversation space.</p>
                     <label>Performance <select id="performance"><option value="auto">Auto</option><option value="latency">Low latency</option><option value="balanced">Balanced</option><option value="quality">Quality</option></select></label>
                     <label>Response style <select id="sampling-profile"><option value="qwen">Natural · Balanced</option><option value="creative">Creative · Experimental</option></select></label>
                     <label>Reply length <select id="response-length"><option value="220">Short</option><option value="600">Medium</option><option value="2048">Full passage (2,048)</option><option value="8192" selected>Long script (8,192)</option></select></label>
@@ -433,7 +431,7 @@ Open your official session in its own tab, then start the local clock alongside 
                 <p class="hint">The voice gently brightens the spiral without zooming. Each tick pulses the center focus; only the Orb also expands. Voice reactions follow the audio; displayed words stay still. Triggers have their own visual effects. Set strength to zero to turn the added reactions off. Gentle motion keeps them still.</p>
                 <label>Center focus<select id="visual-fixation"><option value="none">None</option><option value="dot">Glowing point</option><option value="heart">Heart</option></select></label>
                 <label class="check"><input id="visual-focus-words" type="checkbox">Large spoken words</label>
-                <p class="hint">Show the words Bambi is speaking in the center, with or without sentence captions.</p>
+                <p class="hint">Show one spoken word at a time in pink, even when Show captions is off.</p>
                 <div id="immersive-presets" class="content-actions"><button type="button" id="immersive-max" class="quiet">Maximum immersion</button><button type="button" id="immersive-tunnel" class="quiet">Deep Tunnel</button><button type="button" id="immersive-loop" class="quiet">Endless Loop</button><button type="button" id="immersive-fractal" class="quiet">Fractal Bloom</button><button type="button" id="immersive-vortex" class="quiet">Deep Vortex</button><button type="button" id="immersive-infinity" class="quiet">Infinity Coil</button><button type="button" id="immersive-prism" class="quiet">Prismatic</button><button type="button" id="immersive-orb" class="quiet">Pink Orb</button></div>
                 <div id="spiral-presets" class="content-actions">
                 </div>
@@ -481,7 +479,22 @@ Open your official session in its own tab, then start the local clock alongside 
                 <label class="check"><input id="device-phase-defaults" type="checkbox" checked> Patterns follow session phases</label>
                 <label class="check"><input id="device-random-rotation" type="checkbox"> Random rotation during conditioning</label>
                 <p id="device-levels" class="small" aria-live="off">Vibration 0% · Rotation 0%</p>
-                <p class="hint">Your limits apply to all patterns. Pause and interrupt stop both channels.</p>
+                <p class="hint">Your limits apply to every command. Pause stops both channels; conversation cancels queued cues and keeps the current phase pattern. In event mode, the event haptics option controls cues and phase patterns are suspended.</p>
+                <details id="device-cue-settings">
+                  <summary>Speech cues &amp; timing calibration</summary>
+                  <div class="fold-content">
+                    <label class="check"><input id="device-speech-accents" type="checkbox" checked> Brief vibration at spoken cues</label>
+                    <div class="settings-grid">
+                      <label>Cue intensity<input id="device-accent-intensity" type="number" min="0" max="1" step="0.01" value="0.1"></label>
+                      <label>Cue duration · ms<input id="device-accent-duration" type="number" min="100" max="2000" step="10" value="150"></label>
+                      <label>Vibration lead · ms<input id="device-vib-lead" type="number" min="0" max="1000" step="10" value="0"></label>
+                      <label>Rotation lead · ms<input id="device-rot-lead" type="number" min="0" max="1000" step="10" value="0"></label>
+                      <label>Phase transition · ms<input id="device-transition" type="number" min="0" max="2000" step="10" value="250"></label>
+                    </div>
+                    <button id="device-test-cue" type="button" class="quiet">Compare sound &amp; vibration</button>
+                    <p class="hint">Comparison needs enabled control, an unpaused session and speech cues enabled. Intensity is 0–1 and respects your vibration limit. If movement arrives after the word, increase that motor's lead by the measured delay. A lead cannot precede an already started cue. Impulses return to the ongoing pattern. These values affect playback; they do not measure physical movement.</p>
+                  </div>
+                </details>
               </section>
               <details id="device-mapping-settings" data-section="Connection &amp; channel mapping">
                 <summary>Connection &amp; channel mapping</summary>
@@ -509,7 +522,7 @@ Open your official session in its own tab, then start the local clock alongside 
                   </div>
                   <div class="settings-grid">
                     <label>Channel<select id="device-manual-channel"><option value="vib">Vibration</option><option value="rot">Rotation</option></select></label>
-                    <label>Pattern<select id="device-manual-pattern"><option value="pulse">Pulse</option><option value="ramp_up">Ramp up</option><option value="strobe">Strobe</option><option value="breathe">Breathe · Vib</option><option value="wave">Wave · Vib</option><option value="constant">Constant · Vib</option><option value="slow">Slow · Rot</option><option value="steady">Steady · Rot</option></select></label>
+                    <label>Pattern<select id="device-manual-pattern"><option value="pulse">Pulse</option><option value="ramp_up">Ramp up</option><option value="strobe">Strobe</option><option value="breathe">Breathe · Vib</option><option value="wave">Wave · Vib</option><option value="constant">Constant · Vib</option><option value="slow">Continuous · Rot (slow)</option><option value="steady">Continuous · Rot (steady alias)</option></select></label>
                   </div>
                   <div class="content-actions">
                     <button id="device-command-run" type="button" class="quiet">Start pattern</button>
@@ -522,31 +535,51 @@ Open your official session in its own tab, then start the local clock alongside 
             </section>
             <section id="view-files" class="workspace-view" data-view="files" aria-labelledby="heading-files" hidden>
               <div class="view-heading">
-                <h1 id="heading-files" tabindex="-1">Files</h1>
-                <p>Choose local sessions and add a timeline or captions.</p>
+                <h1 id="heading-files" tabindex="-1">Sessions &amp; playlists</h1>
+                <p>Your little collection. Choose a session, settle in.</p>
               </div>
               <nav class="section-nav" aria-label="Within files">
-                <a href="#file-library" data-jump="file-library">Files</a>
-                <a href="#timeline-settings" data-jump="timeline-settings">Timeline</a>
+                <a href="#file-library" data-jump="file-library">Your collection</a>
+                <a href="#timeline-settings" data-jump="timeline-settings">Extra timing options</a>
               </nav>
               <section id="file-library" class="settings-group" data-section="Your files">
-                <h2>Your files</h2>
+                <h2 class="sr-only">Your collection</h2>
                 <section class="library">
-                  <div class="section-title">
-                    <h2>Session library</h2>
-                    <label class="file-button">+ Choose files<input id="files" type="file" accept="audio/*,video/*,.flac,.m4a,.ogg" multiple></label>
+                  <div class="library-imports">
+                    <div class="local-import">
+                      <h2>From your device</h2>
+                      <p>Audio or video. Kept local.</p>
+                      <label class="file-button">Add files<input id="files" type="file" accept="audio/*,video/*,.flac,.m4a,.ogg" multiple></label>
+                    </div>
+                    <form id="bambicloud-import" class="bambicloud-import">
+                      <label for="bambicloud-url">From BambiCloud</label>
+                      <div class="bambicloud-import-row">
+                        <input id="bambicloud-url" type="url" placeholder="Paste a playlist link" required aria-describedby="bambicloud-status">
+                        <button id="bambicloud-load" type="submit">Add playlist</button>
+                        <button id="bambicloud-cancel" type="button" class="quiet" hidden>Cancel</button>
+                      </div>
+                      <small id="bambicloud-status" role="status">Public playlists. Original audio, played in full.</small>
+                    </form>
                   </div>
-                  <div id="tracks" class="tracks">
-                    <div class="empty">
-                      <span>♬</span>
-                      <p>Bring your favorite sounds.</p>
-                      <small>MP3, WAV, FLAC, OGG, M4A and video.<br>Your files stay on your device.</small>
+                  <div class="collection-layout">
+                    <nav id="library-collections" class="library-collections" aria-label="Session collections"></nav>
+                    <div class="collection-content">
+                      <div class="collection-heading"><h2 id="collection-title">All sessions</h2><span id="collection-count"></span></div>
+                      <label for="library-filter" class="sr-only">Search titles, authors and triggers</label>
+                      <input id="library-filter" type="search" placeholder="Find a session, author or trigger…">
+                      <div id="library-selection" class="library-selection" hidden>
+                        <div><small>Selected session</small><strong id="library-selected-name"></strong></div>
+                        <button id="library-play" type="button">Play session</button>
+                      </div>
+                      <div id="tracks" class="tracks"></div>
+                      <label class="check cloud-cue-option"><input id="bambicloud-cues" type="checkbox" checked> Show timed trigger words &amp; visuals <small>Complete cue names appear in the center, when timing data is available.</small></label>
+                      <p id="bambicloud-cue-status" class="hint" role="status" hidden></p>
                     </div>
                   </div>
                 </section>
               </section>
               <details id="timeline-settings" data-section="Timeline &amp; captions">
-                <summary>Timeline &amp; captions</summary>
+                <summary>Extra timing &amp; analysis options</summary>
                 <label class="file-button">Import VTT / timeline<input id="timeline-file" type="file" accept=".vtt,.json"></label>
                 <label class="check"><input id="analysis-transcript" type="checkbox"> Create captions during analysis</label>
                 <a class="quiet" href="/timelines/phase-choreography.json" download="phase-choreography.json">Download phase timeline</a>
@@ -570,7 +603,7 @@ Open your official session in its own tab, then start the local clock alongside 
               <section class="settings-group" id="local-tools" data-section="Local tools">
                 <h2>Local tools</h2>
                 <div class="tool-links">
-                  <button type="button" class="tool-link" data-open-memory>Memories <span>View and manage saved chats</span></button>
+                  <a class="tool-link" href="#conversation-settings" data-target="conversation-settings">Conversation &amp; memories <span>Saved preferences and recent chats</span></a>
                   <a class="tool-link" href="/studio" target="_blank" rel="noopener">Session Studio <span>Create and export sessions</span></a>
                   <a class="tool-link" href="/setup" target="_blank" rel="noopener">Setup <span>Check services and reply timing</span></a>
                   <a class="tool-link" href="/voice-lab" target="_blank" rel="noopener">Voice Lab <span>Compare voices and sounds</span></a>
@@ -582,7 +615,7 @@ Open your official session in its own tab, then start the local clock alongside 
                 <p class="hint">Open an external session in its own tab, then run local visuals and sound alongside it. Timing is manual.</p>
                 <button id="external-session-activate" class="quiet" type="button">Set up external session</button>
               </details>
-<details id="help-settings" data-section="Help &amp; shortcuts"><summary>Help &amp; shortcuts</summary><p class="hint">Space pauses or resumes. Press Escape twice to stop everything. Ctrl/Cmd+K finds a setting. Use Full screen for an immersive session. Hover over Controls or select it for volume and the timeline. The microphone stays available when chat is closed.</p><h2>Local system</h2><span id="connection" class="connection">Connecting …</span><footer class="health">
+<details id="help-settings" data-section="Help &amp; shortcuts"><summary>Help &amp; shortcuts</summary><p class="hint">Space pauses or resumes. Press Escape twice to stop everything. Ctrl/Cmd+K finds a setting. Use Full screen for an immersive session. Move over the player to reveal playback, volume and your message field. The microphone sits beside your messages. Stop ends the session, voice, microphone and devices; Pause keeps your place.</p><h2>Local system</h2><span id="connection" class="connection">Connecting …</span><footer class="health">
               <span id="health-llm">AI …</span>
               <span id="health-tts">Voice …</span>
               <span id="health-audio">Audio ready</span>
@@ -616,6 +649,15 @@ Open your official session in its own tab, then start the local clock alongside 
         <button id="close-memory">Close</button>
       </div>
     </dialog>
+    <dialog id="library-notes" aria-labelledby="library-notes-heading">
+      <form id="library-notes-form">
+        <h2 id="library-notes-heading">Notes &amp; tags</h2>
+        <p id="library-notes-title"></p>
+        <label for="library-notes-text">Your notes</label><textarea id="library-notes-text" rows="4" maxlength="4000"></textarea>
+        <label for="library-notes-tags">Tags, separated by commas</label><input id="library-notes-tags" type="text" maxlength="500">
+        <div class="dialog-actions"><button id="library-notes-cancel" type="button" class="quiet">Cancel</button><button type="submit">Save</button></div>
+      </form>
+    </dialog>
     <dialog id="content-dialog">
       <h2 id="content-title">Content</h2>
       <div id="content-body">
@@ -637,6 +679,5 @@ Open your official session in its own tab, then start the local clock alongside 
       </div>
       <p class="search-help">↑ ↓ Select · Enter Open · Esc Close</p>
     </dialog>
-    <button id="chat-backdrop" type="button" aria-label="Close chat" hidden></button>
   </body>
 </html>

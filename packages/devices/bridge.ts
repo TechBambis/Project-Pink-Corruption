@@ -20,13 +20,13 @@ export class LocalBLEBridge{
   // bridge is run on the host; the normal app stays in its existing environment.
   return existsSync('/.flatpak-info')?{file:'/usr/bin/flatpak-spawn',args:['--host','--watch-bus',python,script,...args]}:{file:python,args:[script,...args]};
  }
- async scan(){if(!this.supported)throw Error('BLE-Setup fehlt. Starte ./scripts/setup-joyhub.sh.');if(this.scanBusy)throw Error('A Bluetooth scan is already running.');this.scanBusy=true;
+ async scan(){if(!this.supported)throw Error('Bluetooth setup is missing. Run ./scripts/setup-joyhub.sh.');if(this.scanBusy)throw Error('A Bluetooth scan is already running.');this.scanBusy=true;
   try{const command=this.command(['--scan','--seconds','6']);const {stdout}=await runFile(command.file,command.args,{timeout:20000,maxBuffer:128*1024});const devices=z.array(z.object({address:z.string(),name:z.string(),rssi:z.number()})).max(200).parse(JSON.parse(stdout));return devices;}
-  catch(error){throw Error('Bluetooth-Suche fehlgeschlagen: '+String((error as {stderr?:string}).stderr||error).slice(0,300));}
+  catch(error){throw Error('Bluetooth scan failed: '+String((error as {stderr?:string}).stderr||error).slice(0,300));}
   finally{this.scanBusy=false;}
  }
  connect(input:unknown){const operation=this.operations.catch(()=>{}).then(()=>this.connectInternal(input));this.operations=operation;return operation;}
- private async connectInternal(input:unknown){if(!this.supported)throw Error('BLE-Setup fehlt. Starte ./scripts/setup-joyhub.sh.');const settings=BLEConnectionSchema.parse(input);const target=JSON.stringify(settings);
+ private async connectInternal(input:unknown){if(!this.supported)throw Error('Bluetooth setup is missing. Run ./scripts/setup-joyhub.sh.');const settings=BLEConnectionSchema.parse(input);const target=JSON.stringify(settings);
   if(this.process&&this.target===target)return {started:true,connecting:this.connecting};
   await this.disconnectInternal();this.target=target;this.lastError='';this.connecting=true;
   mkdirSync('runtime',{recursive:true});const log=createWriteStream('runtime/joyhub-bridge.log',{flags:'a'});const command=this.command(['--address',settings.address,...(settings.writeChar?['--write-char',settings.writeChar]:[])]);

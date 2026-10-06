@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
+import {voiceTagEnd} from './dual-voice';
 import {parseBreathMarker,type BreathCue} from './breath';
 import {stripVocalFillers} from './nonverbal';
+import {stripSpeechFormatting} from './formatting';
 import {triggerUnits} from './trigger-units';
 import {effectForTrigger} from '../../config/trigger-sequence';
 import {parseDeviceMarker,type DeviceCommand} from '../devices/commands';
@@ -16,11 +18,10 @@ export interface ScriptUnit {text:string;trigger?:string;postPause?:boolean;preP
 const known=new Set<string>(scriptCueNames);
 /** Pure text transformation: metadata is never passed to speech inference. */
 export function normalizeScript(text:string){
- return stripVocalFillers(text).replace(/---\s*END\s*---/gi,'').replace(/\bI-Q\b/gi,'IQ')
+ return stripSpeechFormatting(stripVocalFillers(text)).replace(/---\s*END\s*---/gi,'').replace(/\bI-Q\b/gi,'IQ')
   .replace(/\[PAUSE\]/gi,'[SFX:PAUSE_10]')
   .replace(/…{2,}|\.{6,}/g,' [pause:5000] ')
-  .replace(/…|\.{3}/g,' [pause:2500] ')
-  .replace(/\*\*/g,'');
+  .replace(/…|\.{3}/g,' [pause:2500] ');
 }
 export function scriptUnits(raw:string,names:string[]=[]):ScriptUnit[]{
  const text=normalizeScript(raw),units:ScriptUnit[]=[];let pending:PlaybackCue[]=[],sounds:SoundCue[]=[],ticks:TickCue[]=[],prefixPause='';let breath:BreathCue|undefined;
@@ -65,15 +66,15 @@ export function scriptUnits(raw:string,names:string[]=[]):ScriptUnit[]{
 
 /** Hide only machine cues from the streamed chat display, including split tags. */
 export class ScriptDisplayStream {
- private buffer='';
- constructor(private preserveBreath=false){}
+ private buffer='';private background=false;
+ constructor(private preserveBreath=false,private preservePauses=false,private showBambi=true){}
  push(text:string){this.buffer+=text;let out='';
-  while(this.buffer){const bracket=this.buffer.indexOf('[');if(bracket<0){out+=this.buffer;this.buffer='';break;}
-   out+=this.buffer.slice(0,bracket);this.buffer=this.buffer.slice(bracket);
-   const end=this.buffer.indexOf(']');if(end<0){const upper=this.buffer.toUpperCase();if(['[SFX:','[SOUND:','[TICK:','[VIB:','[ROT:','[BOTH:','[BREATH:','[PAUSE:','[PAUSE]'].some(prefix=>prefix.startsWith(upper)||upper.startsWith(prefix)))break;out+='[';this.buffer=this.buffer.slice(1);continue;}
-   const tag=this.buffer.slice(0,end+1);if(this.preserveBreath&&parseBreathMarker(tag))out+=tag;else if(!/^\[(?:(?:SFX|sound|tick|vib|rot|both|breath):[^\]]*|pause:[^\]]*|PAUSE)\]$/i.test(tag))out+=tag;
+  while(this.buffer){const bracket=this.buffer.indexOf('[');if(bracket<0){if(!this.background||this.showBambi)out+=this.buffer;this.buffer='';break;}
+   if(!this.background||this.showBambi)out+=this.buffer.slice(0,bracket);this.buffer=this.buffer.slice(bracket);
+   const end=voiceTagEnd(this.buffer);if(end<0){const upper=this.buffer.toUpperCase();if(['[SFX:','[SOUND:','[TICK:','[VIB:','[ROT:','[BOTH:','[BREATH:','[PAUSE:','[PAUSE]','[OWNER]','[BAMBI]','[BAMBI:'].some(prefix=>prefix.startsWith(upper)||upper.startsWith(prefix)))break;out+='[';this.buffer=this.buffer.slice(1);continue;}
+   const tag=this.buffer.slice(0,end+1);if(/^\[(owner|bambi)\]$/i.test(tag)){this.background=/bambi/i.test(tag);this.buffer=this.buffer.slice(end+1);continue;}if(/^\[bambi:/i.test(tag)){if(this.showBambi)out+=tag.slice(7,-1);this.buffer=this.buffer.slice(end+1);continue;}if((this.preserveBreath&&parseBreathMarker(tag))||(this.preservePauses&&/^\[pause:(?:\d+|normal|short|medium|long|transition)\]$/.test(tag)))out+=tag;else if(!/^\[(?:(?:SFX|sound|tick|vib|rot|both|breath):[^\]]*|pause:[^\]]*|PAUSE)\]$/i.test(tag))out+=tag;
    this.buffer=this.buffer.slice(end+1);
   }return out;
  }
- flush(){const rest=/^\[(?:SFX|sound|tick|vib|rot|both|breath|pause|PAUSE)/i.test(this.buffer)?'':this.buffer;this.buffer='';return rest;}
+ flush(){const rest=/^\[(?:SFX|sound|tick|vib|rot|both|breath|pause|PAUSE|owner|bambi)/i.test(this.buffer)||this.background&&!this.showBambi?'':this.buffer;this.buffer='';return rest;}
 }

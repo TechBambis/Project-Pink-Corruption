@@ -23,5 +23,10 @@ def strip_speech_controls(text):
     """Hardware/SFX are executed by the playback client, never by the voice model."""
     return _INTERRUPTION.sub(' ', _CONTROLS.sub(' ', text))
 
+def strip_speech_formatting(text):
+    """Remove emphasis/code delimiters, including pairs split between phrases."""
+    text = re.sub(r'[*`]', '', text)
+    return re.sub(r'(?<![^\W_])_+|_+(?![^\W_])', '', text)
+
 def spoken_input(text):
-    return strip_vocal_fillers(strip_speech_controls(text))
+    return strip_speech_formatting(strip_vocal_fillers(strip_speech_controls(text))).strip()

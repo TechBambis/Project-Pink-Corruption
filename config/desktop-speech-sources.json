@@ -1,0 +1,32 @@
+[
+  {
+    "file": "espeakng-loader-0.2.4-source.tar.gz",
+    "url": "https://codeload.github.com/thewh1teagle/espeakng-loader/tar.gz/146599e29be31bf17d99f0bcb7dbb2f92aef3d95",
+    "bytes": 3935,
+    "sha256": "d6496114cd0608988f5291f54d2d15b50cb37b7f007af00bb62cf93be1b3ceca"
+  },
+  {
+    "file": "espeak-ng-source.tar.gz",
+    "url": "https://codeload.github.com/espeak-ng/espeak-ng/tar.gz/4870adfa25b1a32b4361592f1be8a40337c58d6c",
+    "bytes": 17747711,
+    "sha256": "cd83f84c4e495f281ac14e919aecf2834306ec1ea1b498de8ef6000f3a0f90de"
+  },
+  {
+    "file": "pyinstaller-6.22.3-source.tar.gz",
+    "url": "https://codeload.github.com/pyinstaller/pyinstaller/tar.gz/refs/tags/v6.22.3",
+    "bytes": 3707378,
+    "sha256": "f07fc92f550f6ece2ff4e6c3bddb799601abcac2bf79d4e410a326c3123d82da"
+  },
+  {
+    "file": "python-3.12.13-source.tar.xz",
+    "url": "https://www.python.org/ftp/python/3.12.13/Python-3.12.13.tar.xz",
+    "bytes": 20801708,
+    "sha256": "c08bc65a81971c1dd5783182826503369466c7e67374d1646519adf05207b684"
+  },
+  {
+    "file": "phonemizer-3.4.0-source.tar.gz",
+    "url": "https://files.pythonhosted.org/packages/bc/7d/5a96ddb130552f6365a090b5fd12ace803a95a858e3f67258f2ad13dc51f/phonemizer-3.4.0.tar.gz",
+    "bytes": 93535,
+    "sha256": "e13231980c50bc671ec0466379ba027260ad9d61929952d8ae9665b3d0f251eb"
+  }
+]

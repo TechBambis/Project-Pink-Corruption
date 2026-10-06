@@ -1,0 +1,32 @@
+{
+  "node": {
+    "version": "24.18.1",
+    "file": "node-v24.18.1-win-x64.zip",
+    "url": "https://nodejs.org/dist/v24.18.1/node-v24.18.1-win-x64.zip",
+    "bytes": 37177316,
+    "sha256": "ec56b84a7551893ab2324ebdfdc4ab974a63b4781162600b68a1293cc3e53765"
+  },
+  "electron": {
+    "version": "44.5.1",
+    "file": "electron-v44.5.1-win32-x64.zip",
+    "url": "https://github.com/electron/electron/releases/download/v44.5.1/electron-v44.5.1-win32-x64.zip",
+    "bytes": 157998329,
+    "sha256": "9b382492dcfee91f8f9e92c91f7972550a1b95d2299cac72279dab33a600d7db"
+  },
+  "uv": {
+    "version": "0.11.23",
+    "file": "uv-x86_64-pc-windows-msvc.zip",
+    "url": "https://github.com/astral-sh/uv/releases/download/0.11.23/uv-x86_64-pc-windows-msvc.zip",
+    "bytes": 23758102,
+    "sha256": "02ad29f07e674d68726ba3bb1ff25b335d83515756e2b1a194bb56c3cc30e07c"
+  },
+  "llama": {
+    "version": "0.35.1",
+    "file": "ollama-windows-amd64.zip",
+    "url": "https://github.com/ollama/ollama/releases/download/v0.35.1/ollama-windows-amd64.zip",
+    "bytes": 1471094402,
+    "sha256": "dc50b9ca7f9023c86525012632cd1615b093d0407987444a7f62ecab617e8e93"
+  },
+  "python": "3.12.13",
+  "builder": "26.15.3"
+}

@@ -11,7 +11,7 @@ import {phaseConfig} from '../packages/content/phases';
 
 const session=snapshotSession({elapsedSeconds:0,totalSeconds:1200,scene:'Minimal Dark',intensityPercent:0,activeTriggers:[],lastTrigger:null});
 test('greetings and full passage requests use session length while interjections remain conversation',()=>{
- for(const text of ['Hello!','Hi Bambi.','continue','new script','Please guide me through a relaxation session.','Starte die Session.'])assert.ok(isSessionNarration(text,'bambisleep-classic',true),text);
+ for(const text of ['Hello!','Hi Bambi.','continue','new script','Please guide me through a relaxation session.','Start the session.'])assert.ok(isSessionNarration(text,'bambisleep-classic',true),text);
  for(const text of ['Why do you say hello?','Please speak more slowly.','What does that word mean?','I can hear you.','Please stop.'])assert.equal(isSessionNarration(text,'bambisleep-classic',true),false,text);
  assert.equal(isSessionNarration('Hello!','custom',true),false);
  assert.equal(isSessionNarration('Current phase guidance','bambisleep-classic',false),true);
@@ -31,7 +31,7 @@ test('a session passage cannot be clipped by short length or latency preferences
 test('continuation follows the preceding task and explicit brevity overrides full passage targets',()=>{
  assert.equal(isSessionNarration('continue','bambisleep-classic',true,'Explain why changing volume does not change pitch.'),false);
  assert.equal(isSessionNarration('continue','bambisleep-classic',true,'Start a relaxation session.'),true);
- for(const request of ['In one sentence, describe relaxation.','Keep it short.','In einem Satz bitte.']){
+ for(const request of ['In one sentence, describe relaxation.','Keep it short.','Use a single sentence please.']){
   assert.equal(isSessionNarration(request,'bambisleep-classic',false),false,request);
   assert.ok(replyTaskDirection(request,false).includes('Do not apply a minimum passage length'));
  }
@@ -40,7 +40,7 @@ test('continuation follows the preceding task and explicit brevity overrides ful
 test('explicit word targets have room to finish and replace the default phase ceiling',()=>{
  assert.deepEqual(requestedWordRange('Use 180-220 words.'),{min:180,max:220});
  assert.deepEqual(requestedWordRange('About 200 words.'),{min:180,max:220});
- assert.deepEqual(requestedWordRange('Genau 100 Wörter.'),{min:100,max:100});
+ assert.deepEqual(requestedWordRange('Exactly 100 words.'),{min:100,max:100});
  assert.equal(requestedWordRange('400-200 words.'),undefined);
  assert.equal(replyTokenBudget(220,true,false,'Explain this in 180-220 words.'),880);
  assert.equal(narrationPassageComplete('Rest. '.repeat(400),'induction','Use 500 words.'),false);
@@ -60,7 +60,7 @@ test('full narration and brief conversation get separate instructions after the 
  assert.ok(!short.includes(phaseConfig.phases.induction),'A factual or conversational reply must not inherit the extra phase passage directive');
 });
 test('conversational greetings acknowledge presence in-character without starting a session',()=>{
- for(const greeting of ['Hi Bambi','Hello!','Hey sweetie.','Hallo']){
+ for(const greeting of ['Hi Bambi','Hello!','Hey sweetie.','Good evening']){
   const direction=replyTaskDirection(greeting,false);
   const immediate=direction.split('\n').find(line=>line.startsWith('Immediate task:'));
   assert.ok(immediate,greeting);

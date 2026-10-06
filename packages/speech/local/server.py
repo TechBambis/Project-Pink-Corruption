@@ -65,6 +65,9 @@ def main():
                 self.reply(200, {'ok': True, 'engine': 'kokoro-onnx', 'offline': True, 'device': 'CPUExecutionProvider',
                                  'startupSeconds': startup_seconds, 'modelSha256': provider.model_id,
                                  'voices': provider.registry.names(), 'cacheHits': provider.cache_hits, 'cacheMisses': provider.cache_misses})
+            elif path == '/desktop/identity' and secrets.compare_digest(self.headers.get('X-Bambi-TTS-Token', ''), credential):
+                self.reply(200, {'app': 'bambi-local', 'service': 'kokoro', 'protocol': 1, 'pid': os.getpid(),
+                                 'instance': os.environ.get('BAMBI_INSTANCE_TOKEN'), 'modelSha256': provider.model_id})
             elif path == '/v1/audio/voices':
                 self.reply(200, {'voices': provider.registry.names()})
             elif path == '/lab/catalog':
@@ -127,7 +130,7 @@ def main():
                     try:
                         if not select.select([self.connection], [], [], 0)[0]:
                             return False
-                        return self.connection.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT) == b''
+                        return self.connection.recv(1, socket.MSG_PEEK | getattr(socket, 'MSG_DONTWAIT', 0)) == b''
                     except (BlockingIOError, TimeoutError):
                         return False
                     except OSError:

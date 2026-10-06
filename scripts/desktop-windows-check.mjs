@@ -1,0 +1,118 @@
+// SPDX-FileCopyrightText: 2026 BambiOS
+// SPDX-License-Identifier: AGPL-3.0-only
+import {_electron as electron} from 'playwright';
+import assert from 'node:assert/strict';
+import {mkdirSync,mkdtempSync,readFileSync,writeFileSync,existsSync,realpathSync,cpSync} from 'node:fs';
+import {resolve,dirname,join,relative,isAbsolute} from 'node:path';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+import {execFileSync,spawn} from 'node:child_process';
+import {createServer} from 'node:http';
+import {hashFile,digest,inventory,assertNativeTree,logicalPath} from './desktop-windows-support.mjs';
+import {ownedRows,processRows,privateAcl,machineConditions} from './desktop-windows-processes.mjs';
+
+if(process.argv.includes('--help')){console.log('Native Windows: node scripts/desktop-windows-check.mjs "path to Bambi Local.exe". Evidence stays in LOCALAPPDATA/Bambi qualification.');process.exit(0);}
+if(process.platform!=='win32'||process.arch!=='x64')throw Error('Run acceptance on native Windows x64.');
+if(!process.argv[2])throw Error('Supply the unpacked or installed Bambi Local.exe path.');
+const root=resolve(fileURLToPath(new URL('../',import.meta.url)));
+const outputRoot=resolve(process.env.BAMBI_WINDOWS_TEST_OUTPUT||join(process.env.LOCALAPPDATA,'Bambi qualification'));mkdirSync(outputRoot,{recursive:true});
+const output=mkdtempSync(join(outputRoot,'Windows ü smoke ')),data=join(output,'User data ä'),emptyPath=join(output,'Empty PATH');mkdirSync(emptyPath);
+let executable=realpathSync(resolve(process.argv[2]));
+const local=relative(root,executable);
+if(!local.startsWith('..')&&!isAbsolute(local)){
+ const received=join(output,'Received app ü');cpSync(dirname(executable),received,{recursive:true,errorOnExist:true,force:false});executable=join(received,executable.slice(dirname(executable).length+1));
+}
+const resources=join(dirname(executable),'resources'),backendRoot=join(resources,'backend');
+const evidence={testedAt:new Date().toISOString(),executable,data,environment:machineConditions(),checks:[],measurements:{},errors:[]};
+const record=(name,detail={})=>{evidence.checks.push({name,...detail});writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('PASS',name);};
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+async function stopped(rows){
+ const deadline=performance.now()+12000;
+ while(performance.now()<deadline){const current=processRows();if(rows.every(row=>!current.some(now=>now.pid===row.pid&&now.created===row.created)))return;await delay(250);}
+ assert.fail('Owned processes survived shutdown');
+}
+function killOwned(row){const current=processRows().find(now=>now.pid===row.pid);if(!current)return;assert.equal(current.created,row.created,'Refuse a recycled PID');assert.equal(current.executable,row.executable);process.kill(row.pid,'SIGKILL');}
+const environment={...process.env,PATH:emptyPath,NODE_OPTIONS:'--trace-warnings',BAMBI_CLOUD_API_KEY:'qualification-sentinel'};delete environment.ELECTRON_RUN_AS_NODE;
+async function launch(port=16969){
+ const started=performance.now();
+ const application=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,`--bambi-port=${port}`],cwd:output,env:environment,timeout:30000});
+ const page=await application.firstWindow();page.on('pageerror',error=>evidence.errors.push(String(error)));await page.waitForSelector('#offline-sample',{state:'visible'});
+ const startupMs=performance.now()-started;
+ const owner=await application.evaluate(({app,BrowserWindow})=>({pid:process.pid,data:app.getPath('userData'),sandbox:app.isReady()&&BrowserWindow.getAllWindows().every(w=>{const p=w.webContents.getLastWebPreferences();return p.sandbox&&p.contextIsolation&&!p.nodeIntegration&&p.webSecurity;})}));
+ assert.equal(owner.data,data);assert(owner.sandbox);
+ const rows=ownedRows(owner.pid),supervisor=rows.find(r=>r.parent===owner.pid&&r.command.includes('windows-supervisor.mjs'));
+ const guard=rows.find(r=>r.parent===supervisor?.pid&&r.executable?.toLowerCase().endsWith('bambi-job.exe'));
+ const backend=rows.find(r=>r.parent===guard?.pid&&r.command.includes('apps/server/index.ts'));
+ assert(supervisor&&guard&&backend,'Owned native job/supervisor/backend tree is missing');
+ assert.equal(backend.executable.toLowerCase(),join(backendRoot,'node/bin/node.exe').toLowerCase());
+ return {application,page,owner,supervisor,guard,backend,rows,startupMs};
+}
+let current,canary,conflict;
+try{
+ const runtime=JSON.parse(readFileSync(join(resources,'notices/RUNTIME-MANIFEST.json'),'utf8'));
+ assert.equal(runtime.platform,'win32');assert.equal(runtime.architecture,'x64');assertNativeTree(backendRoot);
+ const shell=join(output,'Shell inspection'),source=join(output,'Source inspection');mkdirSync(source);
+ createRequire(import.meta.url)('@electron/asar').extractAll(join(resources,'app.asar'),shell);
+ execFileSync(join(process.env.SystemRoot,'System32/tar.exe'),['-xzf',join(backendRoot,'dist/web/corresponding-source.tar.gz'),'-C',source]);
+ const sourceManifest=JSON.parse(readFileSync(join(source,'SOURCE-MANIFEST.json'),'utf8'));
+ assert.equal(digest(JSON.stringify(sourceManifest.files)),sourceManifest.sourceDigest);assert.equal(runtime.sourceDigest,sourceManifest.sourceDigest);
+ for(const entry of sourceManifest.files)assert.equal(await hashFile(join(source,entry.path)),entry.sha256,'Source mismatch '+entry.path);
+ for(const entry of runtime.files)assert.equal(await hashFile(join(backendRoot,entry.path)),entry.sha256,'Runtime mismatch '+entry.path);
+ for(const [name,key] of [['main.cjs','mainSha256'],['preload.cjs','preloadSha256'],['runtime-environment.cjs','runtimeEnvironmentSha256']]){
+  assert.equal(await hashFile(join(shell,name)),runtime.shell[key]);assert.equal(await hashFile(join(source,'apps/desktop',name)),runtime.shell[key]);
+ }
+ for(const folder of [source,shell,resources])for(const entry of await inventory(folder)){
+  assert(!/(?:^|\/)(?:\.env(?:\.|$)|\.git|\.runtime|internal|models|recordings|imported-sounds)(?:\/|$)|\.(?:sqlite|key|pem|p12|pfx)$/.test(logicalPath(entry.path)),'Excluded private/local path in artifact '+entry.path);
+ }
+ record('finished-package-matching-source-and-native-PE-audit',{sourceDigest:runtime.sourceDigest,scope:'Per-file hashes, native x64 PE headers and excluded paths; not a semantic secret scan.'});
+ const before=await inventory(resources);
+ canary=spawn(join(backendRoot,'node/bin/node.exe'),['-e','setInterval(()=>{},1000)'],{windowsHide:true,stdio:'ignore'});
+ current=await launch();evidence.measurements.startupMs=current.startupMs;
+ record('isolated-native-launch-with-empty-PATH',{startupMs:current.startupMs,bundledNode:current.backend.executable,rendererSandbox:true});
+ const health=await current.page.evaluate(async()=>await(await fetch('/api/health')).json());assert(health.database);
+ if(runtime.phase==='smoke'){assert(health.desktopSmoke);assert(!health.ollama&&!health.kokoro&&!health.streamingSpeech);}
+ else {assert(health.desktopAlpha);assert(!health.kokoro&&!health.llamaModels.length);}
+ record('sqlite-and-explicit-capabilities',{health});
+ for(const path of [data,join(data,'data/bambi.sqlite')]){
+  const acl=privateAcl(path);if(path===data)assert(acl.protected);
+  assert(acl.rules.length);assert(acl.rules.every(rule=>rule.type==='Allow'&&[acl.user,'S-1-5-18','S-1-5-32-544'].includes(rule.sid)),'Unexpected access to private profile');
+ }
+ record('private-Windows-profile-ACLs');
+ await current.page.addInitScript(()=>{
+  const original=AudioNode.prototype.connect;
+  AudioNode.prototype.connect=function(destination,...args){
+   if(destination===this.context.destination&&!window.__testAnalyser){const analyser=this.context.createAnalyser(),silent=this.context.createGain();silent.gain.value=0;original.call(this,analyser);original.call(analyser,silent);original.call(silent,destination);window.__testAnalyser=analyser;}return original.call(this,destination,...args);
+  };
+ });
+ await current.page.reload();await current.page.locator('#offline-sample').click();await current.page.locator('#pause').click();
+ await current.page.waitForFunction(()=>document.querySelector('#media').currentTime>.4&&!document.querySelector('#media').paused);
+ const pcm=()=>current.page.evaluate(()=>{const a=window.__testAnalyser;if(!a)return 0;const values=new Float32Array(a.fftSize);a.getFloatTimeDomainData(values);return Math.max(...values.map(Math.abs));});
+ async function audible(){for(let i=0;i<25;i++){const peak=await pcm();if(peak>.0001)return peak;await delay(100);}assert.fail('No nonzero output PCM');}
+ record('included-sample-has-nonzero-output-PCM',{peak:await audible()});
+ await current.page.locator('#pause').click();const position=await current.page.locator('#media').evaluate(n=>n.currentTime);await delay(500);assert.equal(await current.page.locator('#media').evaluate(n=>n.currentTime),position);
+ await current.page.locator('#pause').click();await current.page.waitForFunction(p=>document.querySelector('#media').currentTime>p+.2,position);record('pause-and-resume');
+ await current.page.locator('#mute').click();await delay(500);assert.equal(await pcm(),0);await current.page.locator('#mute').click();await audible();record('audio-mute-and-unmute');
+ await current.page.keyboard.press('Escape');await current.page.keyboard.press('Escape');await current.page.waitForFunction(()=>document.querySelector('#media').paused&&window.__testAnalyser.context.state==='suspended');record('end-session-stops-output');
+ await current.page.evaluate(async()=>{const profile=await(await fetch('/api/preferences')).json();await fetch('/api/preferences',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({...profile,'bambi-name':'Windows persistence ü'})});});
+ await current.application.evaluate(({app})=>{setImmediate(()=>app.quit());});await stopped(current.rows);await current.application.close().catch(()=>{});record('ordinary-Quit-cleans-owned-tree');
+ current=await launch();assert.equal(await current.page.evaluate(async()=>(await(await fetch('/api/preferences')).json())['bambi-name']),'Windows persistence ü');record('reopen-retains-preferences');
+ const second=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,'--bambi-port=16969'],cwd:output,env:environment,timeout:15000}).catch(()=>null);
+ if(second)await second.close().catch(()=>{});
+ assert(processRows().some(r=>r.pid===current.backend.pid&&r.created===current.backend.created));record('second-start-keeps-original-owner');
+ current.application.process().kill('SIGKILL');await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-Electron-death-cleans-owned-tree');
+ for(const target of ['backend','supervisor','guard']){
+  current=await launch();await current.application.evaluate(({dialog})=>{dialog.showErrorBox=()=>{};});killOwned(current[target]);await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-'+target+'-death-cleans-owned-tree');
+ }
+ current=await launch();await current.application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());await stopped(current.rows);await current.application.close().catch(()=>{});current=null;record('window-close-quits');
+ conflict=createServer((_req,res)=>res.end('unrelated listener'));await new Promise((accept,reject)=>conflict.once('error',reject).listen(16969,'127.0.0.1',accept));
+ const blocked=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,'--bambi-port=16969'],cwd:output,env:environment,timeout:15000});
+ await blocked.evaluate(({dialog})=>{dialog.showErrorBox=()=>{};}).catch(()=>{});
+ await Promise.race([new Promise(r=>blocked.process().once('exit',r)),delay(15000)]);
+ await blocked.close().catch(()=>{});assert.equal(await(await fetch('http://127.0.0.1:16969')).text(),'unrelated listener');record('port-conflict-preserves-unrelated-listener');
+ await new Promise(r=>conflict.close(r));conflict=null;
+ assert(canary.exitCode===null&&processRows().some(r=>r.pid===canary.pid));record('unrelated-native-canary-survives-all-shutdowns');
+ assert.deepEqual(await inventory(resources),before);record('immutable-resources-unchanged');
+ evidence.result='passed';
+ evidence.limitations=['This tests the unpacked/installed binary on the recorded native Windows host. Actual browser download, NSIS install/uninstall and security policy are separate tests.','PCM is application output, not physical listening. No physical microphone test.','AI, setup, GPU offloading, CPU fallback, offline network isolation and suspended-process injection need separate qualification.'];
+}catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);process.exitCode=1;}
+finally{if(current)await current.application.close().catch(()=>{});if(canary&&canary.exitCode===null)canary.kill();if(conflict?.listening)await new Promise(r=>conflict.close(r));writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));}

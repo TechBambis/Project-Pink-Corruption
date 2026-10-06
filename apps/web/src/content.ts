@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
-import { TRIGGER_EFFECTS, strongestTriggerEffect } from '../../../packages/visuals/trigger-effects';
+import { TRIGGER_EFFECTS, strongestTriggerEffect, triggerEffectFor } from '../../../packages/visuals/trigger-effects';
 import {triggerAliases} from '../../../config/trigger-sequence';
 import { findTriggers, triggerSoundSettings } from '../../../config/trigger-sounds';
 interface Trigger { name: string; description: string; category: string }
@@ -131,4 +131,12 @@ export function triggerFlash(text: string, playSound = true) {
     const category = catalog.triggers.find(trigger => trigger.name === match.name)?.category.toLowerCase() || 'mental';
     document.dispatchEvent(new CustomEvent('trigger-detected', { detail: { triggerName: match.name, playSound, category, visualEffect, timestamp: Date.now() } }));
   }
+}
+
+/** Author-timed cues already identify a complete trigger; never scan for partial names. */
+export function triggerCue(phrase:string) {
+  const name=phrase.trim();if(!name||!input('triggers-enabled').checked)return;
+  document.dispatchEvent(new CustomEvent('trigger-detected',{detail:{
+    triggerName:name,playSound:false,source:'media',visualEffect:triggerEffectFor(name),timestamp:Date.now(),
+  }}));
 }
