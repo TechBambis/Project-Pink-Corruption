@@ -6,7 +6,11 @@ import {join} from 'node:path';
 export function powershell(command,extraEnvironment={}){
  if(process.platform!=='win32')throw Error('Native Windows inspection requires Windows.');
  const executable=join(process.env.SystemRoot||process.env.WINDIR,'System32/WindowsPowerShell/v1.0/powershell.exe');
- return execFileSync(executable,['-NoLogo','-NoProfile','-NonInteractive','-Command',"$ErrorActionPreference='Stop'; [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false); "+command],{encoding:'utf8',windowsHide:true,timeout:20000,maxBuffer:16*1024**2,env:{...process.env,...extraEnvironment}}).trim();
+ const environment={...process.env,...extraEnvironment};
+ // Native grandchildren of pwsh otherwise resolve shared module names to PS7
+ // versions that inbox Windows PowerShell cannot load. Preserve host settings.
+ for(const key of Object.keys(environment))if(key.toLowerCase()==='psmodulepath')delete environment[key];
+ return execFileSync(executable,['-NoLogo','-NoProfile','-NonInteractive','-Command',"$ErrorActionPreference='Stop'; [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false); "+command],{encoding:'utf8',windowsHide:true,timeout:20000,maxBuffer:16*1024**2,env:environment}).trim();
 }
 export function processRows(){
  const result=JSON.parse(powershell('Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,ExecutablePath,CreationDate,KernelModeTime,UserModeTime,WorkingSetSize,PageFileUsage,CommandLine | ConvertTo-Json -Compress')||'[]');
