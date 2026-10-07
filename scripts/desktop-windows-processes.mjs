@@ -35,7 +35,8 @@ export async function measureProcesses(owner,seconds=10){
  return {durationSeconds,cpuPercentOfOneCore:cpu100ns/1e7/durationSeconds*100,rssBytesMean:samples.reduce((n,s)=>n+s.rssBytes,0)/samples.length,rssBytesMax:Math.max(...samples.map(s=>s.rssBytes)),privateCommitBytesMean:samples.reduce((n,s)=>n+s.privateCommitBytes,0)/samples.length,samples,method:'Owned Windows descendant tree; native Toolhelp snapshot, process creation-time, CPU 100 ns, working-set and private-commit counters. Working sets count shared pages repeatedly; private commit is not physical RAM. One core is 100%. One-second intervals plus snapshot overhead; creation and termination between samples may be missed.'};
 }
 export function privateAcl(path){
- return JSON.parse(powershell('$acl=Get-Acl -LiteralPath $env:BAMBI_ACL_PATH; $sid=[System.Security.Principal.SecurityIdentifier]; @{user=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value; owner=$acl.Owner; protected=$acl.AreAccessRulesProtected; rules=@($acl.Access | ForEach-Object { @{sid=$_.IdentityReference.Translate($sid).Value; type=$_.AccessControlType.ToString(); inherited=$_.IsInherited; rights=$_.FileSystemRights.ToString()} })} | ConvertTo-Json -Depth 4 -Compress',{BAMBI_ACL_PATH:path}));
+ if(!process.env.BAMBI_WINDOWS_JOB_HELPER)throw Error('Native Windows ACL snapshot helper was not selected.');
+ return JSON.parse(execFileSync(resolve(process.env.BAMBI_WINDOWS_JOB_HELPER),['--profile-acl',resolve(path)],{encoding:'utf8',windowsHide:true,timeout:20000,maxBuffer:1024**2}));
 }
 export function machineConditions(){
  return JSON.parse(powershell('@{os=(Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,TotalVisibleMemorySize,FreePhysicalMemory); cpu=(Get-CimInstance Win32_Processor | Select-Object Name,NumberOfLogicalProcessors); gpu=@(Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion)} | ConvertTo-Json -Depth 4 -Compress'));

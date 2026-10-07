@@ -3,7 +3,7 @@
 const alpha=process.env.BAMBI_WINDOWS_PHASE==='alpha',productName=alpha?'Bambi Local':'Bambi Local Smoke';
 module.exports={
  appId:alpha?'local.bambi.alpha':'local.bambi.smoke',productName,electronVersion:'44.5.1',
- directories:{app:'.runtime/desktop-windows-stage/shell',output:'dist/desktop-windows/'+(process.env.BAMBI_WINDOWS_VERSION||'0.1.0-smoke.4')},
+ directories:{app:'.runtime/desktop-windows-stage/shell',output:'dist/desktop-windows/'+(process.env.BAMBI_WINDOWS_VERSION||'0.1.0-smoke.5')},
  electronDist:process.env.BAMBI_ELECTRON_DIST||'.runtime/desktop-windows-electron',
  asar:true,npmRebuild:false,files:['main.cjs','runtime-environment.cjs','preload.cjs','package.json','!node_modules/**/*'],
  extraResources:[{from:'.runtime/desktop-windows-stage/backend',to:'backend',filter:['**/*']},{from:'.runtime/desktop-windows-stage/backend/node_modules',to:'backend/node_modules',filter:['**/*']},{from:'.runtime/desktop-windows-stage/notices',to:'notices',filter:['**/*']}],

@@ -10,7 +10,7 @@ on:
       version:
         description: Immutable matching phase version (0.1.0-smoke.N or 0.1.0-alpha.N)
         required: true
-        default: 0.1.0-smoke.4
+        default: 0.1.0-smoke.5
       quota_checked:
         description: Actual remaining Free Actions allowance checked before dispatch; no extra paid quota
         type: boolean

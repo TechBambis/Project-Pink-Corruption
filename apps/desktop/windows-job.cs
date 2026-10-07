@@ -160,6 +160,23 @@ public static class BambiWindowsJob
         return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n") + "\"";
     }
     static ulong Number(UIntPtr value) { return value.ToUInt64(); }
+    static int ProfileAcl(string path)
+    {
+        FileSystemSecurity acl = Directory.Exists(path) ? (FileSystemSecurity)new DirectoryInfo(path).GetAccessControl() : new FileInfo(path).GetAccessControl();
+        Console.OutputEncoding = new UTF8Encoding(false);
+        Console.Write("{\"user\":" + Json(WindowsIdentity.GetCurrent().User.Value)
+            + ",\"owner\":" + Json(((SecurityIdentifier)acl.GetOwner(typeof(SecurityIdentifier))).Value)
+            + ",\"protected\":" + (acl.AreAccessRulesProtected ? "true" : "false") + ",\"rules\":[");
+        bool first = true;
+        foreach (FileSystemAccessRule rule in acl.GetAccessRules(true, true, typeof(SecurityIdentifier)))
+        {
+            if (!first) Console.Write(","); first = false;
+            Console.Write("{\"sid\":" + Json(((SecurityIdentifier)rule.IdentityReference).Value)
+                + ",\"type\":" + Json(rule.AccessControlType.ToString()) + ",\"inherited\":" + (rule.IsInherited ? "true" : "false")
+                + ",\"rights\":" + Json(rule.FileSystemRights.ToString()) + "}");
+        }
+        Console.WriteLine("]}"); return 0;
+    }
     static int ProcessSnapshot()
     {
         IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);
@@ -212,6 +229,7 @@ public static class BambiWindowsJob
             if (Environment.OSVersion.Platform != PlatformID.Win32NT || IntPtr.Size != 8) throw new InvalidOperationException("Windows x64 is required");
             if (args.Length == 2 && args[0] == "--secure-data") return SecureData(args[1]);
             if (args.Length == 1 && args[0] == "--process-snapshot") return ProcessSnapshot();
+            if (args.Length == 2 && args[0] == "--profile-acl") return ProfileAcl(args[1]);
             uint ownerPid, supervisorPid;
             if (args.Length < 3 || !uint.TryParse(args[0], out ownerPid) || !uint.TryParse(args[1], out supervisorPid) || ownerPid == 0 || supervisorPid == 0 || supervisorPid != ParentPid())
                 throw new InvalidOperationException("A live own supervisor and Electron lease are required");
