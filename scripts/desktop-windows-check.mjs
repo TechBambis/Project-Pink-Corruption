@@ -52,7 +52,7 @@ async function launch(port=16969){
  assert.equal(backend.executable.toLowerCase(),join(backendRoot,'node/bin/node.exe').toLowerCase());
  return {application,page,owner,supervisor,guard,backend,rows,startupMs};
 }
-let current,canary,conflict;
+let current,canary,conflict,secondNative;
 try{
  if(process.env.BAMBI_WINDOWS_OBSERVER)evidence.processObservation={sha256:await hashFile(process.env.BAMBI_WINDOWS_OBSERVER),method:'Separate read-only qualification observer: Toolhelp parent tree, queried only for specified owned/canary PIDs and descendants. App Job Object and shipped helper unchanged.'};
  const runtime=JSON.parse(readFileSync(join(resources,'notices/RUNTIME-MANIFEST.json'),'utf8'));
@@ -117,9 +117,15 @@ try{
  await current.page.evaluate(async()=>{const profile=await(await fetch('/api/preferences')).json();await fetch('/api/preferences',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({...profile,'bambi-name':'Windows persistence ü'})});});
  await current.application.evaluate(({app})=>{setImmediate(()=>app.quit());});await stopped(current.rows);await current.application.close().catch(()=>{});record('ordinary-Quit-cleans-owned-tree');
  current=await launch();assert.equal(await current.page.evaluate(async()=>(await(await fetch('/api/preferences')).json())['bambi-name']),'Windows persistence ü');record('reopen-retains-preferences');
- const second=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,'--bambi-port=16969'],cwd:output,env:environment,timeout:15000}).catch(()=>null);
- if(second)await second.close().catch(()=>{});
- assert(processRows([current.backend.pid]).some(r=>r.pid===current.backend.pid&&r.created===current.backend.created));record('second-start-keeps-original-owner');
+ // The second instance intentionally exits before Electron's ready event.
+ // Launch it as an ordinary native process, without a debugger handshake.
+ secondNative=spawn(executable,[`--bambi-user-data=${data}`,'--bambi-port=16969'],{cwd:output,env:environment,stdio:'ignore'});
+ await new Promise((accept,reject)=>{
+  const timer=setTimeout(()=>reject(Error('Second instance did not exit within 15 seconds')),15000);
+  secondNative.once('error',error=>{clearTimeout(timer);reject(error);});
+  secondNative.once('exit',(code,signal)=>{clearTimeout(timer);if(code===0&&!signal)accept();else reject(Error('Second instance exit '+JSON.stringify({code,signal})));});
+ });
+ assert(processRows([current.backend.pid]).some(r=>r.pid===current.backend.pid&&r.created===current.backend.created));record('second-start-keeps-original-owner',{secondExitCode:secondNative.exitCode,method:'Ordinary native spawn without Playwright/debug flags.'});
  applications.get(current.application).kill('SIGKILL');await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-Electron-death-cleans-owned-tree');
  for(const target of ['backend','supervisor','guard']){
   current=await launch();await current.application.evaluate(({dialog})=>{dialog.showErrorBox=()=>{};});killOwned(current[target]);await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-'+target+'-death-cleans-owned-tree');
@@ -143,6 +149,7 @@ finally{
   await Promise.race([application.close().catch(()=>{}),delay(2000)]);
  }
  if(canary&&canary.exitCode===null)canary.kill();
+ if(secondNative&&secondNative.exitCode===null&&secondNative.signalCode===null)secondNative.kill('SIGKILL');
  if(conflict?.listening)await new Promise(r=>conflict.close(r));
  writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));
 }
