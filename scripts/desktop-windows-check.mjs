@@ -156,7 +156,9 @@ try{
  await current.page.evaluate(async()=>{const profile=await(await fetch('/api/preferences')).json();await fetch('/api/preferences',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({...profile,'bambi-name':'Windows persistence ü'})});});
  await current.application.evaluate(({app})=>{setImmediate(()=>app.quit());});await stopped(current.rows);await current.application.close().catch(()=>{});record('ordinary-Quit-cleans-owned-tree');
  current=await launch();assert.equal(await current.page.evaluate(async()=>(await(await fetch('/api/preferences')).json())['bambi-name']),'Windows persistence ü');record('reopen-retains-preferences');
- applications.get(current.application).kill('SIGKILL');await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-Electron-death-cleans-owned-tree');
+ const electronOwner=current.rows.find(row=>row.pid===current.owner.pid);
+ assert(electronOwner?.created&&electronOwner.executable.toLowerCase()===executable.toLowerCase());
+ await killOwned(electronOwner);await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-Electron-death-cleans-owned-tree',{killedPid:electronOwner.pid,method:'Verified native Electron PID, creation time and executable; Playwright Windows shell PID is not the app owner.'});
  for(const target of ['backend','supervisor','guard']){
   current=await launch();await current.application.evaluate(({dialog})=>{dialog.showErrorBox=()=>{};});await killOwned(current[target]);await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-'+target+'-death-cleans-owned-tree');
  }
