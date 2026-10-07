@@ -56,7 +56,7 @@ async function launch(port=16969){
  assert.equal(backend.executable.toLowerCase(),join(backendRoot,'node/bin/node.exe').toLowerCase());
  return {application,page,owner,supervisor,guard,backend,rows,startupMs};
 }
-let current,canary,conflict,secondNative;
+let current,canary,conflict,secondNative,nativeFirst;
 try{
  await startObserver();
  if(process.env.BAMBI_WINDOWS_OBSERVER)evidence.processObservation={sha256:await hashFile(process.env.BAMBI_WINDOWS_OBSERVER),method:'Separate read-only qualification observer: Toolhelp parent tree, queried only for specified owned/canary PIDs and descendants. App Job Object and shipped helper unchanged.'};
@@ -78,6 +78,40 @@ try{
  record('finished-package-matching-source-and-native-PE-audit',{sourceDigest:runtime.sourceDigest,scope:'Per-file hashes, native x64 PE headers and excluded paths; not a semantic secret scan.'});
  const before=await inventory(resources);
  canary=spawn(join(backendRoot,'node/bin/node.exe'),['-e','setInterval(()=>{},1000)'],{windowsHide:true,stdio:'ignore'});
+ // Verify a normal launch and duplicate start without Playwright or debug flags.
+ const nativeData=join(output,'Ordinary native profile ü');
+ nativeFirst=spawn(executable,[`--bambi-user-data=${nativeData}`,'--bambi-port=16970'],{cwd:output,env:environment,stdio:'ignore'});
+ const nativeDeadline=performance.now()+30000;let nativeRows=[],nativeBackend,nativeHealth;
+ while(performance.now()<nativeDeadline){
+  if(nativeFirst.exitCode!==null)throw Error('Ordinary native launch exited '+nativeFirst.exitCode);
+  nativeRows=await observeOwnedRows(nativeFirst.pid);
+  const supervisor=nativeRows.find(row=>row.parent===nativeFirst.pid&&row.executable?.toLowerCase()===join(backendRoot,'node/bin/node.exe').toLowerCase());
+  const guard=nativeRows.find(row=>row.parent===supervisor?.pid&&row.executable?.toLowerCase().endsWith('bambi-job.exe'));
+  nativeBackend=nativeRows.find(row=>row.parent===guard?.pid&&row.executable?.toLowerCase()===join(backendRoot,'node/bin/node.exe').toLowerCase());
+  if(nativeBackend){try{nativeHealth=await(await fetch('http://127.0.0.1:16970/api/health',{signal:AbortSignal.timeout(500)})).json();if(nativeHealth.database&&(nativeHealth.desktopSmoke||nativeHealth.desktopAlpha))break;}catch{}}
+  const windows=await observeRows([nativeFirst.pid],true);
+  if(windows.some(window=>window.title==='Error')){evidence.nativeLaunchFailure={processes:nativeRows.map(({command,...row})=>row),windows};throw Error('Ordinary native launch displayed an error dialog');}
+  await delay(250);
+ }
+ assert(nativeBackend&&nativeHealth?.database,'Ordinary native launch did not become healthy');
+ record('ordinary-native-launch-without-debugger',{backendPid:nativeBackend.pid,windows:await observeRows([nativeFirst.pid],true)});
+ // The second instance intentionally exits before Electron's ready event.
+ // Launch it as an ordinary native process, without a debugger handshake.
+ secondNative=spawn(executable,[`--bambi-user-data=${nativeData}`,'--bambi-port=16970'],{cwd:output,env:environment,stdio:'ignore'});
+ const secondRoots=[secondNative.pid,nativeFirst.pid];
+ evidence.secondStart={pid:secondNative.pid,observations:[]};
+ await new Promise((accept,reject)=>{
+  const timer=setTimeout(async()=>{
+   try{if(process.env.BAMBI_WINDOWS_OBSERVER){
+    evidence.secondStart.observations.push({at:new Date().toISOString(),processes:(await observeRows(secondRoots)).map(({command,...row})=>row),windows:await observeRows(secondRoots,true)});
+   }}catch(error){evidence.secondStart.observationFailure=String(error);}
+   reject(Error('Second instance did not exit within 15 seconds'));
+  },15000);
+  secondNative.once('error',error=>{clearTimeout(timer);reject(error);});
+  secondNative.once('exit',(code,signal)=>{clearTimeout(timer);if(code===0&&!signal)accept();else reject(Error('Second instance exit '+JSON.stringify({code,signal})));});
+ });
+ assert((await observeRows([nativeBackend.pid])).some(r=>r.pid===nativeBackend.pid&&r.created===nativeBackend.created));record('second-start-keeps-original-owner',{secondExitCode:secondNative.exitCode,method:'Ordinary native spawn without Playwright/debug flags.'});
+ nativeFirst.kill('SIGKILL');await stopped(nativeRows);record('ordinary-native-owner-death-cleans-owned-tree');
  current=await launch();evidence.measurements.startupMs=current.startupMs;
  record('isolated-native-launch-with-empty-PATH',{startupMs:current.startupMs,bundledNode:current.backend.executable,rendererSandbox:true});
  const health=await current.page.evaluate(async()=>await(await fetch('/api/health')).json());assert(health.database);
@@ -122,22 +156,6 @@ try{
  await current.page.evaluate(async()=>{const profile=await(await fetch('/api/preferences')).json();await fetch('/api/preferences',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({...profile,'bambi-name':'Windows persistence ü'})});});
  await current.application.evaluate(({app})=>{setImmediate(()=>app.quit());});await stopped(current.rows);await current.application.close().catch(()=>{});record('ordinary-Quit-cleans-owned-tree');
  current=await launch();assert.equal(await current.page.evaluate(async()=>(await(await fetch('/api/preferences')).json())['bambi-name']),'Windows persistence ü');record('reopen-retains-preferences');
- // The second instance intentionally exits before Electron's ready event.
- // Launch it as an ordinary native process, without a debugger handshake.
- secondNative=spawn(executable,[`--bambi-user-data=${data}`,'--bambi-port=16969'],{cwd:output,env:environment,stdio:'ignore'});
- const secondRoots=[secondNative.pid,current.owner.pid];
- evidence.secondStart={pid:secondNative.pid,observations:[]};
- await new Promise((accept,reject)=>{
-  const timer=setTimeout(async()=>{
-   try{if(process.env.BAMBI_WINDOWS_OBSERVER){
-    evidence.secondStart.observations.push({at:new Date().toISOString(),processes:(await observeRows(secondRoots)).map(({command,...row})=>row),windows:await observeRows(secondRoots,true)});
-   }}catch(error){evidence.secondStart.observationFailure=String(error);}
-   reject(Error('Second instance did not exit within 15 seconds'));
-  },15000);
-  secondNative.once('error',error=>{clearTimeout(timer);reject(error);});
-  secondNative.once('exit',(code,signal)=>{clearTimeout(timer);if(code===0&&!signal)accept();else reject(Error('Second instance exit '+JSON.stringify({code,signal})));});
- });
- assert((await observeRows([current.backend.pid])).some(r=>r.pid===current.backend.pid&&r.created===current.backend.created));record('second-start-keeps-original-owner',{secondExitCode:secondNative.exitCode,method:'Ordinary native spawn without Playwright/debug flags.'});
  applications.get(current.application).kill('SIGKILL');await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-Electron-death-cleans-owned-tree');
  for(const target of ['backend','supervisor','guard']){
   current=await launch();await current.application.evaluate(({dialog})=>{dialog.showErrorBox=()=>{};});await killOwned(current[target]);await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-'+target+'-death-cleans-owned-tree');
@@ -162,6 +180,7 @@ finally{
  }
  if(canary&&canary.exitCode===null)canary.kill();
  if(secondNative&&secondNative.exitCode===null&&secondNative.signalCode===null)secondNative.kill('SIGKILL');
+ if(nativeFirst&&nativeFirst.exitCode===null&&nativeFirst.signalCode===null)nativeFirst.kill('SIGKILL');
  if(conflict?.listening)await new Promise(r=>conflict.close(r));
  await stopObserver();
  writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));

@@ -48,7 +48,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $observer = Join-Path $env:RUNNER_TEMP 'bambi-qualification-observer.exe'
           $csc = Join-Path $env:SystemRoot 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-          & $csc /nologo /target:exe /platform:x64 /optimize+ ('/out:'+$observer) (Join-Path $PWD 'scripts/desktop-windows-observer.cs')
+          $wpf = Join-Path (Split-Path $csc) 'WPF'
+          & $csc /nologo /target:exe /platform:x64 /optimize+ /define:WINDOWS_UIA ('/reference:'+(Join-Path $wpf 'UIAutomationClient.dll')) ('/reference:'+(Join-Path $wpf 'UIAutomationTypes.dll')) ('/reference:'+(Join-Path $wpf 'WindowsBase.dll')) ('/out:'+$observer) (Join-Path $PWD 'scripts/desktop-windows-observer.cs')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           'BAMBI_WINDOWS_OBSERVER='+$observer | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Receive exact existing private package and verify every retained hash

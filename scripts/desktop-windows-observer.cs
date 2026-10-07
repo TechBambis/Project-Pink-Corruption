@@ -9,6 +9,9 @@ using System.Text;
 using System.IO;
 using System.Security.AccessControl;
 using System.Security.Principal;
+#if WINDOWS_UIA
+using System.Windows.Automation;
+#endif
 
 public static class BambiWindowsObserver
 {
@@ -94,6 +97,18 @@ public static class BambiWindowsObserver
                     if (title.Length != 0) {
                         if (!firstWindow) windows.Append(','); firstWindow = false; windows.Append("{\"pid\":").Append(pid).Append(",\"title\":").Append(Json(title.ToString()));
                         if (title.ToString() == "Error" || title.ToString().StartsWith("Bambi Local", StringComparison.Ordinal)) {
+#if WINDOWS_UIA
+                            try {
+                                AutomationElement element = AutomationElement.FromHandle(window);
+                                AutomationElementCollection texts = element.FindAll(TreeScope.Descendants, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text));
+                                windows.Append(",\"accessibleText\":["); bool firstAccessible = true;
+                                for (int i = 0; i < texts.Count && i < 16; i++) {
+                                    string text = texts[i].Current.Name; if (text.Length > 4096) text = text.Substring(0, 4096);
+                                    if (text.Length != 0) { if (!firstAccessible) windows.Append(','); firstAccessible = false; windows.Append(Json(text)); }
+                                }
+                                windows.Append(']');
+                            } catch (Exception error) { windows.Append(",\"accessibilityError\":").Append(Json(error.Message)); }
+#endif
                             windows.Append(",\"staticText\":["); bool firstText = true;
                             EnumChildWindows(window, delegate(IntPtr control, IntPtr unused) {
                                 StringBuilder type = new StringBuilder(64); GetClassNameW(control, type, type.Capacity);
