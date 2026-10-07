@@ -46,34 +46,8 @@ async function build(){
  run(csc,['/nologo','/target:exe','/platform:x64','/optimize+','/out:'+ownership,resolve('apps/desktop/windows-job.cs')]);assertWindowsX64(ownership);
  let speechBuild;
  if(alpha){
-  const uvArchive=await acquire(pins.uv);run('tar',['-xf',uvArchive,'-C',extract]);
-  // Upstream Windows ZIPs place uv.exe directly at their root.
-  const uv=join(extract,'uv.exe');assertWindowsX64(uv);
-  const buildEnv=resolve('.runtime/alpha-windows-build');rmSync(buildEnv,{recursive:true,force:true});mkdirSync(buildEnv,{recursive:true});
-  const pythonVenv=join(buildEnv,'venv'),python=join(pythonVenv,'Scripts/python.exe');
-  const buildEnvironment={...process.env,PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8',UV_PYTHON_INSTALL_DIR:join(buildEnv,'python'),UV_CACHE_DIR:join(buildEnv,'cache')};
-  run(uv,['venv',pythonVenv,'--python',pins.python,'--managed-python','--no-project'],{env:buildEnvironment});
-  run(uv,['pip','install','--python',python,'-r',resolve('packages/speech/desktop-build.lock')],{env:buildEnvironment});
-  const actualPython=execFileSync(python,['-c','import platform; print(platform.python_version())'],{encoding:'utf8',env:buildEnvironment}).trim();
-  if(actualPython!==pins.python)throw Error('Native Python build differs from the pinned version.');
-  const speechDist=resolve('.runtime/alpha-speech-windows'),speechWork=resolve('.runtime/alpha-speech-windows-build');
-  rmSync(speechDist,{recursive:true,force:true});rmSync(speechWork,{recursive:true,force:true});
-  run(python,['scripts/freeze-desktop-speech.py'],{env:{...buildEnvironment,BAMBI_SPEECH_DISTPATH:speechDist,BAMBI_SPEECH_WORKPATH:speechWork}});
-  copyTree(join(speechDist,'bambi-speech'),join(backend,'native/speech'));assertNativeTree(join(backend,'native/speech'));
-  const metadata=join(pythonVenv,'Lib/site-packages');
-  for(const folder of readdirSync(metadata).filter(name=>name.endsWith('.dist-info')))copyTree(join(metadata,folder),join(notices,'speech-metadata',folder));
-  for(const asset of JSON.parse(readFileSync('config/desktop-speech-sources.json','utf8'))){
-   const path=join(cache,'speech-source',asset.file);await downloadPinned(asset,path);copy(path,join(notices,'speech-source',asset.file));
-  }
-  copy(resolve('config/desktop-speech-sources.json'),join(notices,'speech-source/SOURCE-MANIFEST.json'));
-  speechBuild={python:actualPython,pyinstaller:'6.22.3',buildLockSha256:await hashFile('packages/speech/desktop-build.lock'),environment:'Fresh uv-managed native Windows x64 CPython; frozen in this build'};
-  const llamaZip=await acquire(pins.llama);
-  const listing=execFileSync('tar',['-tf',llamaZip],{encoding:'utf8',maxBuffer:4*1024**2}).trim().split(/\r?\n/);
-  const approved=llamaEntries(listing),llamaExtract=join(stage,'llama');mkdirSync(llamaExtract);
-  // Extract the reviewed CPU/Vulkan slice only, never the CUDA acquisition tree.
-  run('tar',['-xf',llamaZip,'-C',llamaExtract,...approved]);
-  copyTree(join(llamaExtract,'lib/ollama'),join(backend,'native/llama'));assertNativeTree(join(backend,'native/llama'));
-  writeFileSync(join(notices,'LLAMA-SELECTION.json'),JSON.stringify({archive:pins.llama,entries:approved},null,2)+'\n');
+  const {buildWindowsNative}=await import('./desktop-windows-native.mjs');
+  speechBuild=await buildWindowsNative({root,backend,notices,cache,pins});
  }
  const electronDist=resolve('.runtime/desktop-windows-electron');rmSync(electronDist,{recursive:true,force:true});mkdirSync(electronDist,{recursive:true});
  run('tar',['-xf',electronZip,'-C',electronDist]);assertWindowsX64(join(electronDist,'electron.exe'));

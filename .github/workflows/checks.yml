@@ -1,7 +1,7 @@
 name: Application checks
 on:
   push:
-    branches-ignore: ['build/windows-smoke-*']
+    branches-ignore: ['build/windows-smoke-*', 'build/windows-alpha-*']
   pull_request:
 permissions:
   contents: read

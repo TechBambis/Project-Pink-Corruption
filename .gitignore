@@ -190,3 +190,7 @@ test-results/
 !/scripts/desktop-windows-ai-check.mjs
 !/scripts/desktop-windows-source.mjs
 !/docs/DESKTOP_WINDOWS.md
+
+!/scripts/desktop-windows-native.mjs
+!/scripts/desktop-windows-runtime-slice.mjs
+!/docs/DESKTOP_WINDOWS_ALPHA.md

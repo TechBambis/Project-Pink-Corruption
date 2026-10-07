@@ -13,9 +13,15 @@ if errorlevel 1 goto failed
 set "BAMBI_BUILD_NODE=%CD%\.runtime\desktop-windows-tools\node-v24.18.1-win-x64"
 set "PATH=%BAMBI_BUILD_NODE%;%PATH%"
 set "ELECTRON_SKIP_BINARY_DOWNLOAD=1"
+if /I "%~1"=="runtime-slice" goto runtime_slice
 "%BAMBI_BUILD_NODE%\node.exe" "%BAMBI_BUILD_NODE%\node_modules\npm\bin\npm-cli.js" ci --ignore-scripts
 if errorlevel 1 goto failed
 "%BAMBI_BUILD_NODE%\node.exe" scripts\desktop-windows-build.mjs %*
+if errorlevel 1 goto failed
+popd
+exit /b 0
+:runtime_slice
+"%BAMBI_BUILD_NODE%\node.exe" scripts\desktop-windows-runtime-slice.mjs
 if errorlevel 1 goto failed
 popd
 exit /b 0

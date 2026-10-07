@@ -1,17 +1,17 @@
 # Build-branch entry point only. The default branch CLA workflow is preserved.
 # An existing default-branch dispatch path is required by GitHub; this branch
 # delegates its authorized manual Windows build to the prepared workflow.
-name: Manual Windows smoke build entry point
+name: Manual Windows desktop build entry point
 on:
   workflow_dispatch:
     inputs:
       mode:
         type: choice
-        options: [build, qualify]
+        options: [build, qualify, runtime-slice]
         default: build
       phase:
         type: choice
-        options: [smoke]
+        options: [smoke, alpha]
         default: smoke
       version:
         type: string
@@ -46,6 +46,12 @@ jobs:
   qualification:
     if: inputs.mode == 'qualify' && inputs.quota_checked && github.actor_id == '337824705'
     uses: ./.github/workflows/desktop-windows-qualify.yml
+    with:
+      quota_record: ${{ inputs.quota_record }}
+      remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}
+  runtime-slice:
+    if: inputs.mode == 'runtime-slice' && inputs.quota_checked && github.actor_id == '337824705'
+    uses: ./.github/workflows/desktop-windows-runtime-slice.yml
     with:
       quota_record: ${{ inputs.quota_record }}
       remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}
