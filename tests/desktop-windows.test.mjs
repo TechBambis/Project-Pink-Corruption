@@ -22,7 +22,7 @@ test('Windows private runtime environment keeps canonical OS paths and excludes 
  assert.throws(()=>runtimeEnvironment({SystemRoot:'relative'},{platform:'win32',tokens:{}}),/SystemRoot/);
 });
 test('Windows builds start with smoke and reject phase/version mismatches and path traversal',()=>{
- assert.deepEqual(buildOptions([]),{phase:'smoke',alpha:false,version:'0.1.0-smoke.2'});
+ assert.deepEqual(buildOptions([]),{phase:'smoke',alpha:false,version:'0.1.0-smoke.4'});
  assert.equal(buildOptions(['alpha','0.1.0-alpha.3']).alpha,true);
  for(const args of [['alpha','0.1.0-smoke.2'],['smoke','../escape'],['other'],['alpha','0.1.0-alpha.3','extra']])assert.throws(()=>buildOptions(args));
 });

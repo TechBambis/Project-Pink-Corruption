@@ -15,7 +15,7 @@ export async function hashFile(path){
 export function buildOptions(args,environment={}){
  const [phase='smoke',requested,...extra]=args;
  if(!['smoke','alpha'].includes(phase)||extra.length)throw Error('Use desktop-windows-build.mjs smoke|alpha [0.1.0-smoke.N|0.1.0-alpha.N]');
- const version=requested||environment.BAMBI_WINDOWS_VERSION||`0.1.0-${phase}.2`;
+ const version=requested||environment.BAMBI_WINDOWS_VERSION||`0.1.0-${phase}.${phase==='smoke'?4:2}`;
  if(!new RegExp(`^0\\.1\\.0-${phase}\\.[1-9][0-9]*$`).test(version))throw Error('Version must match the selected phase: 0.1.0-'+phase+'.N');
  return {phase,version,alpha:phase==='alpha'};
 }

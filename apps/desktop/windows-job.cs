@@ -49,6 +49,11 @@ public static class BambiWindowsJob
     [StructLayout(LayoutKind.Sequential)] struct StartupEx { public Startup Startup; public IntPtr Attributes; }
     [StructLayout(LayoutKind.Sequential)] struct ProcessInfo { public IntPtr Process, Thread; public uint Pid, Tid; }
     [StructLayout(LayoutKind.Sequential)] struct FileTime { public uint Low, High; }
+    [StructLayout(LayoutKind.Sequential)] struct ProcessMemory
+    {
+        public uint Size, Faults;
+        public UIntPtr PeakWorkingSet, WorkingSet, PeakPaged, Paged, PeakNonPaged, NonPaged, Pagefile, PeakPagefile, PrivateUsage;
+    }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct ProcessEntry
     {
         public uint Size, Usage, Pid;
@@ -66,6 +71,8 @@ public static class BambiWindowsJob
     [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
     [DllImport("kernel32.dll")] static extern uint GetCurrentProcessId();
     [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetProcessTimes(IntPtr process, out FileTime creation, out FileTime exit, out FileTime kernel, out FileTime user);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags, StringBuilder path, ref uint size);
+    [DllImport("psapi.dll", SetLastError = true)] static extern bool GetProcessMemoryInfo(IntPtr process, ref ProcessMemory counters, uint size);
     [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint pid);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry entry);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry entry);
@@ -147,6 +154,55 @@ public static class BambiWindowsJob
         File.WriteAllText(marker, "Bambi Local private desktop profile v1\n", new UTF8Encoding(false));
         return 0;
     }
+    static string Json(string value)
+    {
+        if (value == null) return "null";
+        return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n") + "\"";
+    }
+    static ulong Number(UIntPtr value) { return value.ToUInt64(); }
+    static int ProcessSnapshot()
+    {
+        IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);
+        Require(snapshot != new IntPtr(-1), "Read Windows process snapshot");
+        try
+        {
+            Console.OutputEncoding = new UTF8Encoding(false);
+            Console.Write("[");
+            ProcessEntry entry = new ProcessEntry(); entry.Size = (uint)Marshal.SizeOf(typeof(ProcessEntry));
+            bool first = true;
+            if (Process32FirstW(snapshot, ref entry)) do
+            {
+                IntPtr process = OpenProcess(0x1000 | 0x0400 | 0x0010, false, entry.Pid);
+                string executable = null, created = null;
+                ulong cpu = 0, rss = 0, privateCommit = 0;
+                if (process != IntPtr.Zero) try
+                {
+                    uint length = 32768; StringBuilder path = new StringBuilder((int)length);
+                    if (QueryFullProcessImageNameW(process, 0, path, ref length)) executable = path.ToString();
+                    FileTime creation, exited, kernel, user;
+                    if (GetProcessTimes(process, out creation, out exited, out kernel, out user))
+                    {
+                        created = (((ulong)creation.High << 32) | creation.Low).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        cpu = (((ulong)kernel.High << 32) | kernel.Low) + (((ulong)user.High << 32) | user.Low);
+                    }
+                    ProcessMemory memory = new ProcessMemory(); memory.Size = (uint)Marshal.SizeOf(typeof(ProcessMemory));
+                    if (GetProcessMemoryInfo(process, ref memory, memory.Size)) { rss = Number(memory.WorkingSet); privateCommit = Number(memory.PrivateUsage); }
+                }
+                finally { CloseHandle(process); }
+                if (!first) Console.Write(",");
+                first = false;
+                Console.Write("{\"pid\":" + entry.Pid.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    + ",\"parent\":" + entry.ParentPid.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    + ",\"executable\":" + Json(executable) + ",\"created\":" + Json(created)
+                    + ",\"cpu100ns\":" + cpu.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    + ",\"rssBytes\":" + rss.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    + ",\"privateCommitBytes\":" + privateCommit.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}");
+            } while (Process32NextW(snapshot, ref entry));
+            Console.WriteLine("]");
+            return 0;
+        }
+        finally { CloseHandle(snapshot); }
+    }
     public static int Main(string[] args)
     {
         IntPtr attributes = IntPtr.Zero, handleList = IntPtr.Zero, input = IntPtr.Zero, log = IntPtr.Zero, thread = IntPtr.Zero;
@@ -155,6 +211,7 @@ public static class BambiWindowsJob
         {
             if (Environment.OSVersion.Platform != PlatformID.Win32NT || IntPtr.Size != 8) throw new InvalidOperationException("Windows x64 is required");
             if (args.Length == 2 && args[0] == "--secure-data") return SecureData(args[1]);
+            if (args.Length == 1 && args[0] == "--process-snapshot") return ProcessSnapshot();
             uint ownerPid, supervisorPid;
             if (args.Length < 3 || !uint.TryParse(args[0], out ownerPid) || !uint.TryParse(args[1], out supervisorPid) || ownerPid == 0 || supervisorPid == 0 || supervisorPid != ParentPid())
                 throw new InvalidOperationException("A live own supervisor and Electron lease are required");

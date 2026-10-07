@@ -19,6 +19,7 @@ const local=relative(root,executable);
 if(!local.startsWith('..')&&!isAbsolute(local)){const received=join(output,'Received app ü');cpSync(dirname(executable),received,{recursive:true,errorOnExist:true,force:false});executable=join(received,executable.slice(dirname(executable).length+1));}
 const source=realpathSync(resolve(process.argv[3])),cpu=process.argv.includes('--cpu'),port=17969;
 const resources=join(dirname(executable),'resources');
+process.env.BAMBI_WINDOWS_JOB_HELPER=join(resources,'backend/native/ownership/bambi-job.exe');
 const manifest=JSON.parse(readFileSync(join(resources,'notices/RUNTIME-MANIFEST.json'),'utf8'));assert.equal(manifest.phase,'alpha');
 const evidence={testedAt:new Date().toISOString(),executable,data,environment:machineConditions(),accelerator:cpu?'cpu':'auto',checks:[],errors:[],measurements:{}};
 const record=(name,details={})=>{evidence.checks.push({name,...details});writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('PASS',name);};

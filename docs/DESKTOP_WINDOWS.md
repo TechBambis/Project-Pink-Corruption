@@ -9,7 +9,7 @@ Extract the reviewed source snapshot into a writable local directory. Use Window
 From Command Prompt in that source directory:
 
 ```bat
-scripts\desktop-windows-build.cmd smoke 0.1.0-smoke.3
+scripts\desktop-windows-build.cmd smoke 0.1.0-smoke.4
 ```
 
 This first milestone includes Electron, bundled Node 24.18.1 with SQLite, private user data, the original offline chimes, and the native process ownership helper. It excludes local AI runtimes. Allow at least 2 GiB free for the build; installed size is determined by the actual build.
@@ -17,7 +17,7 @@ This first milestone includes Electron, bundled Node 24.18.1 with SQLite, privat
 Run the packaging acceptance before adding speech and inference:
 
 ```bat
-.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-install-check.mjs "dist\desktop-windows\0.1.0-smoke.3"
+.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-install-check.mjs "dist\desktop-windows\0.1.0-smoke.4"
 ```
 
 Then build the full alpha:

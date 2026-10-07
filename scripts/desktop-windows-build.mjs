@@ -10,7 +10,7 @@ import {buildOptions,downloadPinned,hashFile,files,copy,copyTree,inventory,logic
 const root=resolve(fileURLToPath(new URL('../',import.meta.url)));
 process.chdir(root);
 if(process.argv.includes('--help')){
- console.log('Native Windows x64: node scripts/desktop-windows-build.mjs smoke|alpha [0.1.0-smoke.N|0.1.0-alpha.N]. Default: smoke 0.1.0-smoke.2.');process.exit(0);
+ console.log('Native Windows x64: node scripts/desktop-windows-build.mjs smoke|alpha [0.1.0-smoke.N|0.1.0-alpha.N]. Default: smoke 0.1.0-smoke.4.');process.exit(0);
 }
 const {phase,version,alpha}=buildOptions(process.argv.slice(2),process.env);
 if(process.platform!=='win32'||process.arch!=='x64')throw Error('Use a native Windows x64 build host for this target.');
