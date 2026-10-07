@@ -29,11 +29,15 @@ public static class BambiWindowsObserver
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags, StringBuilder path, ref uint length);
     [DllImport("kernel32.dll")] static extern bool GetProcessTimes(IntPtr process, out Time created, out Time exited, out Time kernel, out Time user);
     [DllImport("psapi.dll")] static extern bool GetProcessMemoryInfo(IntPtr process, ref Memory memory, uint size);
+    delegate bool WindowCallback(IntPtr window, IntPtr parameter);
+    [DllImport("user32.dll")] static extern bool EnumWindows(WindowCallback callback, IntPtr parameter);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowTextW(IntPtr window, StringBuilder text, int count);
     static ulong Number(Time value) { return ((ulong)value.High << 32) | value.Low; }
     static string Json(string value) { return value == null ? "null" : "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n") + "\""; }
     public static int Main(string[] args)
     {
-        if (Environment.OSVersion.Platform != PlatformID.Win32NT || IntPtr.Size != 8 || args.Length != 1) return 64;
+        if (Environment.OSVersion.Platform != PlatformID.Win32NT || IntPtr.Size != 8 || args.Length < 1 || args.Length > 2 || (args.Length == 2 && args[1] != "--windows")) return 64;
         HashSet<uint> selected = new HashSet<uint>();
         foreach (string value in args[0].Split(',')) { uint pid; if (!uint.TryParse(value, out pid) || pid == 0) return 64; selected.Add(pid); }
         IntPtr snapshot = CreateToolhelp32Snapshot(2, 0);
@@ -47,6 +51,19 @@ public static class BambiWindowsObserver
         finally { CloseHandle(snapshot); }
         bool changed;
         do { changed = false; foreach (Entry entry in entries) if (selected.Contains(entry.Parent) && selected.Add(entry.Pid)) changed = true; } while (changed);
+        if (args.Length == 2)
+        {
+            StringBuilder windows = new StringBuilder("["); bool firstWindow = true;
+            EnumWindows(delegate(IntPtr window, IntPtr parameter) {
+                uint pid; GetWindowThreadProcessId(window, out pid);
+                if (selected.Contains(pid)) {
+                    StringBuilder title = new StringBuilder(1024); GetWindowTextW(window, title, title.Capacity);
+                    if (title.Length != 0) { if (!firstWindow) windows.Append(','); firstWindow = false; windows.Append("{\"pid\":").Append(pid).Append(",\"title\":").Append(Json(title.ToString())).Append('}'); }
+                }
+                return true;
+            }, IntPtr.Zero);
+            Console.OutputEncoding = new UTF8Encoding(false); Console.WriteLine(windows.Append(']').ToString()); return 0;
+        }
         StringBuilder output = new StringBuilder("[");
         bool first = true;
         foreach (Entry entry in entries)
