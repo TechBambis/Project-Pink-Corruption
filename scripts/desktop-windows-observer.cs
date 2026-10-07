@@ -37,6 +37,17 @@ public static class BambiWindowsObserver
     static string Json(string value) { return value == null ? "null" : "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n") + "\""; }
     public static int Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--server")
+        {
+            Console.OutputEncoding = new UTF8Encoding(false); Console.WriteLine("{\"ready\":true}");
+            string line;
+            while ((line = Console.ReadLine()) != null)
+            {
+                try { if (Main(line.Split(' ')) != 0) Console.WriteLine("{\"error\":\"Invalid observation request\"}"); }
+                catch (Exception error) { Console.WriteLine("{\"error\":" + Json(error.Message) + "}"); }
+            }
+            return 0;
+        }
         if (Environment.OSVersion.Platform != PlatformID.Win32NT || IntPtr.Size != 8 || args.Length < 1 || args.Length > 2 || (args.Length == 2 && args[1] != "--windows")) return 64;
         HashSet<uint> selected = new HashSet<uint>();
         foreach (string value in args[0].Split(',')) { uint pid; if (!uint.TryParse(value, out pid) || pid == 0) return 64; selected.Add(pid); }

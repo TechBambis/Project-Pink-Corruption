@@ -1,7 +1,41 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawn} from 'node:child_process';
+import {createInterface} from 'node:readline';
 import {join,resolve} from 'node:path';
+
+let observerChild,observerReply;
+function nextReply(timeout=20000){
+ if(observerReply)throw Error('Concurrent observer requests are not supported.');
+ return new Promise((accept,reject)=>{
+  const timer=setTimeout(()=>{observerReply=null;reject(Error('Native observer reply timed out'));},timeout);
+  observerReply={accept:value=>{clearTimeout(timer);observerReply=null;accept(value);},reject:error=>{clearTimeout(timer);observerReply=null;reject(error);}};
+ });
+}
+export async function startObserver(){
+ if(!process.env.BAMBI_WINDOWS_OBSERVER)return;
+ observerChild=spawn(resolve(process.env.BAMBI_WINDOWS_OBSERVER),['--server'],{windowsHide:true,stdio:['pipe','pipe','pipe']});
+ const ready=nextReply(30000);
+ observerChild.stdin.on('error',error=>observerReply?.reject(error));observerChild.stderr.resume();
+ createInterface({input:observerChild.stdout}).on('line',line=>{
+  try{const value=JSON.parse(line);if(value.error)throw Error(value.error);observerReply?.accept(value);}catch(error){observerReply?.reject(error);}
+ });
+ observerChild.once('error',error=>observerReply?.reject(error));
+ observerChild.once('exit',()=>observerReply?.reject(Error('Native observer exited before its reply')));
+ if((await ready).ready!==true)throw Error('Native observer did not report ready');
+}
+export async function observeRows(roots,windows=false){
+ if(!observerChild)return processRows(roots);
+ if(!roots.length||roots.some(pid=>!Number.isSafeInteger(pid)||pid<=0))throw Error('Specify owned process IDs for observation.');
+ const reply=nextReply();observerChild.stdin.write(roots.join(',')+(windows?' --windows':'')+'\n');
+ const rows=await reply;return windows?rows:rows.map(row=>({...row,command:''}));
+}
+export async function observeOwnedRows(owner){return ownedRows(owner,await observeRows([owner]));}
+export async function stopObserver(){
+ if(!observerChild)return;
+ const child=observerChild;observerChild=null;child.stdin.end();
+ await Promise.race([new Promise(resolve=>child.once('exit',resolve)),new Promise(resolve=>setTimeout(()=>{if(child.exitCode===null)child.kill('SIGKILL');resolve();},2000))]);
+}
 
 export function powershell(command,extraEnvironment={}){
  if(process.platform!=='win32')throw Error('Native Windows inspection requires Windows.');

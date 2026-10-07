@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync,spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {hashFile,digest,inventory,assertNativeTree,logicalPath} from './desktop-windows-support.mjs';
-import {ownedRows,processRows,privateAcl,machineConditions} from './desktop-windows-processes.mjs';
+import {observeOwnedRows,observeRows,startObserver,stopObserver,privateAcl,machineConditions} from './desktop-windows-processes.mjs';
 
 if(process.argv.includes('--help')){console.log('Native Windows: node scripts/desktop-windows-check.mjs "path to Bambi Local.exe". Evidence stays in LOCALAPPDATA/Bambi qualification.');process.exit(0);}
 if(process.platform!=='win32'||process.arch!=='x64')throw Error('Run acceptance on native Windows x64.');
@@ -29,10 +29,10 @@ const record=(name,detail={})=>{evidence.checks.push({name,...detail});writeFile
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function stopped(rows){
  const deadline=performance.now()+12000;
- while(performance.now()<deadline){const current=processRows(rows.map(row=>row.pid));if(rows.every(row=>!current.some(now=>now.pid===row.pid&&now.created===row.created)))return;await delay(250);}
+ while(performance.now()<deadline){const current=await observeRows(rows.map(row=>row.pid));if(rows.every(row=>!current.some(now=>now.pid===row.pid&&now.created===row.created)))return;await delay(250);}
  assert.fail('Owned processes survived shutdown');
 }
-function killOwned(row){const current=processRows([row.pid]).find(now=>now.pid===row.pid);if(!current)return;assert.equal(current.created,row.created,'Refuse a recycled PID');assert.equal(current.executable,row.executable);process.kill(row.pid,'SIGKILL');}
+async function killOwned(row){const current=(await observeRows([row.pid])).find(now=>now.pid===row.pid);if(!current)return;assert.equal(current.created,row.created,'Refuse a recycled PID');assert.equal(current.executable,row.executable);process.kill(row.pid,'SIGKILL');}
 const environment={...process.env,PATH:emptyPath,NODE_OPTIONS:'--trace-warnings',BAMBI_CLOUD_API_KEY:'qualification-sentinel'};delete environment.ELECTRON_RUN_AS_NODE;
 const applications=new Map();
 async function launch(port=16969){
@@ -45,7 +45,7 @@ async function launch(port=16969){
  const startupMs=performance.now()-started;
  const owner=await application.evaluate(({app,BrowserWindow})=>({pid:process.pid,data:app.getPath('userData'),sandbox:app.isReady()&&BrowserWindow.getAllWindows().every(w=>{const p=w.webContents.getLastWebPreferences();return p.sandbox&&p.contextIsolation&&!p.nodeIntegration&&p.webSecurity;})}));
  assert.equal(owner.data,data);assert(owner.sandbox);
- const rows=ownedRows(owner.pid),supervisor=rows.find(r=>r.parent===owner.pid&&r.executable?.toLowerCase()===join(backendRoot,'node/bin/node.exe').toLowerCase());
+ const rows=await observeOwnedRows(owner.pid),supervisor=rows.find(r=>r.parent===owner.pid&&r.executable?.toLowerCase()===join(backendRoot,'node/bin/node.exe').toLowerCase());
  const guard=rows.find(r=>r.parent===supervisor?.pid&&r.executable?.toLowerCase().endsWith('bambi-job.exe'));
  const backend=rows.find(r=>r.parent===guard?.pid&&r.executable?.toLowerCase()===join(backendRoot,'node/bin/node.exe').toLowerCase());
  assert(supervisor&&guard&&backend,'Owned native job/supervisor/backend tree is missing');
@@ -54,6 +54,7 @@ async function launch(port=16969){
 }
 let current,canary,conflict,secondNative;
 try{
+ await startObserver();
  if(process.env.BAMBI_WINDOWS_OBSERVER)evidence.processObservation={sha256:await hashFile(process.env.BAMBI_WINDOWS_OBSERVER),method:'Separate read-only qualification observer: Toolhelp parent tree, queried only for specified owned/canary PIDs and descendants. App Job Object and shipped helper unchanged.'};
  const runtime=JSON.parse(readFileSync(join(resources,'notices/RUNTIME-MANIFEST.json'),'utf8'));
  assert.equal(runtime.platform,'win32');assert.equal(runtime.architecture,'x64');assertNativeTree(backendRoot);
@@ -123,19 +124,19 @@ try{
  const secondRoots=[secondNative.pid,current.owner.pid];
  evidence.secondStart={pid:secondNative.pid,observations:[]};
  await new Promise((accept,reject)=>{
-  const timer=setTimeout(()=>{
+  const timer=setTimeout(async()=>{
    try{if(process.env.BAMBI_WINDOWS_OBSERVER){
-    evidence.secondStart.observations.push({at:new Date().toISOString(),processes:processRows(secondRoots).map(({command,...row})=>row),windows:JSON.parse(execFileSync(process.env.BAMBI_WINDOWS_OBSERVER,[secondRoots.join(','),'--windows'],{encoding:'utf8',timeout:20000,windowsHide:true}))});
+    evidence.secondStart.observations.push({at:new Date().toISOString(),processes:(await observeRows(secondRoots)).map(({command,...row})=>row),windows:await observeRows(secondRoots,true)});
    }}catch(error){evidence.secondStart.observationFailure=String(error);}
    reject(Error('Second instance did not exit within 15 seconds'));
   },15000);
   secondNative.once('error',error=>{clearTimeout(timer);reject(error);});
   secondNative.once('exit',(code,signal)=>{clearTimeout(timer);if(code===0&&!signal)accept();else reject(Error('Second instance exit '+JSON.stringify({code,signal})));});
  });
- assert(processRows([current.backend.pid]).some(r=>r.pid===current.backend.pid&&r.created===current.backend.created));record('second-start-keeps-original-owner',{secondExitCode:secondNative.exitCode,method:'Ordinary native spawn without Playwright/debug flags.'});
+ assert((await observeRows([current.backend.pid])).some(r=>r.pid===current.backend.pid&&r.created===current.backend.created));record('second-start-keeps-original-owner',{secondExitCode:secondNative.exitCode,method:'Ordinary native spawn without Playwright/debug flags.'});
  applications.get(current.application).kill('SIGKILL');await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-Electron-death-cleans-owned-tree');
  for(const target of ['backend','supervisor','guard']){
-  current=await launch();await current.application.evaluate(({dialog})=>{dialog.showErrorBox=()=>{};});killOwned(current[target]);await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-'+target+'-death-cleans-owned-tree');
+  current=await launch();await current.application.evaluate(({dialog})=>{dialog.showErrorBox=()=>{};});await killOwned(current[target]);await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-'+target+'-death-cleans-owned-tree');
  }
  current=await launch();await current.application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());await stopped(current.rows);await current.application.close().catch(()=>{});current=null;record('window-close-quits');
  conflict=createServer((_req,res)=>res.end('unrelated listener'));await new Promise((accept,reject)=>conflict.once('error',reject).listen(16969,'127.0.0.1',accept));
@@ -145,7 +146,7 @@ try{
  await Promise.race([new Promise(r=>applications.get(blocked).once('exit',r)),delay(15000)]);
  await blocked.close().catch(()=>{});assert.equal(await(await fetch('http://127.0.0.1:16969')).text(),'unrelated listener');record('port-conflict-preserves-unrelated-listener');
  await new Promise(r=>conflict.close(r));conflict=null;
- assert(canary.exitCode===null&&processRows([canary.pid]).some(r=>r.pid===canary.pid));record('unrelated-native-canary-survives-all-shutdowns');
+ assert(canary.exitCode===null&&(await observeRows([canary.pid])).some(r=>r.pid===canary.pid));record('unrelated-native-canary-survives-all-shutdowns');
  assert.deepEqual(await inventory(resources),before);record('immutable-resources-unchanged');
  evidence.result='passed';
  evidence.limitations=['This tests the unpacked/installed binary on the recorded native Windows host. Actual browser download, NSIS install/uninstall and security policy are separate tests.','PCM is application output, not physical listening. No physical microphone test.','AI, setup, GPU offloading, CPU fallback, offline network isolation and suspended-process injection need separate qualification.'];
@@ -158,5 +159,6 @@ finally{
  if(canary&&canary.exitCode===null)canary.kill();
  if(secondNative&&secondNative.exitCode===null&&secondNative.signalCode===null)secondNative.kill('SIGKILL');
  if(conflict?.listening)await new Promise(r=>conflict.close(r));
+ await stopObserver();
  writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));
 }
