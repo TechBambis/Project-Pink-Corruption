@@ -40,6 +40,8 @@ async function launch(port=16969){
  const application=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,`--bambi-port=${port}`],cwd:output,env:environment,timeout:30000});
  applications.add(application);
  const page=await application.firstWindow();page.on('pageerror',error=>evidence.errors.push(String(error)));await page.waitForSelector('#offline-sample',{state:'visible'});
+ const bounds=await application.evaluate(({BrowserWindow})=>{const window=BrowserWindow.getAllWindows()[0];window.setSize(880,640);return window.getBounds();});
+ evidence.measurements.windowBounds=bounds;
  const startupMs=performance.now()-started;
  const owner=await application.evaluate(({app,BrowserWindow})=>({pid:process.pid,data:app.getPath('userData'),sandbox:app.isReady()&&BrowserWindow.getAllWindows().every(w=>{const p=w.webContents.getLastWebPreferences();return p.sandbox&&p.contextIsolation&&!p.nodeIntegration&&p.webSecurity;})}));
  assert.equal(owner.data,data);assert(owner.sandbox);
@@ -94,7 +96,22 @@ try{
  record('included-sample-has-nonzero-output-PCM',{peak:await audible()});
  await current.page.locator('#pause').click();const position=await current.page.locator('#media').evaluate(n=>n.currentTime);await delay(500);assert.equal(await current.page.locator('#media').evaluate(n=>n.currentTime),position);
  await current.page.locator('#pause').click();await current.page.waitForFunction(p=>document.querySelector('#media').currentTime>p+.2,position);record('pause-and-resume');
- await current.page.locator('#mute').click();await delay(500);assert.equal(await pcm(),0);await current.page.locator('#mute').click();await audible();record('audio-mute-and-unmute');
+ // Keep time-sensitive assertions in the renderer: hosted-runner IPC can take
+ // seconds per call and otherwise exhaust the real 24-second sample.
+ const muteCheck=await current.page.evaluate(async()=>{
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms)),media=document.querySelector('#media'),mute=document.querySelector('#mute');
+  const state=()=>({time:media.currentTime,duration:media.duration,paused:media.paused,ended:media.ended,context:window.__testAnalyser?.context.state,muted:mute.dataset.muted});
+  const peak=()=>{const a=window.__testAnalyser;if(!a)return 0;const values=new Float32Array(a.fftSize);a.getFloatTimeDomainData(values);return Math.max(...values.map(Math.abs));};
+  const wait=async(predicate,label)=>{const deadline=performance.now()+8000;while(performance.now()<deadline){if(predicate())return;await sleep(100);}throw Error(label+' '+JSON.stringify(state()));};
+  await document.querySelector('#offline-sample').onclick();document.querySelector('#pause').click();
+  await wait(()=>!media.paused&&!media.ended&&media.currentTime>.4&&peak()>.0001,'Fresh sample has no output');
+  const before={...state(),peak:peak()};mute.click();
+  await sleep(500);const muted={...state(),peak:peak()};
+  if(muted.paused||muted.ended||muted.muted!=='true'||muted.peak!==0)throw Error('Mute assertion '+JSON.stringify(muted));
+  mute.click();await wait(()=>!media.paused&&!media.ended&&mute.dataset.muted==='false'&&peak()>.0001,'Unmute has no output');
+  return {before,muted,unmuted:{...state(),peak:peak()},method:'Fresh included sample; real button handlers invoked in the renderer to avoid hosted-runner IPC delays. No direct media, gain or audio-context manipulation.'};
+ });
+ record('audio-mute-and-unmute',muteCheck);
  await current.page.keyboard.press('Escape');await current.page.keyboard.press('Escape');await current.page.waitForFunction(()=>document.querySelector('#media').paused&&window.__testAnalyser.context.state==='suspended');record('end-session-stops-output');
  await current.page.evaluate(async()=>{const profile=await(await fetch('/api/preferences')).json();await fetch('/api/preferences',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({...profile,'bambi-name':'Windows persistence ü'})});});
  await current.application.evaluate(({app})=>{setImmediate(()=>app.quit());});await stopped(current.rows);await current.application.close().catch(()=>{});record('ordinary-Quit-cleans-owned-tree');

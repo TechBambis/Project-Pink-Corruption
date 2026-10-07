@@ -11,6 +11,7 @@ if(process.argv.includes('--help')){console.log('Native Windows x64: node script
 if(process.platform!=='win32'||process.arch!=='x64')throw Error('Installer acceptance requires native Windows x64.');
 if(!process.argv[2])throw Error('Supply the immutable version output directory.');
 const root=resolve(fileURLToPath(new URL('../',import.meta.url))),output=resolve(process.argv[2]);
+const receivedInstaller=process.argv.includes('--received-installer');
 const runtime=JSON.parse(readFileSync(join(output,'RUNTIME-MANIFEST.json'),'utf8'));
 assert.match(runtime.version,/^0\.1\.0-(smoke|alpha)\.[1-9][0-9]*$/);
 const product=runtime.phase==='alpha'?'Bambi Local':'Bambi Local Smoke';
@@ -31,10 +32,13 @@ function nsis(path,args){
 let fixture,fixtureHash;
 try{
  nsis(installer,['/S','/D='+installed]);assert(existsSync(executable)&&existsSync(uninstaller),'Expected per-user NSIS installation');
- const expected=await inventory(join(output,'win-unpacked/resources'));
+ // A received private artifact has no build staging tree. Its embedded hashes
+ // and corresponding source are audited by the application check below.
+ const expected=await inventory(receivedInstaller?join(installed,'resources'):join(output,'win-unpacked/resources'));
  assert.deepEqual(await inventory(join(installed,'resources')),expected);
- assert.equal(await hashFile(executable),await hashFile(join(output,'win-unpacked',product+'.exe')));
- record('NSIS-install-in-fresh-space-and-Unicode-path',{path:installed,resourcesMatch:true});
+ const installedExecutableHash=await hashFile(executable);
+ if(!receivedInstaller)assert.equal(installedExecutableHash,await hashFile(join(output,'win-unpacked',product+'.exe')));
+ record('NSIS-install-in-fresh-space-and-Unicode-path',{path:installed,resourcesMatch:!receivedInstaller,receivedInstaller,installedExecutableHash,resourceAudit:receivedInstaller?'Embedded runtime/source/shell hashes below; installed inventory retained for reinstall comparison.':'Build staging inventory and executable hash.'});
  execFileSync(process.execPath,[join(root,'scripts/desktop-windows-check.mjs'),executable],{cwd:root,env:process.env,timeout:10*60*1000,stdio:'inherit'});
  record('actual-installed-application-packaging-acceptance');
  const testRoot=resolve(process.env.BAMBI_WINDOWS_TEST_OUTPUT||join(process.env.LOCALAPPDATA,'Bambi qualification'));
@@ -48,6 +52,7 @@ try{
  assert.equal(await hashFile(fixture),fixtureHash);record('NSIS-uninstall-and-retained-profile');
  nsis(installer,['/S','/D='+installed]);assert(existsSync(executable)&&existsSync(uninstaller));
  assert.deepEqual(await inventory(join(installed,'resources')),expected);assert.equal(await hashFile(fixture),fixtureHash);
+ assert.equal(await hashFile(executable),installedExecutableHash);
  record('NSIS-reinstall-with-retained-profile');
  nsis(uninstaller,['/S','/KEEP_APP_DATA','_?='+installed]);
  assert(!existsSync(executable)&&!existsSync(join(installed,'resources')));assert.equal(await hashFile(fixture),fixtureHash);
@@ -55,6 +60,7 @@ try{
 }catch(error){evidence.failure=String(error.stack||error);console.error(error);process.exitCode=1;}
 finally{
  if(existsSync(executable)&&existsSync(uninstaller))try{nsis(uninstaller,['/S','/KEEP_APP_DATA','_?='+installed]);}catch(error){evidence.cleanupFailure=String(error);process.exitCode=1;evidence.result='failed';}
- writeFileSync(join(output,'INSTALLER-CHECK.json'),JSON.stringify(evidence,null,2)+'\n');
- console.log('Installer evidence:',join(output,'INSTALLER-CHECK.json'));
+ const evidencePath=join(output,receivedInstaller?'QUALIFIED-INSTALLER-CHECK.json':'INSTALLER-CHECK.json');
+ writeFileSync(evidencePath,JSON.stringify(evidence,null,2)+'\n');
+ console.log('Installer evidence:',evidencePath);
 }

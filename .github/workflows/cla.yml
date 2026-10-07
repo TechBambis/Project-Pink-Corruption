@@ -5,6 +5,10 @@ name: Manual Windows smoke build entry point
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        type: choice
+        options: [build, qualify]
+        default: build
       phase:
         type: choice
         options: [smoke]
@@ -27,9 +31,10 @@ on:
         default: '0'
 permissions:
   contents: read
+  actions: read
 jobs:
   windows:
-    if: inputs.quota_checked && github.actor_id == '337824705'
+    if: inputs.mode == 'build' && inputs.quota_checked && github.actor_id == '337824705'
     uses: ./.github/workflows/desktop-windows.yml
     with:
       phase: ${{ inputs.phase }}
@@ -37,4 +42,10 @@ jobs:
       quota_checked: ${{ inputs.quota_checked }}
       quota_record: ${{ inputs.quota_record }}
       upload_packages: ${{ inputs.upload_packages }}
+      remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}
+  qualification:
+    if: inputs.mode == 'qualify' && inputs.quota_checked && github.actor_id == '337824705'
+    uses: ./.github/workflows/desktop-windows-qualify.yml
+    with:
+      quota_record: ${{ inputs.quota_record }}
       remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}
