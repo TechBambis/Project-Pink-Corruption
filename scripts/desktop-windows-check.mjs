@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync,spawn} from 'node:child_process';
 import {createServer} from 'node:http';
 import {hashFile,digest,inventory,assertNativeTree,logicalPath} from './desktop-windows-support.mjs';
-import {observeOwnedRows,observeRows,startObserver,stopObserver,privateAcl,machineConditions} from './desktop-windows-processes.mjs';
+import {observeOwnedRows,observeRows,observeAcl,startObserver,stopObserver,machineConditions} from './desktop-windows-processes.mjs';
 
 if(process.argv.includes('--help')){console.log('Native Windows: node scripts/desktop-windows-check.mjs "path to Bambi Local.exe". Evidence stays in LOCALAPPDATA/Bambi qualification.');process.exit(0);}
 if(process.platform!=='win32'||process.arch!=='x64')throw Error('Run acceptance on native Windows x64.');
@@ -34,6 +34,10 @@ async function stopped(rows){
 }
 async function killOwned(row){const current=(await observeRows([row.pid])).find(now=>now.pid===row.pid);if(!current)return;assert.equal(current.created,row.created,'Refuse a recycled PID');assert.equal(current.executable,row.executable);process.kill(row.pid,'SIGKILL');}
 const environment={...process.env,PATH:emptyPath,NODE_OPTIONS:'--trace-warnings',BAMBI_CLOUD_API_KEY:'qualification-sentinel'};delete environment.ELECTRON_RUN_AS_NODE;
+// Playwright removes NODE_OPTIONS internally. Match that normal environment in
+// ordinary native starts too; do not claim to qualify injected main-node flags.
+delete environment.NODE_OPTIONS;
+evidence.testConditions={nodeOptions:'Absent for all Electron starts. Existing/injected NODE_OPTIONS behavior is not qualified; backend filtering has separate portable regression coverage.',processInspection:'Persistent read-only observer started before the application; identity and NTFS ACL queries are asynchronous.'};
 const applications=new Map();
 async function launch(port=16969){
  const started=performance.now();
@@ -81,7 +85,7 @@ try{
  else {assert(health.desktopAlpha);assert(!health.kokoro&&!health.llamaModels.length);}
  record('sqlite-and-explicit-capabilities',{health});
  for(const path of [data,join(data,'data/bambi.sqlite')]){
-  const acl=privateAcl(path);if(path===data)assert(acl.protected);
+  const acl=await observeAcl(path);if(path===data)assert(acl.protected);
   assert(acl.rules.length);assert(acl.rules.every(rule=>rule.type==='Allow'&&[acl.user,'S-1-5-18','S-1-5-32-544'].includes(rule.sid)),'Unexpected access to private profile');
  }
  record('private-Windows-profile-ACLs');

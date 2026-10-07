@@ -31,6 +31,10 @@ export async function observeRows(roots,windows=false){
  const rows=await reply;return windows?rows:rows.map(row=>({...row,command:''}));
 }
 export async function observeOwnedRows(owner){return ownedRows(owner,await observeRows([owner]));}
+export async function observeAcl(path){
+ if(!observerChild)return privateAcl(path);
+ const reply=nextReply();observerChild.stdin.write('--acl '+Buffer.from(resolve(path),'utf8').toString('base64')+'\n');return await reply;
+}
 export async function stopObserver(){
  if(!observerChild)return;
  const child=observerChild;observerChild=null;child.stdin.end();

@@ -6,6 +6,9 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.IO;
+using System.Security.AccessControl;
+using System.Security.Principal;
 
 public static class BambiWindowsObserver
 {
@@ -50,6 +53,22 @@ public static class BambiWindowsObserver
                 catch (Exception error) { Console.WriteLine("{\"error\":" + Json(error.Message) + "}"); }
             }
             return 0;
+        }
+        if (args.Length == 2 && args[0] == "--acl")
+        {
+            string path = Encoding.UTF8.GetString(Convert.FromBase64String(args[1]));
+            FileSystemSecurity acl = Directory.Exists(path) ? (FileSystemSecurity)new DirectoryInfo(path).GetAccessControl() : new FileInfo(path).GetAccessControl();
+            StringBuilder json = new StringBuilder("{\"user\":").Append(Json(WindowsIdentity.GetCurrent().User.Value))
+                .Append(",\"owner\":").Append(Json(((SecurityIdentifier)acl.GetOwner(typeof(SecurityIdentifier))).Value))
+                .Append(",\"protected\":").Append(acl.AreAccessRulesProtected ? "true" : "false").Append(",\"rules\":[");
+            bool firstRule = true;
+            foreach (FileSystemAccessRule rule in acl.GetAccessRules(true, true, typeof(SecurityIdentifier))) {
+                if (!firstRule) json.Append(','); firstRule = false;
+                json.Append("{\"sid\":").Append(Json(((SecurityIdentifier)rule.IdentityReference).Value))
+                    .Append(",\"type\":").Append(Json(rule.AccessControlType.ToString())).Append(",\"inherited\":").Append(rule.IsInherited ? "true" : "false")
+                    .Append(",\"rights\":").Append(Json(rule.FileSystemRights.ToString())).Append('}');
+            }
+            Console.WriteLine(json.Append("]}").ToString()); return 0;
         }
         if (Environment.OSVersion.Platform != PlatformID.Win32NT || IntPtr.Size != 8 || args.Length < 1 || args.Length > 2 || (args.Length == 2 && args[1] != "--windows")) return 64;
         HashSet<uint> selected = new HashSet<uint>();
