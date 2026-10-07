@@ -31,6 +31,9 @@ public static class BambiWindowsObserver
     [DllImport("psapi.dll")] static extern bool GetProcessMemoryInfo(IntPtr process, ref Memory memory, uint size);
     delegate bool WindowCallback(IntPtr window, IntPtr parameter);
     [DllImport("user32.dll")] static extern bool EnumWindows(WindowCallback callback, IntPtr parameter);
+    [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr window, WindowCallback callback, IntPtr parameter);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(IntPtr window, StringBuilder text, int count);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessageTimeoutW(IntPtr window, uint message, UIntPtr capacity, StringBuilder text, uint flags, uint timeout, out UIntPtr result);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowTextW(IntPtr window, StringBuilder text, int count);
     static ulong Number(Time value) { return ((ulong)value.High << 32) | value.Low; }
@@ -69,7 +72,22 @@ public static class BambiWindowsObserver
                 uint pid; GetWindowThreadProcessId(window, out pid);
                 if (selected.Contains(pid)) {
                     StringBuilder title = new StringBuilder(1024); GetWindowTextW(window, title, title.Capacity);
-                    if (title.Length != 0) { if (!firstWindow) windows.Append(','); firstWindow = false; windows.Append("{\"pid\":").Append(pid).Append(",\"title\":").Append(Json(title.ToString())).Append('}'); }
+                    if (title.Length != 0) {
+                        if (!firstWindow) windows.Append(','); firstWindow = false; windows.Append("{\"pid\":").Append(pid).Append(",\"title\":").Append(Json(title.ToString()));
+                        if (title.ToString() == "Error" || title.ToString().StartsWith("Bambi Local", StringComparison.Ordinal)) {
+                            windows.Append(",\"staticText\":["); bool firstText = true;
+                            EnumChildWindows(window, delegate(IntPtr control, IntPtr unused) {
+                                StringBuilder type = new StringBuilder(64); GetClassNameW(control, type, type.Capacity);
+                                if (type.ToString() == "Static") {
+                                    StringBuilder text = new StringBuilder(4096); UIntPtr result;
+                                    SendMessageTimeoutW(control, 0x000d, (UIntPtr)text.Capacity, text, 2, 200, out result);
+                                    if (text.Length != 0) { if (!firstText) windows.Append(','); firstText = false; windows.Append(Json(text.ToString())); }
+                                }
+                                return true;
+                            }, IntPtr.Zero); windows.Append(']');
+                        }
+                        windows.Append('}');
+                    }
                 }
                 return true;
             }, IntPtr.Zero);
