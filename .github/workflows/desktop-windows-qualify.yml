@@ -46,6 +46,11 @@ jobs:
           $env:PATH = (Split-Path $node)+[IO.Path]::PathSeparator+$env:PATH
           & $node (Join-Path (Split-Path $node) 'node_modules/npm/bin/npm-cli.js') ci --ignore-scripts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $observer = Join-Path $env:RUNNER_TEMP 'bambi-qualification-observer.exe'
+          $csc = Join-Path $env:SystemRoot 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+          & $csc /nologo /target:exe /platform:x64 /optimize+ ('/out:'+$observer) scripts/desktop-windows-observer.cs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          'BAMBI_WINDOWS_OBSERVER='+$observer | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Receive exact existing private package and verify every retained hash
         shell: pwsh
         env:

@@ -12,11 +12,15 @@ export function powershell(command,extraEnvironment={}){
  for(const key of Object.keys(environment))if(key.toLowerCase()==='psmodulepath')delete environment[key];
  return execFileSync(executable,['-NoLogo','-NoProfile','-NonInteractive','-Command',"$ErrorActionPreference='Stop'; [Console]::OutputEncoding=New-Object System.Text.UTF8Encoding($false); "+command],{encoding:'utf8',windowsHide:true,timeout:20000,maxBuffer:16*1024**2,env:environment}).trim();
 }
-export function processRows(){
+export function processRows(roots=[]){
+ if(process.env.BAMBI_WINDOWS_OBSERVER){
+  if(!roots.length||roots.some(pid=>!Number.isSafeInteger(pid)||pid<=0))throw Error('Specify owned process IDs for qualification observation.');
+  return JSON.parse(execFileSync(resolve(process.env.BAMBI_WINDOWS_OBSERVER),[roots.join(',')],{encoding:'utf8',windowsHide:true,timeout:20000,maxBuffer:16*1024**2})).map(row=>({...row,command:''}));
+ }
  if(!process.env.BAMBI_WINDOWS_JOB_HELPER)throw Error('Native Windows process snapshot helper was not selected.');
  return JSON.parse(execFileSync(resolve(process.env.BAMBI_WINDOWS_JOB_HELPER),['--process-snapshot'],{encoding:'utf8',windowsHide:true,timeout:20000,maxBuffer:16*1024**2})).map(row=>({...row,command:''}));
 }
-export function ownedRows(owner,rows=processRows()){
+export function ownedRows(owner,rows=processRows([owner])){
  const owned=new Set([owner]);let changed=true;
  while(changed){changed=false;for(const row of rows)if(owned.has(row.parent)&&!owned.has(row.pid)){assertCreation(row);owned.add(row.pid);changed=true;}}
  return rows.filter(row=>owned.has(row.pid));

@@ -186,6 +186,7 @@ test-results/
 !/scripts/desktop-windows-check.mjs
 !/scripts/desktop-windows-install-check.mjs
 !/scripts/desktop-windows-processes.mjs
+!/scripts/desktop-windows-observer.cs
 !/scripts/desktop-windows-ai-check.mjs
 !/scripts/desktop-windows-source.mjs
 !/docs/DESKTOP_WINDOWS.md

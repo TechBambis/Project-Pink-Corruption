@@ -29,16 +29,16 @@ const record=(name,detail={})=>{evidence.checks.push({name,...detail});writeFile
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function stopped(rows){
  const deadline=performance.now()+12000;
- while(performance.now()<deadline){const current=processRows();if(rows.every(row=>!current.some(now=>now.pid===row.pid&&now.created===row.created)))return;await delay(250);}
+ while(performance.now()<deadline){const current=processRows(rows.map(row=>row.pid));if(rows.every(row=>!current.some(now=>now.pid===row.pid&&now.created===row.created)))return;await delay(250);}
  assert.fail('Owned processes survived shutdown');
 }
-function killOwned(row){const current=processRows().find(now=>now.pid===row.pid);if(!current)return;assert.equal(current.created,row.created,'Refuse a recycled PID');assert.equal(current.executable,row.executable);process.kill(row.pid,'SIGKILL');}
+function killOwned(row){const current=processRows([row.pid]).find(now=>now.pid===row.pid);if(!current)return;assert.equal(current.created,row.created,'Refuse a recycled PID');assert.equal(current.executable,row.executable);process.kill(row.pid,'SIGKILL');}
 const environment={...process.env,PATH:emptyPath,NODE_OPTIONS:'--trace-warnings',BAMBI_CLOUD_API_KEY:'qualification-sentinel'};delete environment.ELECTRON_RUN_AS_NODE;
-const applications=new Set();
+const applications=new Map();
 async function launch(port=16969){
  const started=performance.now();
  const application=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,`--bambi-port=${port}`],cwd:output,env:environment,timeout:30000});
- applications.add(application);
+ applications.set(application,application.process());
  const page=await application.firstWindow();page.on('pageerror',error=>evidence.errors.push(String(error)));await page.waitForSelector('#offline-sample',{state:'visible'});
  const bounds=await application.evaluate(({BrowserWindow})=>{const window=BrowserWindow.getAllWindows()[0];window.setSize(880,640);return window.getBounds();});
  evidence.measurements.windowBounds=bounds;
@@ -54,6 +54,7 @@ async function launch(port=16969){
 }
 let current,canary,conflict;
 try{
+ if(process.env.BAMBI_WINDOWS_OBSERVER)evidence.processObservation={sha256:await hashFile(process.env.BAMBI_WINDOWS_OBSERVER),method:'Separate read-only qualification observer: Toolhelp parent tree, queried only for specified owned/canary PIDs and descendants. App Job Object and shipped helper unchanged.'};
  const runtime=JSON.parse(readFileSync(join(resources,'notices/RUNTIME-MANIFEST.json'),'utf8'));
  assert.equal(runtime.platform,'win32');assert.equal(runtime.architecture,'x64');assertNativeTree(backendRoot);
  const shell=join(output,'Shell inspection'),source=join(output,'Source inspection');mkdirSync(source);
@@ -118,27 +119,27 @@ try{
  current=await launch();assert.equal(await current.page.evaluate(async()=>(await(await fetch('/api/preferences')).json())['bambi-name']),'Windows persistence ü');record('reopen-retains-preferences');
  const second=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,'--bambi-port=16969'],cwd:output,env:environment,timeout:15000}).catch(()=>null);
  if(second)await second.close().catch(()=>{});
- assert(processRows().some(r=>r.pid===current.backend.pid&&r.created===current.backend.created));record('second-start-keeps-original-owner');
- current.application.process().kill('SIGKILL');await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-Electron-death-cleans-owned-tree');
+ assert(processRows([current.backend.pid]).some(r=>r.pid===current.backend.pid&&r.created===current.backend.created));record('second-start-keeps-original-owner');
+ applications.get(current.application).kill('SIGKILL');await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-Electron-death-cleans-owned-tree');
  for(const target of ['backend','supervisor','guard']){
   current=await launch();await current.application.evaluate(({dialog})=>{dialog.showErrorBox=()=>{};});killOwned(current[target]);await stopped(current.rows);await current.application.close().catch(()=>{});record('forced-'+target+'-death-cleans-owned-tree');
  }
  current=await launch();await current.application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());await stopped(current.rows);await current.application.close().catch(()=>{});current=null;record('window-close-quits');
  conflict=createServer((_req,res)=>res.end('unrelated listener'));await new Promise((accept,reject)=>conflict.once('error',reject).listen(16969,'127.0.0.1',accept));
  const blocked=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,'--bambi-port=16969'],cwd:output,env:environment,timeout:15000});
- applications.add(blocked);
+ applications.set(blocked,blocked.process());
  await blocked.evaluate(({dialog})=>{dialog.showErrorBox=()=>{};}).catch(()=>{});
- await Promise.race([new Promise(r=>blocked.process().once('exit',r)),delay(15000)]);
+ await Promise.race([new Promise(r=>applications.get(blocked).once('exit',r)),delay(15000)]);
  await blocked.close().catch(()=>{});assert.equal(await(await fetch('http://127.0.0.1:16969')).text(),'unrelated listener');record('port-conflict-preserves-unrelated-listener');
  await new Promise(r=>conflict.close(r));conflict=null;
- assert(canary.exitCode===null&&processRows().some(r=>r.pid===canary.pid));record('unrelated-native-canary-survives-all-shutdowns');
+ assert(canary.exitCode===null&&processRows([canary.pid]).some(r=>r.pid===canary.pid));record('unrelated-native-canary-survives-all-shutdowns');
  assert.deepEqual(await inventory(resources),before);record('immutable-resources-unchanged');
  evidence.result='passed';
  evidence.limitations=['This tests the unpacked/installed binary on the recorded native Windows host. Actual browser download, NSIS install/uninstall and security policy are separate tests.','PCM is application output, not physical listening. No physical microphone test.','AI, setup, GPU offloading, CPU fallback, offline network isolation and suspended-process injection need separate qualification.'];
 }catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);process.exitCode=1;}
 finally{
- for(const application of applications){
-  const child=application.process();if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
+ for(const [application,child] of applications){
+  if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
   await Promise.race([application.close().catch(()=>{}),delay(2000)]);
  }
  if(canary&&canary.exitCode===null)canary.kill();
