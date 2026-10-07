@@ -48,7 +48,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $observer = Join-Path $env:RUNNER_TEMP 'bambi-qualification-observer.exe'
           $csc = Join-Path $env:SystemRoot 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-          & $csc /nologo /target:exe /platform:x64 /optimize+ ('/out:'+$observer) scripts/desktop-windows-observer.cs
+          & $csc /nologo /target:exe /platform:x64 /optimize+ ('/out:'+$observer) (Join-Path $PWD 'scripts/desktop-windows-observer.cs')
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           'BAMBI_WINDOWS_OBSERVER='+$observer | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Receive exact existing private package and verify every retained hash
@@ -85,7 +85,7 @@ jobs:
             if ($runs.Count -ne 1) { throw 'Expected exactly one application check.' }
             Copy-Item (Join-Path $runs[0].FullName 'evidence.json') (Join-Path $env:BAMBI_QUALIFICATION_EVIDENCE 'QUALIFIED-WINDOWS-PACKAGING-CHECK.json')
           }
-          & git archive --format=tar.gz -o (Join-Path $env:BAMBI_QUALIFICATION_EVIDENCE 'QUALIFICATION-SOURCE.tar.gz') HEAD
+          & git archive --format=tar.gz -o (Join-Path $env:BAMBI_QUALIFICATION_EVIDENCE 'QUALIFICATION-SOURCE.tar.gz') HEAD scripts/desktop-windows-check.mjs scripts/desktop-windows-install-check.mjs scripts/desktop-windows-processes.mjs scripts/desktop-windows-support.mjs scripts/desktop-windows-observer.cs config/desktop-windows-runtime.json package.json package-lock.json .github/workflows/cla.yml .github/workflows/desktop-windows-qualify.yml LICENSE LICENSING.md
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $report = @{qualificationGitSha=$env:GITHUB_SHA; qualificationRunId=$env:GITHUB_RUN_ID; buildGitSha='baf090d55054030bc64d432c2c501502755281c6'; buildRunId=37672497878; receivedArtifactId=11505529283; version='0.1.0-smoke.5'; rebuilt=$false; quotaRecord=$env:BAMBI_QUOTA_RECORD}
           $report | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $env:BAMBI_QUALIFICATION_EVIDENCE 'QUALIFICATION-RUN.json') -Encoding utf8NoBOM
