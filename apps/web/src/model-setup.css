@@ -17,3 +17,11 @@
 .model-setup progress{width:100%;height:10px;accent-color:var(--model-accent)}.model-progress{overflow-wrap:anywhere;font-size:13px;min-height:24px}.model-error{color:#ffb4ca}.model-wizard-actions{border-top:1px solid var(--line,#50394f);padding-top:18px}.model-wizard-actions [data-finish]{margin-left:auto}
 #model-onboarding{max-width:820px;max-height:85vh;overflow:auto}#model-onboarding>h2{font-size:27px}#model-onboarding button{font:inherit}#model-onboarding [hidden],.model-setup [hidden]{display:none!important}
 @media(max-width:600px){.model-steps{gap:7px}.model-steps button{flex:1;padding:8px;font-size:12px}.model-hardware{grid-template-columns:1fr;gap:3px}.model-hardware dd{margin-bottom:10px}.model-choice{padding:12px}.model-wizard-actions [data-finish]{margin-left:0}}
+.model-status{margin:22px 0 12px;padding:18px 20px;border-left:3px solid var(--model-accent);background:var(--surface,#28182f);border-radius:0 10px 10px 0}
+.model-status .model-progress{display:block;font-size:18px;color:var(--model-accent);margin:0 0 12px}.model-progress-detail{margin:10px 0 0;font-size:13px;max-width:75ch;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.model-status[data-phase=failed],.model-status[data-phase=cancelled]{border-color:#ffb4ca}.model-status[data-phase=ready]{border-color:var(--cyan,#54d8de)}
+.model-unavailable,.model-connection,.model-running{padding:12px 15px;border:1px solid var(--line,#50394f);border-radius:10px;overflow-wrap:anywhere}
+.model-local{border-top:1px solid var(--line,#50394f);padding-top:14px;margin-top:24px}.model-local h3{font-size:17px;color:var(--model-accent)}
+.model-source{padding:15px 0;border-top:1px solid var(--line,#50394f)}.model-source strong,.model-source span{display:block;overflow-wrap:anywhere}.model-source span,.model-source p{font-size:12px;color:var(--muted,#c0a8c7)}.model-source-actions{display:flex;flex-wrap:wrap;gap:8px}.model-source-actions button{font-size:12px;text-align:left}
+.model-setup button:focus-visible{outline:2px solid var(--model-accent);outline-offset:3px}.model-setup [data-download]:enabled,.model-setup [data-prepare]:enabled{border-color:var(--model-accent)}
+@media(max-width:600px){.model-status{padding:14px}.model-actions>button{flex:1 1 150px}.model-source-actions>button{width:100%}}

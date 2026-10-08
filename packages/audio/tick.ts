@@ -3,6 +3,7 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import type {SessionPhase} from '../session-director/phases';
+import {isAppAudioOrigin} from './app-origin';
 import {bufferRms} from './sound-renderer';
 import {synthesizeDesignSound} from './sound-design';
 
@@ -61,7 +62,7 @@ export class TickEngine {
   }
   init(){return this.loading??=this.load();}
   private async load(){
-    if(!/^http:\/\/(?:127\.0\.0\.1|localhost):6969$/.test(globalThis.location?.origin??''))return;
+    if(!isAppAudioOrigin())return;
     // The user prefers the earlier clock/metronome attack for the BPM loop.
     // Keep the CC0 click as an available fallback, rather than the main timbre.
     for(const file of ['tick.wav','tick_main.wav'])try{const response=await fetch('/assets/sounds/'+file,{signal:AbortSignal.timeout(5000)});if(!response.ok)continue;

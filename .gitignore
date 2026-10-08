@@ -78,6 +78,7 @@ id_ed25519*
 # Provisioning, runtime lifecycle and regular CI entry points only.
 /scripts/*
 !/scripts/model-setup-browser-check.mjs
+!/scripts/desktop-audio-browser-check.mjs
 !/scripts/navigation-browser-check.mjs
 !/scripts/env.sh
 !/scripts/setup.sh

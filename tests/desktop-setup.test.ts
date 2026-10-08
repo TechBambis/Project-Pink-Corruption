@@ -13,7 +13,7 @@ test('verified copy activates only correct bytes; damaged input preserves instal
  const root=await mkdtemp(join(tmpdir(),'bambi-setup-'));const data=join(root,'data'),source=join(root,'source');await mkdir(source);const first=Buffer.from('public first'),second=Buffer.from('public second');const assets=[asset('a',first),asset('b',second)],setup=new DesktopSetup(data,assets);
  try{
   await writeFile(join(source,'a'),first);await writeFile(join(source,'b'),'wrong bytes');await setup.install(source);assert.equal(setup.state.phase,'failed');assert.equal(setup.verified,false);assert.deepEqual(await readFile(join(data,'a')),first);assert(!(await readdir(data)).some(n=>n.endsWith('.partial')));
-  await writeFile(join(source,'b'),second);await setup.install(source);assert.equal(setup.state.phase,'installed');assert.equal(setup.verified,true);await writeFile(join(data,'b'),Buffer.alloc(second.length));await setup.check();assert.equal(setup.verified,false);assert.equal(setup.state.phase,'not-installed');
+  await writeFile(join(source,'b'),second);await setup.install(source);assert.equal(setup.state.phase,'installed');assert.equal(setup.verified,true);await writeFile(join(data,'b'),Buffer.alloc(second.length));await setup.check();assert.equal(setup.verified,false);assert.equal(setup.state.phase,'partial');assert.deepEqual(setup.snapshot.missing,['b']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 test('model-directory symlink cannot overwrite an unrelated file',async()=>{
@@ -36,4 +36,20 @@ test('revoking a download permission stops transfer and removes the staged file'
   lease.abort();await running;assert.equal(setup.state.phase,'cancelled');assert.equal(setup.verified,false);
   assert(!(await readdir(root)).some(name=>name.endsWith('.partial')));
  }finally{await new Promise<void>(accept=>server.close(()=>accept()));await rm(root,{recursive:true,force:true});}
+});
+test('an existing model file can be imported independently of speech; missing speech stays explicit and checksums remain mandatory',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'bambi-single-model-')),data=join(root,'data'),source=join(root,'other-repository');await mkdir(source);const bytes=Buffer.from('reviewed-model-fixture'),voice=Buffer.from('reviewed-voice');
+ const file=join(source,'renamed.gguf');await writeFile(file,bytes);const setup=new DesktopSetup(data,[asset('chat.gguf',bytes),asset('voice.onnx',voice)]);
+ try{
+  await setup.install(source,undefined,file);assert.equal(setup.state.phase,'partial');assert.equal(setup.verified,false);assert.equal(setup.snapshot.remainingBytes,voice.length);assert.deepEqual(setup.snapshot.missing,['voice.onnx']);assert.deepEqual(await readFile(file),bytes);
+  await setup.check();assert.equal(setup.state.phase,'partial');await writeFile(join(source,'voice.onnx'),voice);await setup.install(source,undefined,file);assert(setup.verified);assert.equal(setup.state.phase,'installed');
+  const damaged=new DesktopSetup(join(root,'damaged'),[asset('chat.gguf',bytes)]);await writeFile(file,Buffer.alloc(bytes.length));await damaged.install(source,undefined,file);assert.equal(damaged.state.phase,'failed');assert.equal(damaged.verified,false);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+test('a download that stops delivering data fails visibly, keeps prior verified assets and removes its partial file',async()=>{
+ const {createServer}=await import('node:http');const root=await mkdtemp(join(tmpdir(),'bambi-download-stall-')),first=Buffer.from('retained'),second=Buffer.alloc(4096,42);
+ const server=createServer((_req,res)=>{res.writeHead(200,{'Content-Length':second.length});res.write(second.subarray(0,1024));});await new Promise<void>(accept=>server.listen(0,'127.0.0.1',accept));
+ const pins=[asset('first',first),asset('second',second)];pins[1].url=`http://127.0.0.1:${(server.address() as {port:number}).port}/stall`;await writeFile(join(root,'first'),first);const setup=new DesktopSetup(root,pins,true,{downloadIdleMs:100});
+ try{await setup.install();assert.equal(setup.state.phase,'failed');assert.match(setup.snapshot.error!,/stopped receiving data/);assert.equal(setup.snapshot.operation,'download');assert.equal(setup.snapshot.assetIndex,2);assert.equal(setup.snapshot.assetCount,2);assert.equal(setup.snapshot.assetCompleted,1024);assert(setup.snapshot.updatedAt!>=setup.snapshot.startedAt!);assert.deepEqual(await readFile(join(root,'first')),first);assert(!(await readdir(root)).some(n=>n.endsWith('.partial')));}
+ finally{server.closeAllConnections();await new Promise<void>(accept=>server.close(()=>accept()));await rm(root,{recursive:true,force:true});}
 });

@@ -40,6 +40,11 @@ jobs:
       - name: Check built app in an isolated browser fixture
         if: matrix.node == 24
         run: npm run test:integration
+      - name: Check model onboarding and live setup states
+        if: matrix.node == 24
+        run: |
+          node scripts/model-setup-browser-check.mjs
+          node scripts/desktop-audio-browser-check.mjs
       - name: Save browser diagnostics on failure
         if: failure() && matrix.node == 24
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

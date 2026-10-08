@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
+import {isAppAudioOrigin} from './app-origin';
 import {connectVoiceTrack,backgroundVoiceWindow} from './dual-voice';
 import type {VoiceTrack} from '../speech/dual-voice';
 import {MoanVariations} from './moan-variations';
@@ -199,7 +200,7 @@ export class AudioEngine {
  useOriginalDrone(enabled:boolean){this.bed.useOriginalDrone(enabled);}
  private async loadLocalSounds(){
   // Extension overlays run on third-party pages; never request recordings there.
-  if(!/^http:\/\/(?:127\.0\.0\.1|localhost):6969$/.test(globalThis.location?.origin??''))return;
+  if(!isAppAudioOrigin())return;
   try{
    const response=await fetch('/assets/sounds/tick_sub.wav',{signal:AbortSignal.timeout(5000)});
    if(response.ok){const buffer=await this.context.decodeAudioData(await response.arrayBuffer());

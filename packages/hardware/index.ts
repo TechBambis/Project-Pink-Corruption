@@ -6,6 +6,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import os from 'node:os';
+import {win32} from 'node:path';
 
 export interface GPUInfo {
  name:string;
@@ -66,21 +67,30 @@ export function parseWindowsGPUs(json:string):GPUInfo[]{
  });}catch{return [];}
 }
 const run=promisify(execFile);
+export function gpuProbeCommands(platform:string,environment:NodeJS.ProcessEnv=process.env){
+ const system=win32.join(environment.SystemRoot||environment.WINDIR||'C:\\Windows','System32');
+ return {
+  nvidia:platform==='win32'?win32.join(system,'nvidia-smi.exe'):'nvidia-smi',
+  powershell:win32.join(system,'WindowsPowerShell','v1.0','powershell.exe'),
+  script:"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $ErrorActionPreference = 'Stop'; try { @(Get-CimInstance Win32_VideoController -OperationTimeoutSec 6 | Select-Object Name) | ConvertTo-Json -Compress } catch { @(Get-PnpDevice -Class Display -PresentOnly | Select-Object @{Name='Name';Expression={$_.FriendlyName}}) | ConvertTo-Json -Compress }",
+ };
+}
 async function probeGPUs(platform:string):Promise<GPUInfo[]>{
  if(platform==='darwin')return [];
- const probes=[run('nvidia-smi',['--query-gpu=name,memory.total,memory.free','--format=csv,noheader,nounits'],{timeout:2500,maxBuffer:65536,windowsHide:true}).then(result=>parseNvidiaGPUs(result.stdout))];
- if(platform==='win32')probes.push(run('powershell.exe',['-NoProfile','-NonInteractive','-Command','Get-CimInstance Win32_VideoController | Select-Object Name | ConvertTo-Json -Compress'],{timeout:2500,maxBuffer:65536,windowsHide:true}).then(result=>parseWindowsGPUs(result.stdout)));
+ const commands=gpuProbeCommands(platform);
+ const probes=[run(commands.nvidia,['--query-gpu=name,memory.total,memory.free','--format=csv,noheader,nounits'],{timeout:2500,maxBuffer:65536,windowsHide:true}).then(result=>parseNvidiaGPUs(result.stdout))];
+ if(platform==='win32')probes.push(run(commands.powershell,['-NoProfile','-NonInteractive','-Command',commands.script],{timeout:12000,maxBuffer:65536,windowsHide:true}).then(result=>parseWindowsGPUs(result.stdout.replace(/^\uFEFF/,''))));
  const results=await Promise.allSettled(probes);
  const detected=results.flatMap(result=>result.status==='fulfilled'?result.value:[]);
  const names=new Set(detected.filter(gpu=>gpu.source==='nvidia-smi').map(gpu=>gpu.name));
  return [...detected.filter(gpu=>gpu.source!=='windows-cim'||!names.has(gpu.name)),...linuxGPUs().filter(gpu=>!detected.some(other=>other.source==='nvidia-smi'&&gpu.name==='NVIDIA GPU'))];
 }
-let gpuCache:Promise<GPUInfo[]>|undefined,gpuCacheTime=0;
-export async function hardwareProfile():Promise<HardwareProfile>{
+let gpuCache:Promise<GPUInfo[]>|undefined,gpuCacheTime=0,gpuProbing=false;
+export async function hardwareProfile(refresh=false):Promise<HardwareProfile>{
  const cpus=os.cpus(),platform=os.platform();
  const profile=baseHardwareProfile(platform,os.arch(),cpus[0]?.model??'Unknown CPU',cpus.length,os.totalmem(),availableRAM());
  if(!profile.unifiedMemory){
-  if(!gpuCache||Date.now()-gpuCacheTime>60000){gpuCache=probeGPUs(platform);gpuCacheTime=Date.now();}
+  if(!gpuProbing&&(!gpuCache||refresh||Date.now()-gpuCacheTime>60000)){gpuProbing=true;gpuCacheTime=Date.now();gpuCache=probeGPUs(platform).finally(()=>{gpuProbing=false;});}
   profile.gpus=await gpuCache;
   if(!profile.gpus.some(gpu=>gpu.memoryTotal!==null))profile.warnings.push('Dedicated GPU memory could not be measured. GPU acceleration needs a real runtime test.');
  }

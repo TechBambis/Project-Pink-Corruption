@@ -61,7 +61,7 @@ export function recommendModels(hardware:HardwareProfile,candidates:ModelCandida
   if(hardware.unifiedMemory)reasons.push('Apple Silicon shares memory between CPU and GPU; RAM and GPU memory are counted once.');
   else if(fitsGPU)reasons.push('It may fit in one detected GPU. Drivers and actual offloading still need verification.');
   else if(fitsRAM)reasons.push('Full GPU offloading is not established; CPU or partial offloading may be slower.');
-  if(runtime==='platform-pending')reasons.push('The app’s local AI start/stop integration is currently Linux x64 only. This is a hardware suggestion for a future platform test.');
+  if(runtime==='platform-pending')reasons.push('This build does not support local AI startup on this platform. Use an AI-enabled build qualified for your operating system.');
   else if(runtime==='setup-needed')reasons.push(candidate.installed?'The local backend still needs setup or a runtime check.':'This model is not installed.');
   if(candidate.promptCompatible===false)reasons.push('The configured context is too short for the complete default companion prompt. It is not recommended for that session.');
   return {...candidate,estimatedWorkingBytes,memoryFit,execution,runtime,reasons};

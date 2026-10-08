@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
+import {isAppAudioOrigin} from './app-origin';
 import {soundNames,soundSpecs,soundDuration,synthesizeDesignSound,type SoundCue} from './sound-design';
 import { wiperProfile, wiperFrame, emptyWiperFrame, type WiperProfile, type WiperFrame } from './wiper';
 
@@ -26,7 +27,7 @@ export class SoundRenderer {
     private finished:(source:AudioBufferSourceNode)=>void){}
   init(){return this.loading??=this.load();}
   private async load(){
-    if(!/^http:\/\/(?:127\.0\.0\.1|localhost):6969$/.test(globalThis.location?.origin??''))return;
+    if(!isAppAudioOrigin())return;
     const files=[...soundNames,'sub_rise',...['sub_dive','sub_fall','sinking','descent','sub_rise'].map(name=>name+'_120')];
     await Promise.allSettled(files.map(async name=>{
       const response=await fetch('/assets/sounds/'+name+'.wav',{signal:AbortSignal.timeout(5000)});

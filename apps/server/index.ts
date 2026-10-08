@@ -164,7 +164,21 @@ if(desktop){
   void desktopSetup!.check();
   app.get('/api/desktop/setup',(_req,res)=>res.json(desktopSetup!.snapshot));
   app.post('/api/desktop/setup/install',(_req,res)=>{if(['downloading','verifying','preparing'].includes(desktopSetup!.state.phase)){res.status(409).json({error:'Setup is busy.'});return;}void desktopSetup!.install(undefined,access.signal('modelDownloads'));res.json({ok:true});});
-  app.post('/api/desktop/setup/copy',(req,res)=>{if(req.headers['x-bambi-instance']!==process.env.BAMBI_INSTANCE_TOKEN){res.status(403).end();return;}if(typeof req.body.directory!=='string'||req.body.directory.length>4096){res.status(400).end();return;}if(['downloading','verifying','preparing'].includes(desktopSetup!.state.phase)){res.status(409).json({error:'Setup is busy.'});return;}void desktopSetup!.install(req.body.directory);res.json({ok:true});});
+  app.post('/api/desktop/setup/copy',(req,res)=>{if(!process.env.BAMBI_INSTANCE_TOKEN||req.headers['x-bambi-instance']!==process.env.BAMBI_INSTANCE_TOKEN){res.status(403).end();return;}if(typeof req.body.directory!=='string'||req.body.directory.length>4096){res.status(400).end();return;}if(['downloading','verifying','preparing'].includes(desktopSetup!.state.phase)){res.status(409).json({error:'Setup is busy.'});return;}void desktopSetup!.install(req.body.directory);res.json({ok:true});});
+  app.get('/api/desktop/setup/sources',async(_req,res)=>{try{res.json({sources:await desktopSetup!.sources.list()});}catch{res.status(503).json({error:'Saved model locations could not be checked.'});}});
+  app.post('/api/desktop/setup/sources',async(req,res)=>{
+   if(!process.env.BAMBI_INSTANCE_TOKEN||req.headers['x-bambi-instance']!==process.env.BAMBI_INSTANCE_TOKEN){res.status(403).json({error:'Choose model files using the app’s file dialog.'});return;}
+   const parsed=z.object({path:z.string().min(1).max(4096),kind:z.enum(['file','folder'])}).strict().safeParse(req.body);
+   if(!parsed.success){res.status(400).json({error:'Choose a GGUF file or a model folder.'});return;}
+   try{const id=await desktopSetup!.sources.add(parsed.data.path,parsed.data.kind);res.json({id,sources:await desktopSetup!.sources.list()});}catch(error){res.status(400).json({error:String(error)});}
+  });
+  app.delete('/api/desktop/setup/sources/:id',async(req,res)=>{try{await desktopSetup!.sources.remove(req.params.id);res.json({ok:true});}catch{res.status(503).json({error:'The saved model location could not be removed.'});}});
+  app.post('/api/desktop/setup/import',async(req,res)=>{
+   const parsed=z.object({source:z.string().uuid()}).strict().safeParse(req.body);
+   if(!parsed.success){res.status(400).json({error:'Choose a saved model location.'});return;}
+   if(desktopSetup!.busy||active.size||listeningControllers.size||eventRenderControllers.size){res.status(409).json({error:'Finish or cancel the active setup or session first.'});return;}
+   try{const source=await desktopSetup!.sources.find(parsed.data.source,desktopSetup!.model);if(desktopSetup!.busy||active.size||listeningControllers.size||eventRenderControllers.size){res.status(409).json({error:'Finish or cancel the active setup or session first.'});return;}void desktopSetup!.install(source.root,undefined,source.modelFile);res.json({ok:true});}catch(error){res.status(400).json({error:String(error)});}
+  });
   app.post('/api/desktop/setup/cancel',(_req,res)=>{desktopSetup!.cancel();res.json({ok:true});});
   app.post('/api/desktop/setup/prepare',async(_req,res)=>{const controller=new AbortController();res.on('close',()=>controller.abort());try{await desktopSetup!.prepare(controller.signal);healthTime=0;res.json({ok:true});}catch(error){res.status(503).json({error:String(error)});}});
  }
@@ -197,13 +211,13 @@ app.get('/api/health',async(_req,res)=>res.json(await health()));
 const modelSetup=desktopSetup??(!desktop?new DesktopSetup(resolve('models'),[],false):null);
 app.get('/api/models/onboarding',(_req,res)=>res.json({done:store.get('model-onboarding',false)}));
 app.post('/api/models/onboarding',(_req,res)=>{store.set('model-onboarding',true);res.json({ok:true});});
-app.get('/api/models/catalog',async(_req,res)=>{
+app.get('/api/models/catalog',async(req,res)=>{
  try{
-  const hardware=await hardwareProfile();
+  const hardware=await hardwareProfile(req.query.refresh==='1');
   const current=await health() as {models?:string[];ollama?:boolean;llamaModels?:string[];selectedModel?:string;modelRecommendation?:ModelRecommendation};
   const candidates=modelInventory({models:desktop?[]:(current.models??[]).filter(name=>!name.startsWith('cloud:')).map(name=>({name,size:current.modelRecommendation?.alternatives.find(model=>model.id===name)?.weightsBytes??undefined}))},{desktop,directory:modelSetup?.directory,installedModel:modelSetup?.model,verified:modelSetup?.verified});
-  const recommendation=recommendModels(hardware,candidates,{ollama:!!current.ollama,native:desktopAlpha||!!current.llamaModels?.length,platformReady:desktopAlpha?true:undefined});
-  res.json({...recommendation,desktop,downloadsAvailable:!!modelSetup,selectedModel:desktop?modelSetup?.model:current.selectedModel,setup:modelSetup?.snapshot??null,speechBytes:desktopAlpha?alphaModels.assets.slice(1).reduce((n,a)=>n+a.bytes,0):0});
+  const recommendation=recommendModels(hardware,candidates,{ollama:!!current.ollama,native:desktopAlpha||!!current.llamaModels?.length,platformReady:desktopAlpha?true:desktopSmoke?false:undefined});
+  res.json({...recommendation,desktop,downloadsAvailable:!!modelSetup,buildMode:desktopSmoke?'smoke':desktopAlpha?'alpha':'development',selectedModel:desktop?modelSetup?.model:current.selectedModel,setup:modelSetup?.snapshot??null,speechBytes:desktopAlpha?alphaModels.assets.slice(1).reduce((n,a)=>n+a.bytes,0):0});
  }catch{res.status(503).json({error:'Hardware and model information could not be loaded. Try again.'});}
 });
 app.get('/api/models/setup',(_req,res)=>res.json(modelSetup?.snapshot??null));

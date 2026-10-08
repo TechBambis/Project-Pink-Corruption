@@ -92,6 +92,14 @@ else {
   });
   session.defaultSession.webRequest.onHeadersReceived((details,callback)=>callback({responseHeaders:{...details.responseHeaders,'Content-Security-Policy':["default-src 'self'; script-src 'self' "+(alpha?"'wasm-unsafe-eval' ":'')+"; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws://127.0.0.1:"+port+"; worker-src 'self' blob:; object-src 'none'; frame-src 'none'"]}}));
   window=new BrowserWindow({width:1200,height:820,title:alpha?'Bambi Local · Local AI alpha':'Bambi Local · Packaging smoke',webPreferences:{...(alpha?{preload:join(__dirname,'preload.cjs')}:{}),nodeIntegration:false,nodeIntegrationInWorker:false,contextIsolation:true,sandbox:true,webSecurity:true}});
+  if(alpha)ipcMain.handle('bambi:choose-model-source',async(event,kind)=>{
+   const senderURL=new URL(event.senderFrame.url);
+   if(event.sender!==window?.webContents||event.senderFrame!==window.webContents.mainFrame||senderURL.origin!==origin||!['/','/setup'].includes(senderURL.pathname)||!['file','folder'].includes(kind))throw Error('Open local model setup to choose model data.');
+   const picked=await dialog.showOpenDialog(window,{title:kind==='file'?'Choose an existing GGUF model':'Add a folder containing your models',properties:[kind==='file'?'openFile':'openDirectory'],...(kind==='file'?{filters:[{name:'GGUF models',extensions:['gguf']}]}:{})});
+   if(picked.canceled)return {cancelled:true};
+   const response=await fetch(origin+'/api/desktop/setup/sources',{method:'POST',headers:{'Content-Type':'application/json','x-bambi-instance':env.BAMBI_INSTANCE_TOKEN},body:JSON.stringify({path:picked.filePaths[0],kind}),signal:AbortSignal.timeout(30000)});
+   const result=await response.json();if(!response.ok)throw Error(result.error||'The model location could not be added.');return result;
+  });
   if(alpha)ipcMain.handle('bambi:copy-model-data',async event=>{
    const senderURL=new URL(event.senderFrame.url);
    if(event.sender!==window?.webContents||event.senderFrame!==window.webContents.mainFrame||senderURL.origin!==origin||!['/','/setup'].includes(senderURL.pathname))throw Error('Open local model setup to choose model data.');
