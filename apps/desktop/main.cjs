@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
-const {app,BrowserWindow,dialog,Menu,session,ipcMain}=require('electron');
+const {app,BrowserWindow,dialog,Menu,session,ipcMain,shell}=require('electron');
 const {spawn,spawnSync}=require('node:child_process');
 const {mkdirSync,openSync,closeSync}=require('node:fs');
 const {resolve,join}=require('node:path');
 const {randomBytes}=require('node:crypto');
 const {runtimeEnvironment}=require('./runtime-environment.cjs');
+const {permissionHandlers}=require('./permission-policy.cjs');
 const windows=process.platform==='win32';
 
 if(app.commandLine.hasSwitch('no-sandbox')||app.commandLine.hasSwitch('disable-setuid-sandbox')){console.error('Bambi Local requires its Chromium sandbox.');app.exit(64);return;}
@@ -28,8 +29,7 @@ const resources=join(process.resourcesPath,'backend');
 const accelerator=option('--bambi-accelerator')||'auto';
 const env=runtimeEnvironment(process.env,{resources,data,port,alpha,accelerator,tokens:{instance:randomBytes(32).toString('hex'),llama:randomBytes(32).toString('hex'),speech:randomBytes(32).toString('hex')}});
 for(const path of [env.TMPDIR,join(data,'logs'),join(data,'data')])mkdirSync(path,{recursive:true,mode:0o700});
-// A duplicate owns no backend or window. Exit it before ready on Windows;
-// ordinary Quit still performs the owned-service shutdown below.
+// A duplicate owns no services; Windows must exit before app readiness.
 if(!app.requestSingleInstanceLock()){if(windows)app.exit(0);else app.quit();}
 else {
  app.on('second-instance',()=>{if(window){if(window.isMinimized())window.restore();window.show();window.focus();}});
@@ -71,18 +71,26 @@ else {
   }
   if(quitting)return;
   if(!ready)throw Error(`The owned backend could not start on port ${port}. Another application may already use it. No unrelated process was stopped. See logs/backend.log; retry with --bambi-port=6970.`);
-  session.defaultSession.setPermissionRequestHandler((contents,permission,callback,details)=>callback(alpha&&contents===window?.webContents&&contents.getURL().startsWith(origin+'/')&&permission==='media'&&details.mediaTypes?.length===1&&details.mediaTypes[0]==='audio'));
-  session.defaultSession.setPermissionCheckHandler((contents,permission,requestingOrigin,details)=>alpha&&contents===window?.webContents&&requestingOrigin===origin&&permission==='media'&&details.mediaType==='audio');
+  const permissions=permissionHandlers({alpha,origin,ownedContents:()=>window?.webContents,readAccess:async()=>{
+   const response=await fetch(origin+'/api/access',{signal:AbortSignal.timeout(1500)});if(!response.ok)throw Error('Access choices unavailable.');return response.json();
+  }});
+  session.defaultSession.setPermissionRequestHandler(permissions.request);
+  session.defaultSession.setPermissionCheckHandler(permissions.check);
   session.defaultSession.webRequest.onBeforeRequest((details,callback)=>{
    const url=details.url;callback({cancel:!url.startsWith(origin+'/')&&!url.startsWith(`ws://127.0.0.1:${port}/`)&&!url.startsWith('blob:')&&!url.startsWith('data:')});
   });
   session.defaultSession.webRequest.onHeadersReceived((details,callback)=>callback({responseHeaders:{...details.responseHeaders,'Content-Security-Policy':["default-src 'self'; script-src 'self' "+(alpha?"'wasm-unsafe-eval' ":'')+"; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws://127.0.0.1:"+port+"; worker-src 'self' blob:; object-src 'none'; frame-src 'none'"]}}));
   window=new BrowserWindow({width:1200,height:820,title:alpha?'Bambi Local · Local AI alpha':'Bambi Local · Packaging smoke',webPreferences:{...(alpha?{preload:join(__dirname,'preload.cjs')}:{}),nodeIntegration:false,nodeIntegrationInWorker:false,contextIsolation:true,sandbox:true,webSecurity:true}});
   if(alpha)ipcMain.handle('bambi:copy-model-data',async event=>{
-   if(event.sender!==window?.webContents||event.senderFrame!==window.webContents.mainFrame||event.senderFrame.url!==origin+'/setup')throw Error('Open Setup to choose model data.');
+   const senderURL=new URL(event.senderFrame.url);
+   if(event.sender!==window?.webContents||event.senderFrame!==window.webContents.mainFrame||senderURL.origin!==origin||!['/','/setup'].includes(senderURL.pathname))throw Error('Open local model setup to choose model data.');
    const picked=await dialog.showOpenDialog(window,{title:'Choose a folder containing the reviewed public model and speech assets',properties:['openDirectory']});
    if(picked.canceled)return {cancelled:true};
    const response=await fetch(origin+'/api/desktop/setup/copy',{method:'POST',headers:{'Content-Type':'application/json','x-bambi-instance':env.BAMBI_INSTANCE_TOKEN},body:JSON.stringify({directory:picked.filePaths[0]})});return response.json();
+  });
+  if(alpha)ipcMain.handle('bambi:open-privacy-policy',async event=>{
+   if(event.sender!==window?.webContents||event.senderFrame!==window.webContents.mainFrame||new URL(event.senderFrame.url).origin!==origin)throw Error('Open privacy settings in the local app.');
+   await shell.openExternal('https://www.geojs.io/privacy/');return {ok:true};
   });
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   window.webContents.on('before-input-event',(event,input)=>{if(input.type==='keyDown'&&input.control&&!input.alt&&input.key.toLowerCase()==='q'){event.preventDefault();app.quit();}});

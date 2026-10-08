@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
+import {experienceSettings, selectedExperience, needsExperienceChange, sectionScrollTarget, type Experience} from './experience';
+
 const views = {
   session: 'Session', voice: 'Voice & AI', sound: 'Sound', visuals: 'Visuals',
   devices: 'Devices', files: 'Library', extras: 'Extras',
@@ -49,7 +51,7 @@ const companionDescriptions: Record<string, string> = {
 interface SearchEntry { target: string; title: string; path: string; keywords: string; titleKey: string; }
 
 /** Changing sections preserves playback. Explicit session choices use the existing preference controls. */
-export function initNavigation() {
+export function initNavigation(beforeExperienceChange: () => void = () => {}) {
   const app = element('app'), workspace = element('workspace');
   const dialog = element<HTMLDialogElement>('settings-search'), search = element<HTMLInputElement>('settings-search-input');
   const results = element('settings-search-results');
@@ -72,18 +74,32 @@ export function initNavigation() {
     scrollTo({top: Math.max(0, target), behavior: animate && !reducedMotion.matches ? 'smooth' : 'instant'});
   }
 
+  function experienceState() {
+    return {mode: element<HTMLSelectElement>('mode').value, narration: element<HTMLInputElement>('narration-enabled').checked,
+      events: element<HTMLInputElement>('session-events').checked, aiMode: element<HTMLSelectElement>('ai-mode').value};
+  }
   function syncSummary() {
     for (const [selectId, outputId] of [['voice', 'session-voice-name'], ['audio-preset', 'session-preset-name'], ['scene', 'session-scene-name']]) {
       const select = element<HTMLSelectElement>(selectId);
       element(outputId).textContent = select.selectedOptions[0]?.textContent ?? '';
     }
     const mode = element<HTMLSelectElement>('mode').value;
+    const experience = selectedExperience(experienceState());
     for (const button of document.querySelectorAll<HTMLButtonElement>('[data-experience]')) {
-      button.setAttribute('aria-pressed', String(button.dataset.experience === (mode === 'conversation' ? 'conversation' : 'files')));
+      button.setAttribute('aria-pressed', String(button.dataset.experience === experience));
     }
+    const files = experience === 'files';
+    element('session-duration-control').hidden = files;
+    element('session-intensity-control').hidden = files;
+    element('session-flow-settings').hidden = files;
+    element('session-direction-settings').hidden = experience !== 'guided' || !element<HTMLInputElement>('session-events').checked;
+    element('session-launch').hidden = experience !== 'guided';
     element('experience-join-label').hidden = !['local', 'hybrid'].includes(mode);
     element<HTMLInputElement>('experience-join').checked = mode === 'hybrid';
-    element('experience-description').textContent = experienceDescriptions[mode] ?? '';
+    const unlimited = element<HTMLSelectElement>('duration').value === 'unlimited';
+    element('experience-description').textContent = experience === 'guided'
+      ? unlimited ? 'An AI-led journey with changing visuals, varied voice pace and quieter returns. Continues until you end it.' : 'An AI-led journey with changing visuals, varied voice pace and a gentle closing. Choose your length, then start.'
+      : mode === 'conversation' ? 'Type a message or turn on the microphone to begin. Bambi leaves room for your replies.' : experienceDescriptions[mode] ?? '';
     element('experience-files-link').hidden = !['local', 'hybrid'].includes(mode);
     const aiMode = element<HTMLSelectElement>('ai-mode').value;
     const narration = element<HTMLInputElement>('narration-enabled').checked && !['off', 'text'].includes(aiMode);
@@ -92,7 +108,7 @@ export function initNavigation() {
     element<HTMLInputElement>('voice-occasional').disabled = ['off', 'text'].includes(aiMode) || narration;
     element('companion-description').textContent = ['local', 'official'].includes(mode)
       ? 'AI replies are off here. Choose Bambi Chat or turn on “Let Bambi join in” for your files.'
-      : narration ? element<HTMLSelectElement>('conversation-style').value==='situational'?'Bambi follows your conversation with short passages and relevant questions, leaving room for your answers.':'Continuous narration starts with your session, pauses between passages and ends after the chosen duration.' : companionDescriptions[aiMode] ?? '';
+      : narration ? element<HTMLSelectElement>('conversation-style').value==='situational'?'Bambi follows your conversation with short passages and relevant questions, leaving room for your answers.':unlimited?'Continuous narration pauses between passages and continues until you end the session.':'Continuous narration starts with your session, pauses between passages and ends after the chosen duration.' : companionDescriptions[aiMode] ?? '';
   }
   function show(target: string, push = true, focus = true, intent: 'tab' | 'jump' | 'history' = 'jump') {
     const targetNode = target in views ? element('view-' + target) : element(target.replace(/^setting-/, ''));
@@ -120,9 +136,12 @@ export function initNavigation() {
     const isPage = targetNode === page;
     if (isPage) {
       navigationFrame = requestAnimationFrame(() => {
-        // Tabs replace the settings in place. Only explicit shortcuts and
-        // history navigation move the viewport.
-        if (intent === 'tab') scrollTo({top: position, behavior: 'instant'});
+        // Opening a tab must expose its destination, including below the initial picture.
+        if (intent === 'tab') {
+          const heading = element('heading-' + next).getBoundingClientRect();
+          const top = sectionScrollTarget(position, heading.top, heading.bottom, element('settings-navigation').getBoundingClientRect().height, innerHeight);
+          scrollTo({top, behavior: focus && !reducedMotion.matches && top !== position ? 'smooth' : 'instant'});
+        }
         else if (intent === 'history' && scrollPositions.has(next)) scrollTo({top: scrollPositions.get(next)!, behavior: 'instant'});
         else if (next === 'session') scrollTo({top: 0, behavior: focus && !reducedMotion.matches ? 'smooth' : 'instant'});
         else reveal(element('heading-' + next), focus);
@@ -168,12 +187,23 @@ export function initNavigation() {
     field.dispatchEvent(new Event('change', {bubbles: true}));
   }
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-experience]')) button.onclick = () => {
-    const current = element<HTMLSelectElement>('mode').value;
-    if (button.dataset.experience === 'conversation' && current === 'conversation' || button.dataset.experience === 'files' && ['local', 'hybrid'].includes(current)) return;
-    if (button.dataset.experience === 'conversation') {
-      if (element<HTMLSelectElement>('ai-mode').value === 'off') changeSetting('ai-mode', 'voice');
-      changeSetting('mode', 'conversation');
-    } else changeSetting('mode', element<HTMLInputElement>('experience-join').checked ? 'hybrid' : 'local');
+    const choice = button.dataset.experience as Experience, state = experienceState();
+    if (needsExperienceChange(choice, state)) {
+      beforeExperienceChange();
+      for (const [id, value] of Object.entries(experienceSettings(choice, state, element<HTMLInputElement>('experience-join').checked))) {
+        const field = element<HTMLInputElement | HTMLSelectElement>(id);
+        if (typeof value === 'boolean') (field as HTMLInputElement).checked = value;
+        else field.value = value;
+      }
+      // Apply the complete choice once; never save or warm a half-switched profile.
+      element('mode').dispatchEvent(new Event('input', {bubbles: true}));
+      element('conversation-style').dispatchEvent(new Event('change', {bubbles: true}));
+    }
+    if (choice === 'files') show('files');
+  };
+  element('session-launch').onclick = () => {
+    document.dispatchEvent(new Event('player-controls-open'));
+    element('start').click();
   };
   element<HTMLInputElement>('experience-join').onchange = event => {
     const enabled = (event.target as HTMLInputElement).checked;

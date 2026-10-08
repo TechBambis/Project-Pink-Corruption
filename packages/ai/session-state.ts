@@ -5,7 +5,7 @@
 import { z } from 'zod';
 import { clamp, sceneNames } from '../safety/actions';
 
-import { sessionPhases, sessionPhaseAt } from '../session-director/phases';
+import { sessionPhases, sessionPhaseAt, phasePosition } from '../session-director/phases';
 import {TriggerTimingSchema} from '../session-director/trigger-timing';
 export { sessionPhases } from '../session-director/phases';
 export const SessionStateSchema = z.object({
@@ -15,8 +15,10 @@ export const SessionStateSchema = z.object({
   intensity: z.number().int().min(1).max(5),
   intensityPercent: z.number().finite().min(0).max(100),
   deliveryIntensityPercent: z.number().finite().min(0).max(100).optional(),
-  elapsedMin: z.number().finite().min(0).max(1440),
+  elapsedMin: z.number().finite().min(0).max(Number.MAX_SAFE_INTEGER/60),
   totalMin: z.number().finite().gt(0).max(1440),
+  continuous: z.boolean().optional(),
+  cycleElapsedMin: z.number().finite().min(0).max(1440).optional(),
   activeTriggers: z.array(z.string().max(100)).max(100),
   lastTrigger: z.string().max(100).nullable(),
   triggerTiming: TriggerTimingSchema.optional(),
@@ -25,11 +27,12 @@ export type SessionState = z.infer<typeof SessionStateSchema>;
 
 export function snapshotSession(input: {
   elapsedSeconds: number; totalSeconds: number; scene: SessionState['scene'];
-  intensityPercent: number; activeTriggers: string[]; lastTrigger: string | null;
+  intensityPercent: number; activeTriggers: string[]; lastTrigger: string | null; continuous?:boolean;
 }): SessionState {
   const total = clamp(input.totalSeconds, 1, 86400);
-  const elapsed = clamp(input.elapsedSeconds, 0, 86400);
-  const current = sessionPhaseAt(elapsed, total);
+  const elapsed = clamp(input.elapsedSeconds, 0, input.continuous?Number.MAX_SAFE_INTEGER:86400);
+  const position=phasePosition(elapsed,total,input.continuous);
+  const current = sessionPhaseAt(position, total);
   const intensityPercent = clamp(input.intensityPercent, 0, 100);
   return {
     phase: current.phase,
@@ -39,6 +42,7 @@ export function snapshotSession(input: {
     intensityPercent,
     elapsedMin: Math.round(elapsed / 60 * 100) / 100,
     totalMin: total / 60,
+    ...(input.continuous?{continuous:true,cycleElapsedMin:position/60}:{}),
     activeTriggers: [...input.activeTriggers],
     lastTrigger: input.lastTrigger,
   };
@@ -50,7 +54,7 @@ export function buildSessionState(session: SessionState): string {
 - Phase progress: ${session.phaseProgress}%
 - Scene: ${JSON.stringify(session.scene)}
 - Intensity: ${session.intensity}/5 (${session.intensityPercent}/100 in the UI)${session.deliveryIntensityPercent===undefined?'':`\n- Current audiovisual envelope: ${session.deliveryIntensityPercent}%; this is separate from the selected language intensity.`}
-- Elapsed: ${session.elapsedMin} min / ${session.totalMin} min planned
+- Elapsed: ${session.elapsedMin} min${session.continuous?`; unlimited session, ${session.cycleElapsedMin??0} min into a ${session.totalMin} min engine-controlled journey. The listener decides when to end.`:` / ${session.totalMin} min planned`}
 - Active triggers: ${JSON.stringify(session.activeTriggers)}
 - Last trigger detected: ${session.lastTrigger === null ? 'none' : JSON.stringify(session.lastTrigger)}`;
 }

@@ -88,7 +88,7 @@ try{
  const llama=join(backend,'native/llama/llama-server.exe');
  const llamaEnv={...env,PATH:join(backend,'native/llama')};
  const options=execFileSync(llama,['--help'],{env:llamaEnv,cwd:data,encoding:'utf8',timeout:60000,maxBuffer:4*1024**2,windowsHide:true});
- const required=['--ctx-size','--parallel','--ctx-checkpoints','--checkpoint-min-step','--cache-ram','--gpu-layers','--flash-attn','--jinja','--reasoning','--no-webui','--cache-type-k','--cache-type-v','--api-key','--alias'];
+ const required=['--ctx-size','--parallel','--ctx-checkpoints','--checkpoint-min-step','--cache-ram','--gpu-layers','--flash-attn','--jinja','--reasoning','--no-webui','--cache-type-k','--cache-type-v','--api-key','--alias','--device','--list-devices','--fit','--fit-ctx','--fit-target'];
  for(const option of required)assert(options.includes(option),'Native llama lacks required option '+option);
  record('relocated-native-llama-loader-and-required-options',{sha256:await hashFile(llama),options:required,modelLoaded:false});
  assert.deepEqual(imports.unresolved,[],'Native dependency closure is incomplete; inspect WINDOWS-DLL-IMPORTS.json');

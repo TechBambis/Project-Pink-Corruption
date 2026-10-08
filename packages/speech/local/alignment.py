@@ -5,7 +5,7 @@
 """Word spans from Kokoro's model duration output, never evenly spaced captions."""
 import re
 from difflib import SequenceMatcher
-from .spoken import spoken_input
+from .spoken import pronunciation_input
 
 def word_timings(text, spoken, tokenizer, phonemes=False):
     if not spoken:
@@ -21,7 +21,7 @@ def word_timings(text, spoken, tokenizer, phonemes=False):
     actual = [(index, timing) for index, timing in enumerate(spoken) if audible(timing.phoneme)]
     expected, owners, lengths = [], [], []
     for owner, word in enumerate(words):
-        chars = [char for char in tokenizer.phonemize(spoken_input(word), 'en-us') if audible(char)]
+        chars = [char for char in tokenizer.phonemize(pronunciation_input(word), 'en-us') if audible(char)]
         lengths.append(len(chars))
         expected.extend(chars)
         owners.extend([owner] * len(chars))

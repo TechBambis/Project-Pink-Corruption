@@ -3,9 +3,10 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import { clamp } from '../safety/actions';
+import type {WiperFrame} from '../audio/wiper';
 
 export interface TickVisualSignal { active: boolean; phaseMs: number; level: number }
-export interface AudioVisualSignal { time: number; voice: number; tick: TickVisualSignal }
+export interface AudioVisualSignal { time: number; voice: number; tick: TickVisualSignal; wiper?: WiperFrame }
 export const silentVisualSignal: AudioVisualSignal = { time: 0, voice: 0, tick: { active: false, phaseMs: 0, level: 0 } };
 
 /** Attack/release follows the audio clock, so suspended playback freezes the envelope. */

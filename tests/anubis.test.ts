@@ -26,7 +26,7 @@ test('Anubis has one consistent pinned model, native transport and explicit cont
 });
 
 test('complete authored source and character survive situational conversation in every phase',()=>{
- const selection={promptId:'bambisleep-classic',persona:'Focused fictional guide',username:'Listener',selectedTriggers:['BAMBI SLEEP'],collar:true,collarName:'Chosen label'};
+ const selection={promptId:'bambisleep-classic' as const,persona:'Focused fictional guide',username:'Listener',selectedTriggers:['BAMBI SLEEP'],collar:true,collarName:'Chosen label'};
  const authored=buildRuntimePrompt(selection.promptId,selection.username,selection.selectedTriggers,true,selection.collarName).core;
  const base=buildSituationalBase(selection,authored),fixed=buildFixedReplyPrompt(base,'situational');
  for(const phase of ['induction','deepening','conditioning','anchor','awakening'] as const){

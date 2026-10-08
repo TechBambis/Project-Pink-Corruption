@@ -15,7 +15,7 @@ export async function hashFile(path){
 export function buildOptions(args,environment={}){
  const [phase='smoke',requested,...extra]=args;
  if(!['smoke','alpha'].includes(phase)||extra.length)throw Error('Use desktop-windows-build.mjs smoke|alpha [0.1.0-smoke.N|0.1.0-alpha.N]');
- const version=requested||environment.BAMBI_WINDOWS_VERSION||`0.1.0-${phase}.${phase==='smoke'?5:2}`;
+ const version=requested||environment.BAMBI_WINDOWS_VERSION||`0.1.0-${phase}.2`;
  if(!new RegExp(`^0\\.1\\.0-${phase}\\.[1-9][0-9]*$`).test(version))throw Error('Version must match the selected phase: 0.1.0-'+phase+'.N');
  return {phase,version,alpha:phase==='alpha'};
 }
@@ -61,7 +61,7 @@ export function sourcePathAllowed(path){
  path=logicalPath(path);
  return !/(?:^|\/)(?:\.git|\.runtime|node_modules|internal|reports|models|recordings|imported-sounds|__pycache__)(?:\/|$)/.test(path)
   &&!path.startsWith('apps/web/public/vad/')
-  &&/\.(?:ts|mjs|cjs|json|py|lock|md|html|css|js|svg|wav|spec|cs|txt|cmd|ps1|yml|manifest)$/.test(path);
+  &&/\.(?:ts|mts|mjs|cjs|json|py|lock|md|html|css|js|svg|wav|spec|cs|txt|cmd|ps1|yml|manifest)$/.test(path);
 }
 export function llamaEntries(listing){
  const approved=listing.map(logicalPath).filter(path=>/^lib\/ollama\/(?:[^/]*(?:LICENSE|NOTICE|COPYING)[^/]*|llama-server\.exe|ggml(?:-base|-cpu-[a-z0-9]+)?\.dll|lib(?:c\+\+|llama|llama-common|llama-server-impl|mtmd|omp|unwind|winpthread-1)\.dll|vulkan\/(?:ggml-vulkan|concrt140|msvcp140(?:_[12]|_atomic_wait|_codecvt_ids)?|vccorlib140|vcruntime140(?:_1|_threads)?)\.dll)$/.test(path));
@@ -129,13 +129,6 @@ export function windowsDependencyReport(root){
  return {dependencies,unresolved,optionalDriver,method:'Static normal/delay PE imports; bundled names plus Windows 11 inbox/API-set DLLs. Global bundle lookup is a candidate closure check, not proof of loader search paths or dynamic imports. Native service acceptance remains required.'};
 }
 export async function stageWindowsSource(root,destination,version){
- mkdirSync(destination,{recursive:true});
- for(const folder of ['apps','packages','config','presets','tests'])copyTree(join(root,folder),join(destination,folder),path=>sourcePathAllowed(folder+'/'+path));
- for(const path of ['package.json','package-lock.json','tsconfig.json','.gitignore','desktop-windows-builder.cjs','LICENSE','LICENSING.md','README.md',
-  'scripts/desktop-windows-build.cmd','scripts/desktop-windows-build.mjs','scripts/desktop-windows-support.mjs','scripts/desktop-windows-sample.mjs','scripts/desktop-windows-source.mjs','scripts/desktop-windows-check.mjs','scripts/desktop-windows-install-check.mjs','scripts/desktop-windows-processes.mjs','scripts/desktop-windows-observer.cs','scripts/desktop-windows-ai-check.mjs',
-  'scripts/desktop-windows-native.mjs','scripts/desktop-windows-runtime-slice.mjs','scripts/desktop-windows-transfer.mjs','scripts/freeze-desktop-speech.py','scripts/prepare-vad.mjs','.github/workflows/desktop-windows.yml','.github/workflows/cla.yml','.github/workflows/checks.yml','.github/workflows/desktop-windows-runtime-slice.yml','docs/DESKTOP_WINDOWS_ALPHA.md','docs/DESKTOP_WINDOWS.md','docs/DESKTOP_ALPHA.md','docs/LICENSE.stable2','docs/STABLE_CONTENT.md','docs/LOCAL_AUDIO_LICENSES.md','voices/bambi_classic.json'])copy(join(root,path),join(destination,path));
- copyTree(join(root,'docs/licenses'),join(destination,'docs/licenses'));
- copyTree(join(root,'assets/sounds'),join(destination,'assets/sounds'),path=>['tick-clicks.json','tick_main.wav','tick_sub.wav'].includes(path));
- const sourceFiles=await inventory(destination),sourceDigest=digest(JSON.stringify(sourceFiles));
- return {version,sourceDigest,files:sourceFiles};
+ const {stageDesktopSource}=await import('./desktop-source.mjs');
+ return stageDesktopSource(root,destination,version);
 }

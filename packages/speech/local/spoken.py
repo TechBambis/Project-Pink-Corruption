@@ -30,3 +30,7 @@ def strip_speech_formatting(text):
 
 def spoken_input(text):
     return strip_speech_formatting(strip_vocal_fillers(strip_speech_controls(text))).strip()
+
+def pronunciation_input(text):
+    """TTS-only initialism expansion. Display text and trigger identities stay intact."""
+    return re.sub(r'\bIQ\b', 'I Q', spoken_input(text), flags=re.IGNORECASE)

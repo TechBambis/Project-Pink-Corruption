@@ -5,6 +5,7 @@
 import type {AudioEngine} from '../../../packages/audio';
 import {DeviceSettingsSchema,type DeviceSettings} from '../../../packages/devices/commands';
 import {devicePlaybackPlan} from '../../../packages/devices/playback';
+import {requireAccess} from './privacy-state';
 
 export const devicePreferenceIds=['device-bridge','device-address','device-write-char','device-auto-connect','device-vib-channel','device-rot-channel','device-vib-max','device-rot-max','device-phase-defaults','device-random-rotation','device-speech-accents','device-accent-intensity','device-accent-duration','device-vib-lead','device-rot-lead','device-transition'];
 export const deviceBooleanPreferenceIds=['device-auto-connect','device-phase-defaults','device-random-rotation','device-speech-accents'];
@@ -19,13 +20,17 @@ export function initDeviceControls(send:(message:unknown)=>void,audio:()=>AudioE
  const message=(text:string)=>{element('device-message').textContent=text;};
  const configure=(restart=false)=>{labels();try{send({type:'device-config',settings:settings(),restart});configuredEventMode=engineEvents();send({type:'device-session',session:session()});}catch{message('Check motor channels and calibration values.');}};
  const stop=()=>{enabled=false;element<HTMLInputElement>('device-enabled').checked=false;send({type:'device-stop'});};
- element<HTMLInputElement>('device-enabled').onchange=()=>{enabled=element<HTMLInputElement>('device-enabled').checked;configure();};
+ element<HTMLInputElement>('device-enabled').onchange=async()=>{
+  const control=element<HTMLInputElement>('device-enabled');
+  if(control.checked){try{await requireAccess('devices');}catch(error){control.checked=false;enabled=false;message(String(error));return;}}
+  enabled=control.checked;configure();
+ };
  for(const id of devicePreferenceIds.filter(id=>!['device-address','device-write-char','device-auto-connect'].includes(id)))element(id).addEventListener('change',()=>configure());
  for(const id of ['device-vib-max','device-rot-max'])element(id).addEventListener('input',()=>configure());
  element('device-stop').onclick=stop;
  element('device-resume').onclick=()=>{if(enabled)configure(true);else element('device-message').textContent='Enable device control first.';};
  element('device-scan').onclick=async()=>{const button=element<HTMLButtonElement>('device-scan');button.disabled=true;element('device-message').textContent='Looking for Bluetooth devices …';
-  try{const response=await fetch('/api/devices/scan');const data=await response.json();if(!response.ok)throw Error(data.error);const list=element<HTMLSelectElement>('device-discovered');list.replaceChildren();
+  try{await requireAccess('devices');const response=await fetch('/api/devices/scan');const data=await response.json();if(!response.ok)throw Error(data.error);const list=element<HTMLSelectElement>('device-discovered');list.replaceChildren();
    for(const device of [...data.devices].sort((a:any,b:any)=>Number(/pearlconch|joyhub/i.test(b.name))-Number(/pearlconch|joyhub/i.test(a.name)))){const option=document.createElement('option');option.value=device.address;option.textContent=(device.name||'Unnamed device')+' · '+device.address+' · '+device.rssi+' dBm';list.append(option);}
    if(list.options.length){element<HTMLInputElement>('device-address').value=list.value;element('device-address').dispatchEvent(new Event('change'));}
    element('device-message').textContent=list.options.length?'Choose your device, then press Connect.':'No BLE devices found.';
@@ -33,7 +38,7 @@ export function initDeviceControls(send:(message:unknown)=>void,audio:()=>AudioE
  };
  element<HTMLSelectElement>('device-discovered').onchange=()=>{element<HTMLInputElement>('device-address').value=value('device-discovered');element('device-address').dispatchEvent(new Event('change'));};
  element('device-connect').onclick=async()=>{const button=element<HTMLButtonElement>('device-connect');button.disabled=true;stop();element('device-message').textContent='Connecting to BLE …';
-  try{const response=await fetch('/api/devices/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:value('device-address'),...(value('device-write-char').trim()?{writeChar:value('device-write-char').trim()}:{})})});const data=await response.json();if(!response.ok)throw Error(data.error);element('device-message').textContent='Bridge started · waiting for BLE.';}catch(error){element('device-message').textContent=String(error);}finally{button.disabled=false;}
+  try{await requireAccess('devices');const response=await fetch('/api/devices/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:value('device-address'),...(value('device-write-char').trim()?{writeChar:value('device-write-char').trim()}:{})})});const data=await response.json();if(!response.ok)throw Error(data.error);element('device-message').textContent='Bridge started · waiting for BLE.';}catch(error){element('device-message').textContent=String(error);}finally{button.disabled=false;}
  };
  element('device-disconnect').onclick=async()=>{stop();element<HTMLInputElement>('device-auto-connect').checked=false;element('device-auto-connect').dispatchEvent(new Event('change'));try{const response=await fetch('/api/devices/disconnect',{method:'POST'});if(!response.ok)throw Error('Could not disconnect BLE.');message('BLE disconnected.');}catch(error){message(String(error));}};
  const test=(channel:number)=>{try{if(!channel){message('This motor has no assigned channel yet.');return;}send({type:'device-test',settings:settings(),channel,intensity:Number(value('device-test-intensity'))});message('Requesting a channel test …');}catch{message('Choose two different motor channels.');}};
@@ -64,7 +69,7 @@ export function initDeviceControls(send:(message:unknown)=>void,audio:()=>AudioE
    if(wall-lastBeat>=500){lastBeat=wall;if(enabled)send({type:'device-session',session:session()});}
    if(wall-lastPoll>=1000){lastPoll=wall;send({type:'device-status'});}
   },
-  message(data:any){if(data.type==='device-status'){updateStatus(data);return true;}return false;},
+  message(data:any){if(data.type==='device-status'){if(data.permission==='devices'&&data.error)message(data.error);updateStatus(data);return true;}return false;},
   sync(){if(enabled){if(configuredEventMode!==engineEvents())configure();else send({type:'device-session',session:session()});}},
   bindAudio,clear(){if(enabled)send({type:'device-clear'});},stop,
   disconnected(){enabled=false;element<HTMLInputElement>('device-enabled').checked=false;updateStatus({...lastStatus,owned:false,connected:false,bridgeAvailable:false});},

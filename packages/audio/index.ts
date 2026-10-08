@@ -25,6 +25,7 @@ import type {DeliveryMode} from '../session-director/delivery';
 import type {SessionPhase} from '../session-director/phases';
 import {TickEngine,tickBpmForPhase,validTickCue,type TickCue} from './tick';
 import {VoiceEchoes} from './voice-echoes';
+import {wiperProfile,wiperFrame,emptyWiperFrame,type WiperProfile,type WiperFrame} from './wiper';
 export const buses=['MASTER','SESSION','AI_VOICE','AMBIENCE','EFFECTS','MIC_MONITOR','main_voice','left_voice','right_voice','echo_voice','drone','noise','music_optional'] as const;
 export type Bus=typeof buses[number];
 /** PCM onset fallback only when a provider cannot supply model duration timing. */
@@ -71,9 +72,10 @@ export class AudioEngine {
   this.scheduledSounds.push({trigger:'engine',kind:`event_${kind}`,phase:'after',time,duration,source:'generated',assetId:`event_${kind}`});if(this.scheduledSounds.length>128)this.scheduledSounds.shift();
   source.onended=()=>{this.foreground.delete(source);this.effectSources.delete(source);this.effectPlayback.delete(source);source.disconnect();gain.disconnect();};source.start(Math.max(time,this.context.currentTime));source.stop(time+duration);return true;
  }
- stopEventCues(namedOnly=false){
-  this.pausedEffects=this.pausedEffects.filter(sound=>!(namedOnly?sound.eventTrigger:sound.eventCue));
-  for(const [source,window] of this.effectPlayback)if(namedOnly?window.eventTrigger:window.eventCue){source.onended=null;try{source.stop();}catch{}source.disconnect();window.gain.disconnect();this.foreground.delete(source);this.effectSources.delete(source);this.effectPlayback.delete(source);}
+ stopEventCues(namedOnly=false,preserveWiper=false){
+  this.pausedEffects=this.pausedEffects.filter(sound=>preserveWiper&&sound.profile||!(namedOnly?sound.eventTrigger:sound.eventCue));
+  if(!this.pausedEffects.some(sound=>sound.profile))this.heldWiper=emptyWiperFrame;
+  for(const [source,window] of this.effectPlayback)if(!(preserveWiper&&window.profile)&&(namedOnly?window.eventTrigger:window.eventCue)){source.onended=null;try{source.stop();}catch{}source.disconnect();window.gain.disconnect();this.foreground.delete(source);this.effectSources.delete(source);this.effectPlayback.delete(source);}
  }
  /** Same selected sounds/faders as ordinary triggers, bounded by the engine episode. */
  playEventTrigger(trigger:string,time:number,deadline:number,spokenEnd=time){
@@ -133,7 +135,7 @@ export class AudioEngine {
   this.echoPhase=phase;this.voiceEchoes.phase(phase);
   this.designDefaults.updatePhase(phase);this.updateTickPhase(phase,progress,true);
  }
- pauseSession(){if(this.sessionHeld)return;this.heldBedGains={drone:this.nodes.drone.gain.value,noise:this.nodes.noise.gain.value};this.sessionHeld=true;this.tickEngine.pause();this.designSounds.pause();this.pauseEffects();for(const bus of ['SESSION','EFFECTS','AMBIENCE','drone','noise'] as Bus[])this.apply(bus,.015);if(this.tones)this.tones.gain.gain.setTargetAtTime(0,this.context.currentTime,.005);}
+ pauseSession(){if(this.sessionHeld)return;this.heldBedGains={drone:this.nodes.drone.gain.value,noise:this.nodes.noise.gain.value};this.heldWiper=this.wiperAt(this.outputTime);this.sessionHeld=true;this.tickEngine.pause();this.designSounds.pause();this.pauseEffects();for(const bus of ['SESSION','EFFECTS','AMBIENCE','drone','noise'] as Bus[])this.apply(bus,.015);if(this.tones)this.tones.gain.gain.setTargetAtTime(0,this.context.currentTime,.005);}
  resumeSession(){if(!this.sessionHeld)return;this.sessionHeld=false;for(const bus of ['SESSION','EFFECTS','AMBIENCE','drone','noise'] as Bus[])this.apply(bus,.015);if(this.preset)this.bed.start(this.preset);for(const bus of ['drone','noise'] as Bus[])if(this.heldBedGains[bus]!==undefined)this.nodes[bus].gain.setTargetAtTime(this.heldBedGains[bus]!,this.context.currentTime,.005);this.heldBedGains={};this.designSounds.resume();this.resumeEffects();if(this.tickEnabled)this.tickEngine.resume();}
  get tickStatus(){return {bpm:this.tickEngine.bpm,active:this.tickEngine.active,interval:this.tickEngine.interval,phaseMs:this.tickEngine.phaseMs(),activeCount:this.tickEngine.activeCount};}
  get scheduledTicks(){return this.tickEngine.events;}
@@ -168,10 +170,12 @@ export class AudioEngine {
  private bed:BackgroundBed;
  private preset:AudioPreset|undefined;
  private scriptSoundsEnabled=true;
+ get wiperEnabled(){return this.scriptSoundsEnabled&&this.sequenceSettings.effects&&!this.muted&&this.levels.MASTER>0&&this.levels.EFFECTS>0;}
  setScriptSoundsEnabled(enabled:boolean){this.scriptSoundsEnabled=enabled;}
  private controlSources=new Set<AudioBufferSourceNode>();
- private effectPlayback=new Map<AudioBufferSourceNode,{start:number;duration:number;offset:number;gain:GainNode;output:AudioNode;eventCue?:boolean;eventTrigger?:boolean}>();
- private pausedEffects:{buffer:AudioBuffer;loop:boolean;duration:number;offset:number;gain:number;output:AudioNode;eventCue?:boolean;eventTrigger?:boolean}[]=[];
+ private effectPlayback=new Map<AudioBufferSourceNode,{start:number;duration:number;offset:number;gain:GainNode;output:AudioNode;eventCue?:boolean;eventTrigger?:boolean;profile?:WiperProfile;wiperText?:string}>();
+ private heldWiper:WiperFrame=emptyWiperFrame;
+ private pausedEffects:{buffer:AudioBuffer;loop:boolean;duration:number;offset:number;delay?:number;gain:number;output:AudioNode;eventCue?:boolean;eventTrigger?:boolean;profile?:WiperProfile;wiperText?:string}[]=[];
  onDeviceCue:((command:DeviceCommand,time?:number,origin?:DeviceCueOrigin)=>void)|undefined;
  private foreground=new Map<AudioScheduledSourceNode,{start:number;end:number;bus:'EFFECTS'|'AI_VOICE'}>();
  /** Playback windows exclude queued future speech and trigger silence. Background beds stay independent. */
@@ -212,7 +216,7 @@ export class AudioEngine {
  }
  playLocalSound(id:string){const sound=this.localSounds.get(id);if(!sound||id==='drone'||this.context.state!=='running')return false;
   const source=this.context.createBufferSource(),gain=this.context.createGain();source.buffer=sound.buffer;gain.gain.value=10**(sound.gainDb/20);source.connect(gain);gain.connect(this.soundBuses[id.split('_')[0] as TriggerSound|'moan']??this.nodes.EFFECTS);this.effectSources.add(source);
-  this.effectPlayback.set(source,{start:this.context.currentTime,duration:sound.buffer.duration,offset:0,gain,output:this.soundBuses[id.split('_')[0] as TriggerSound|'moan']??this.nodes.EFFECTS});this.foreground.set(source,{start:this.context.currentTime,end:this.context.currentTime+sound.buffer.duration,bus:'EFFECTS'});
+  this.effectPlayback.set(source,{start:this.context.currentTime,duration:sound.buffer.duration,offset:0,gain,output:this.soundBuses[id.split('_')[0] as TriggerSound|'moan']??this.nodes.EFFECTS,...(id.startsWith('wiper')?{profile:wiperProfile(sound.buffer)}:{})});this.foreground.set(source,{start:this.context.currentTime,end:this.context.currentTime+sound.buffer.duration,bus:'EFFECTS'});
   source.onended=()=>{this.foreground.delete(source);this.effectSources.delete(source);this.effectPlayback.delete(source);source.disconnect();gain.disconnect();};source.start();return true;
  }
  set(bus:Bus,level:number,duration=.12){this.levels[bus]=clamp(level);this.apply(bus,duration);}
@@ -228,9 +232,9 @@ export class AudioEngine {
  }
  private cue(kind:TriggerSound|'moan',trigger:string,phase:'before'|'after',time:number,maxSeconds=Infinity,extraGain=1,durationOverride?:number,sound=this.sound(kind),eventCue=false){
   if(!sound)return 0;const duration=durationOverride??Math.min(kind==='wiper'?this.wiperDuration():sound.buffer.duration,maxSeconds);
-  const node=this.context.createBufferSource(),gain=this.context.createGain();node.buffer=sound.buffer;if(duration>sound.buffer.duration)node.loop=true;gain.gain.value=10**(sound.gainDb/20)*extraGain;node.connect(gain);gain.connect(this.soundBuses[kind]);this.effectSources.add(node);
+  const node=this.context.createBufferSource(),gain=this.context.createGain();node.buffer=sound.buffer;if(duration>sound.buffer.duration)node.loop=true;gain.gain.value=10**(sound.gainDb/20)*extraGain;if(kind==='wiper'){const level=10**(sound.gainDb/20)*extraGain;gain.gain.setValueAtTime(0,time);gain.gain.linearRampToValueAtTime(level,time+Math.min(.01,duration*.2));gain.gain.setValueAtTime(level,time+duration-Math.min(.03,duration*.2));gain.gain.linearRampToValueAtTime(0,time+duration);}node.connect(gain);gain.connect(this.soundBuses[kind]);this.effectSources.add(node);
   this.scheduledSounds.push({trigger,kind,phase,time,duration,source:sound.source,assetId:sound.id});if(this.scheduledSounds.length>128)this.scheduledSounds.shift();
-  this.effectPlayback.set(node,{start:time,duration,offset:0,gain,output:this.soundBuses[kind],eventCue,eventTrigger:eventCue});this.foreground.set(node,{start:time,end:time+duration,bus:'EFFECTS'});
+  this.effectPlayback.set(node,{start:time,duration,offset:0,gain,output:this.soundBuses[kind],eventCue,eventTrigger:eventCue,...(kind==='wiper'?{profile:wiperProfile(sound.buffer)}:{})});this.foreground.set(node,{start:time,end:time+duration,bus:'EFFECTS'});
   node.onended=()=>{this.foreground.delete(node);this.effectSources.delete(node);this.effectPlayback.delete(node);node.disconnect();gain.disconnect();};node.start(time);node.stop(time+duration);return duration;
  }
  private triggerPlan(trigger:string,options:Partial<TriggerSequenceOptions>={}){
@@ -394,6 +398,19 @@ export class AudioEngine {
  ambience(on:boolean){if(on&&this.ambient)return;if(this.ambient){try{this.ambient.stop();}catch{}this.ambient=null;}if(!on)return;const buffer=this.context.createBuffer(2,this.context.sampleRate*4,this.context.sampleRate);for(let ch=0;ch<2;ch++){const data=buffer.getChannelData(ch);let smooth=0;for(let i=0;i<data.length;i++){smooth=(smooth+(Math.random()*2-1)*.02)/1.02;data[i]=smooth*.35;}}const node=this.context.createBufferSource();node.buffer=buffer;node.loop=true;const low=this.context.createBiquadFilter();low.type='lowpass';low.frequency.value=650;node.connect(low);low.connect(this.nodes.AMBIENCE);node.start();this.ambient=node;}
  private voiceAnalyser!:AnalyserNode;
  private voiceMeter=new Float32Array(512);
+ private wiperAt(time:number){
+  if(this.sessionHeld)return this.heldWiper;
+  const window=[...this.effectPlayback.values()].filter(w=>w.profile&&time>=w.start&&time<w.start+w.duration).sort((a,b)=>b.start-a.start)[0];
+  return window?wiperFrame({...window,profile:window.profile!,text:window.wiperText},time):this.designSounds.wiperAt(time);
+ }
+ /** Engine-owned wipe; selected recording and fader, no snap, moan or generated narration. */
+ playWiper(time:number,deadline:number,text='THOUGHTS'){
+  if(this.context.state!=='running'||this.muted||this.sessionHeld||!this.scriptSoundsEnabled||!this.sequenceSettings.effects||!Number.isFinite(time)||!Number.isFinite(deadline)||time<this.context.currentTime-.15||deadline<=time)return false;
+  const before=new Set(this.effectPlayback.keys());
+  this.cue('wiper','engine_wipe','after',time,deadline-time,1,deadline-time,this.sound('wiper'),true);
+  for(const [source,window] of this.effectPlayback)if(!before.has(source)){window.wiperText=text.slice(0,48);window.eventTrigger=false;}
+  return true;
+ }
  visualSignal(){
   const time=this.outputTime;
   const audible=!this.muted&&this.levels.MASTER>0&&this.silenceGate.gain.value>0;
@@ -401,7 +418,7 @@ export class AudioEngine {
   let rms=0;
   if(voiceActive){this.voiceAnalyser.getFloatTimeDomainData(this.voiceMeter);for(const sample of this.voiceMeter)rms+=sample*sample;rms=Math.sqrt(rms/this.voiceMeter.length);}
   const tick=this.tickEngine.visualSignal(time);
-  return {time,voice:clamp(rms/.08),tick:{...tick,active:tick.active&&audible&&!this.sessionHeld&&this.levels.EFFECTS>0}};
+  return {time,voice:clamp(rms/.08),wiper:audible&&this.levels.EFFECTS>0&&(this.eventGates.EFFECTS?.gain.value??1)>0?this.wiperAt(time):emptyWiperFrame,tick:{...tick,active:tick.active&&audible&&!this.sessionHeld&&this.levels.EFFECTS>0}};
  }
  level(){this.analyser.getByteFrequencyData(this.meter);return this.meter.reduce((a,b)=>a+b,0)/this.meter.length/255;}
  brainwave(on:boolean,carrier=200,beat=2,volume=.1){if(!on){if(this.tones){this.tones.left.stop();this.tones.right.stop();this.tones.left.disconnect();this.tones.right.disconnect();this.tones.merger.disconnect();this.tones.gain.disconnect();this.tones=null;}return;}if(!this.tones){const left=this.context.createOscillator(),right=this.context.createOscillator(),merger=this.context.createChannelMerger(2),gain=this.context.createGain();left.connect(merger,0,0);right.connect(merger,0,1);merger.connect(gain);gain.connect(this.toneEventGate);this.tones={left,right,merger,gain};gain.gain.value=0;left.start();right.start();}this.tones.left.frequency.setTargetAtTime(clamp(carrier,20,1000),this.context.currentTime,.02);this.tones.right.frequency.setTargetAtTime(clamp(carrier+beat,20,1000),this.context.currentTime,.02);this.tones.gain.gain.setTargetAtTime(clamp(volume),this.context.currentTime,.02);}
@@ -417,17 +434,18 @@ export class AudioEngine {
 
  private pauseEffects(){
   const now=this.context.currentTime;
-  for(const [source,window] of this.effectPlayback){if(source.buffer&&now>=window.start&&now<window.start+window.duration)this.pausedEffects.push({buffer:source.buffer,loop:source.loop,duration:window.start+window.duration-now,offset:window.offset+now-window.start,gain:window.gain.gain.value,output:window.output,eventCue:window.eventCue,eventTrigger:window.eventTrigger});}
+  for(const [source,window] of this.effectPlayback){if(source.buffer&&now<window.start+window.duration&&(now>=window.start||window.profile))this.pausedEffects.push({buffer:source.buffer,loop:source.loop,duration:window.duration-Math.max(0,now-window.start),offset:window.offset+Math.max(0,now-window.start),delay:Math.max(0,window.start-now),gain:window.gain.gain.value,output:window.output,eventCue:window.eventCue,eventTrigger:window.eventTrigger,profile:window.profile,wiperText:window.wiperText});}
   this.stopEffects(false,false);
  }
  private resumeEffects(){
-  const now=this.context.currentTime,paused=this.pausedEffects;this.pausedEffects=[];
+  const now=this.context.currentTime,paused=this.pausedEffects;this.pausedEffects=[];this.heldWiper=emptyWiperFrame;
   for(const sound of paused){
+   const start=now+(sound.delay??0);
    const source=this.context.createBufferSource(),gain=this.context.createGain();source.buffer=sound.buffer;source.loop=sound.loop;gain.gain.value=sound.gain;source.connect(gain);gain.connect(sound.output);
-   this.effectSources.add(source);this.effectPlayback.set(source,{start:now,duration:sound.duration,offset:sound.offset,gain,output:sound.output,eventCue:sound.eventCue,eventTrigger:sound.eventTrigger});this.foreground.set(source,{start:now,end:now+sound.duration,bus:'EFFECTS'});
-   source.onended=()=>{this.foreground.delete(source);this.effectSources.delete(source);this.effectPlayback.delete(source);source.disconnect();gain.disconnect();};source.start(now,sound.loop?sound.offset%sound.buffer.duration:sound.offset);source.stop(now+sound.duration);
+   this.effectSources.add(source);this.effectPlayback.set(source,{start,duration:sound.duration,offset:sound.offset,gain,output:sound.output,eventCue:sound.eventCue,eventTrigger:sound.eventTrigger,profile:sound.profile,wiperText:sound.wiperText});this.foreground.set(source,{start,end:start+sound.duration,bus:'EFFECTS'});
+   source.onended=()=>{this.foreground.delete(source);this.effectSources.delete(source);this.effectPlayback.delete(source);source.disconnect();gain.disconnect();};source.start(start,sound.loop?sound.offset%sound.buffer.duration:sound.offset);source.stop(start+sound.duration);
   }
  }
- stopEffects(includeDesign=true,clearPaused=true){if(clearPaused)this.pausedEffects=[];if(includeDesign){this.designSounds.stop();this.clearDesignSilence();}for(const source of this.effectSources){this.foreground.delete(source);source.onended=null;try{source.stop();}catch{}source.disconnect();}for(const window of this.effectPlayback.values())window.gain.disconnect();this.effectSources.clear();this.effectPlayback.clear();}
+ stopEffects(includeDesign=true,clearPaused=true){if(clearPaused){this.pausedEffects=[];this.heldWiper=emptyWiperFrame;}if(includeDesign){this.designSounds.stop();this.clearDesignSilence();}for(const source of this.effectSources){this.foreground.delete(source);source.onended=null;try{source.stop();}catch{}source.disconnect();}for(const window of this.effectPlayback.values())window.gain.disconnect();this.effectSources.clear();this.effectPlayback.clear();}
  stop(){this.sessionHeld=false;this.bed.stop();this.brainwave(false);this.stopVoice(false);this.ambience(false);void this.context.suspend();}
 }

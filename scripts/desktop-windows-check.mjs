@@ -44,6 +44,20 @@ async function launch(port=16969){
  const application=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,`--bambi-port=${port}`],cwd:output,env:environment,timeout:30000});
  applications.set(application,application.process());
  const page=await application.firstWindow();page.on('pageerror',error=>evidence.errors.push(String(error)));await page.waitForSelector('#offline-sample',{state:'visible'});
+ const privacyAccess=await page.evaluate(async()=>{const response=await fetch('/api/access');return response.ok?response.json():{configured:true};});
+ if(!privacyAccess.configured){
+  const privacy=page.locator('#privacy-access[open]');await privacy.waitFor();
+  assert.equal(await privacy.locator('.privacy-choices input:checked').count(),5);
+  assert.equal(await privacy.locator('[data-required]:checked:disabled').count(),3);
+  assert.equal(await privacy.locator('[name=contextToCloud]').count(),0);
+  assert(!(await privacy.locator('[name=localClock]').isChecked()));assert(!(await privacy.locator('[name=approximateLocation]').isChecked()));
+  await privacy.locator('[data-local-only]').click();await page.locator('#privacy-access').waitFor({state:'hidden'});
+  const saved=await page.evaluate(async()=>await(await fetch('/api/access')).json());assert(saved.configured&&Object.values(saved.choices).every(value=>value===false));
+  evidence.privacyAccess={requiredCheckedDisabled:3,optionalPreselected:5,clock:false,ipPlace:false,cloudSwitches:1,explicitDenyAllSaved:true};
+ }
+ const onboarding=await page.evaluate(async()=>{const response=await fetch('/api/models/onboarding');return response.ok?response.json():{done:true};});
+ if(!onboarding.done){await page.locator('#model-onboarding[open]').waitFor();await page.locator('#model-onboarding [data-finish]').click();await page.locator('#model-onboarding').waitFor({state:'hidden'});}
+
  const bounds=await application.evaluate(({BrowserWindow})=>{const window=BrowserWindow.getAllWindows()[0];window.setSize(880,640);return window.getBounds();});
  evidence.measurements.windowBounds=bounds;
  const startupMs=performance.now()-started;
@@ -72,6 +86,7 @@ try{
  for(const [name,key] of [['main.cjs','mainSha256'],['preload.cjs','preloadSha256'],['runtime-environment.cjs','runtimeEnvironmentSha256']]){
   assert.equal(await hashFile(join(shell,name)),runtime.shell[key]);assert.equal(await hashFile(join(source,'apps/desktop',name)),runtime.shell[key]);
  }
+ if(runtime.shell.permissionPolicySha256){assert.equal(await hashFile(join(shell,'permission-policy.cjs')),runtime.shell.permissionPolicySha256);assert.equal(await hashFile(join(source,'apps/desktop/permission-policy.cjs')),runtime.shell.permissionPolicySha256);}
  for(const folder of [source,shell,resources])for(const entry of await inventory(folder)){
   assert(!/(?:^|\/)(?:\.env(?:\.|$)|\.git|\.runtime|internal|models|recordings|imported-sounds)(?:\/|$)|\.(?:sqlite|key|pem|p12|pfx)$/.test(logicalPath(entry.path)),'Excluded private/local path in artifact '+entry.path);
  }
@@ -200,15 +215,27 @@ try{
   await current.page.locator('#import').setInputFiles({name:'reopened.bambi.json',mimeType:'application/json',buffer:exported});
   await current.page.waitForFunction(()=>document.querySelector('#status')?.textContent==='Package opened. Preview when you are ready.');
   record('prepared-Studio-export-and-reimport-preserve-audio-and-cues',{assets:exportedPack.assets.length,cues:exportedPack.cues.length,exportSha256:digest(exported)});
+  const consent=await current.page.evaluate(async()=>{
+   const record=await(await fetch('/api/access')).json();const response=await fetch('/api/access',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...record.choices,modelDownloads:true})});return response.ok;
+  });assert(consent,'The public-fixture checker must explicitly grant model downloads.');
   await current.page.goto('http://127.0.0.1:16969/setup');
-  await current.page.waitForFunction(()=>document.querySelector('#setup-progress')?.textContent.startsWith('not-installed'));
-  const setupChecks=await current.page.evaluate(async()=>{
+  await current.page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='not-installed');
+  await current.page.getByRole('button',{name:'3. Install and start',exact:true}).click();
+  const expectedModel=JSON.parse(readFileSync(join(root,'config/desktop-alpha-models.json'),'utf8')).alias;
+  const setupChecks=await current.page.evaluate(async expectedModel=>{
    const sleep=ms=>new Promise(r=>setTimeout(r,ms)),checks=[];
    for(const attempt of [1,2]){
-    const start=performance.now();document.querySelector('#setup-install').click();let observed;
+    const initial=await(await fetch('/api/desktop/setup')).json();if(initial.model!==expectedModel)throw Error('Qualification must retain the unchanged full chat model.');
+    const start=performance.now(),guarded=document.querySelector('#setup-install').disabled;let observed;
+    if(guarded){
+     const catalog=await(await fetch('/api/models/catalog')).json(),model=catalog.alternatives.find(row=>row.id===expectedModel);
+     if(!model||model.memoryFit==='fits')throw Error('Unexpected disabled setup download on a compatible host.');
+     const response=await fetch('/api/desktop/setup/install',{method:'POST'});if(!response.ok)throw Error('Explicit public-fixture download was rejected.');
+    }else document.querySelector('#setup-install').click();
     while(performance.now()-start<30000){
      const state=await(await fetch('/api/desktop/setup')).json();
      if(state.phase==='failed')throw Error('Actual pinned setup download failed: '+state.error);
+     if(state.model!==expectedModel)throw Error('Setup changed the full qualification model.');
      if(state.completed>0&&!document.querySelector('#setup-cancel').disabled){observed={phase:state.phase,completed:state.completed,asset:state.asset,progressVisible:document.querySelector('#setup-progress').textContent};break;}
      await sleep(100);
     }
@@ -216,13 +243,14 @@ try{
     document.querySelector('#setup-cancel').click();let cancelled;
     for(let i=0;i<100;i++){const state=await(await fetch('/api/desktop/setup')).json();if(state.phase==='cancelled'){cancelled=state;break;}await sleep(100);}
     if(!cancelled||cancelled.verified)throw Error('Cancellation activated incomplete model data.');
-    checks.push({attempt,observed,cancelledPhase:cancelled.phase,elapsedMs:performance.now()-start});
+    checks.push({attempt,model:expectedModel,observed,cancelledPhase:cancelled.phase,elapsedMs:performance.now()-start,startMethod:guarded?'Explicit backend API; hosted runner memory estimate prevents UI installation.':'Actual Setup download button.'});
+    if(guarded)continue;
     const retryDeadline=performance.now()+10000;
     while(document.querySelector('#setup-install').disabled&&performance.now()<retryDeadline)await sleep(100);
     if(document.querySelector('#setup-install').disabled)throw Error('Retry did not become available after cancellation.');
    }
    return checks;
-  });
+  },expectedModel);
   assert(!files(join(data,'models')).some(path=>path.endsWith('.partial')));
   record('actual-pinned-Setup-download-progress-cancel-and-retry',{attempts:setupChecks,fullModelActivated:false});
   await current.page.goto('http://127.0.0.1:16969/');

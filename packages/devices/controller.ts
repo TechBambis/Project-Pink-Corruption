@@ -5,19 +5,19 @@
 import dgram from 'node:dgram';
 import {DeviceCommandSchema,DeviceSettingsSchema,DeviceSessionSchema,type DeviceSettings,type DeviceSession,type DeviceCommand} from './commands';
 import {actuatorValue,applyDeviceCommand,offState,type ActuatorState} from './patterns';
-import {sessionPhaseAt,type SessionPhase} from '../session-director/phases';
+import {sessionPhaseAt,phasePosition,type SessionPhase} from '../session-director/phases';
 import {devicePhaseDefaults,deviceTiming} from '../../config/device-control';
 
 export interface DeviceTransport{send(packet:string):void;close():void}
 /** Only the documented local four-channel motor protocol is emitted. */
 export class JoyhubUDP implements DeviceTransport{
  private socket=dgram.createSocket('udp4');private closed=false;
- constructor(private response:(status:Record<string,unknown>)=>void){
+ constructor(private response:(status:Record<string,unknown>)=>void,private allowed=()=>true){
   this.socket.on('error',()=>{});
   this.socket.on('message',(bytes,peer)=>{if(peer.address!=='127.0.0.1'||peer.port!==8888||bytes.length>2048)return;try{const data=JSON.parse(bytes.toString());if(data.protocol==='bambi-joyhub/1'&&typeof data.connected==='boolean')this.response(data);}catch{}});
   this.socket.bind(0,'127.0.0.1',()=>this.socket.unref());
  }
- send(packet:string){if(!this.closed)this.socket.send(packet,8888,'127.0.0.1',()=>{});}
+ send(packet:string){if(!this.closed&&this.allowed())this.socket.send(packet,8888,'127.0.0.1',()=>{});}
  close(){this.closed=true;try{this.socket.close();}catch{}}
 }
 
@@ -32,9 +32,10 @@ export class DeviceController{
  private sent=[0,0,0,0];
  private pausedAt:number|null=null;
  private pending:{command:DeviceCommand;time:number}[]=[];
- private get elapsed(){return Math.min(this.session.duration,this.session.elapsed+(this.session.running&&!this.session.paused?Math.max(0,this.now()-this.seen):0));}
- constructor(transport?:DeviceTransport,private now=()=>performance.now()/1000,private random=()=>Math.random(),autoTick=true){
-  this.transport=transport??new JoyhubUDP(status=>this.bridgeStatus(status));
+ private get elapsed(){const elapsed=this.session.elapsed+(this.session.running&&!this.session.paused?Math.max(0,this.now()-this.seen):0);return this.session.continuous?elapsed:Math.min(this.session.duration,elapsed);}
+ private get phaseElapsed(){return phasePosition(this.elapsed,this.session.duration,this.session.continuous);}
+ constructor(transport?:DeviceTransport,private now=()=>performance.now()/1000,private random=()=>Math.random(),autoTick=true,allowed=()=>true){
+  this.transport=transport??new JoyhubUDP(status=>this.bridgeStatus(status),allowed);
   if(autoTick){this.timer=setInterval(()=>this.tick(),deviceTiming.tickMs);this.timer.unref();}
  }
  bridgeStatus(status:Record<string,unknown>){this.bridgeSeen=this.now();this.delivery={error:typeof status.error==='string'?status.error.slice(0,300):'',writeCount:typeof status.writeCount==='number'?status.writeCount:0,lastNonzeroPacket:typeof status.lastNonzeroPacket==='string'?status.lastNonzeroPacket.slice(0,14):null,lastNonzeroAgeSeconds:typeof status.lastNonzeroAgeSeconds==='number'?status.lastNonzeroAgeSeconds:null};this.connected=status.connected===true;this.device=typeof status.device==='string'?status.device.slice(0,100):'';if(!this.connected)this.stop(false);}
@@ -72,7 +73,7 @@ export class DeviceController{
    if(channel==='rot'&&!this.settings.rotationChannel)continue;
    const current=this.output(channel,time);
    if(channel==='vib')this.accent=null;
-   this.states[channel]=applyDeviceCommand(command.operation==='fade'?{level:current,pattern:'constant',started:time}:this.states[channel],command,time,devicePhaseDefaults[sessionPhaseAt(this.elapsed,this.session.duration).phase][channel==='vib'?'vibration':'rotation']||.3);
+   this.states[channel]=applyDeviceCommand(command.operation==='fade'?{level:current,pattern:'constant',started:time}:this.states[channel],command,time,devicePhaseDefaults[sessionPhaseAt(this.phaseElapsed,this.session.duration).phase][channel==='vib'?'vibration':'rotation']||.3);
   }
   if(command.channel==='rot'||command.channel==='both'){this.manualRotation=true;this.rotationEnd=null;this.nextRotation=null;}
   return true;
@@ -114,7 +115,7 @@ export class DeviceController{
   this.phaseFade=false;this.manualRotation=false;this.deepRotationStarted=false;this.rotationEnd=null;this.nextRotation=null;
   if(phase==='conditioning'&&this.settings.randomRotation)this.nextRotation=this.elapsed+deviceTiming.randomMinSeconds+this.random()*(deviceTiming.randomMaxSeconds-deviceTiming.randomMinSeconds);
  }
- private automate(){const {phase,progress}=sessionPhaseAt(this.elapsed,this.session.duration);
+ private automate(){const {phase,progress}=sessionPhaseAt(this.phaseElapsed,this.session.duration);
   if(phase!==this.phase){this.phase=phase;if(this.settings.phaseDefaults&&!this.blocked)this.applyPhase(phase);}
   if(!this.settings.phaseDefaults||this.blocked)return;
   if(phase==='deepening'&&progress>=.5&&!this.manualRotation&&!this.deepRotationStarted){this.deepRotationStarted=true;this.transition('rot',{level:.2,pattern:'slow',started:this.now()});}
@@ -122,7 +123,7 @@ export class DeviceController{
    if(this.rotationEnd!==null&&this.elapsed>=this.rotationEnd){this.states.rot=offState();this.rotationEnd=null;this.nextRotation=this.elapsed+deviceTiming.randomMinSeconds+this.random()*(deviceTiming.randomMaxSeconds-deviceTiming.randomMinSeconds);}
    if(this.rotationEnd===null&&this.nextRotation!==null&&this.elapsed>=this.nextRotation){this.transition('rot',{level:deviceTiming.randomRotationIntensity,pattern:'slow',started:this.now()});this.rotationEnd=this.elapsed+deviceTiming.rotationMinSeconds+this.random()*(deviceTiming.rotationMaxSeconds-deviceTiming.rotationMinSeconds);}
   }
-  if(phase==='awakening'&&!this.phaseFade){const seconds=Math.min(deviceTiming.awakeningFadeSeconds,Math.max(.1,this.session.duration-this.elapsed));this.phaseFade=true;
+  if(phase==='awakening'&&!this.phaseFade){const seconds=Math.min(deviceTiming.awakeningFadeSeconds,Math.max(.1,this.session.duration-this.phaseElapsed));this.phaseFade=true;
    const now=this.now();
    for(const channel of ['vib','rot'] as const)this.states[channel]=applyDeviceCommand({level:this.output(channel,now),pattern:'constant',started:now},{type:'device',channel,operation:'fade',intensity:0,durationMs:Math.round(seconds*1000)},now);
    this.accent=null;this.pending=[];
@@ -134,7 +135,7 @@ export class DeviceController{
   if(!this.owner||!this.settings.enabled)return;
   if(now-this.seen>deviceTiming.heartbeatTimeoutMs/1000){this.stop();return;}
   if(!this.canWrite()){if(!this.blocked||this.test||this.pending.length)this.stop(false);return;}
-  if(this.session.running&&!this.session.paused&&this.elapsed>=this.session.duration){this.stop();return;}
+  if(!this.session.continuous&&this.session.running&&!this.session.paused&&this.elapsed>=this.session.duration){this.stop();return;}
   while(this.pending.length&&this.pending[0].time<=now){const cue=this.pending.shift()!;if(now-cue.time<=.15||cue.command.operation==='off'||cue.command.operation==='fade')this.command(this.owner,cue.command);}
   const channels=[0,0,0,0];
   if(this.test){if(now>=this.test.end){const disarm=this.test.disarm;this.test=null;this.stop(disarm===true);}else channels[this.test.channel-1]=Math.round(Math.min(this.test.level,this.channelCap(this.test.channel))*100);}

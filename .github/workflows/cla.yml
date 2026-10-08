@@ -1,33 +1,32 @@
-# Build-branch entry point only. The default branch CLA workflow is preserved.
-# An existing default-branch dispatch path is required by GitHub; this branch
-# delegates its authorized manual Windows build to the prepared workflow.
-name: Manual Windows desktop build entry point
+# Isolated authorized build branch only; the default-branch CLA workflow is unchanged.
+name: Manual Windows alpha build entry point
 on:
   workflow_dispatch:
     inputs:
-      mode:
+      target:
         type: choice
-        options: [build, qualify, runtime-slice]
-        default: build
+        options: [windows-x64, linux-x64]
+        default: windows-x64
       phase:
         type: choice
         options: [smoke, alpha]
         default: smoke
       version:
+        description: New immutable version matching the selected phase
         type: string
         required: true
-        default: 0.1.0-smoke.5
       quota_checked:
         type: boolean
         default: false
       quota_record:
+        description: Actual check time/account and remaining private Actions allowance
         type: string
         required: true
       upload_packages:
         type: boolean
         default: false
       transfer_packages:
-        description: Receive bounded private alpha parts locally before removing each temporary part
+        description: Receive private Windows alpha parts locally within checked storage
         type: boolean
         default: false
       remaining_artifact_mib:
@@ -36,27 +35,18 @@ on:
 permissions:
   contents: read
   actions: read
+concurrency:
+  group: desktop-release-${{ inputs.target }}-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
-  windows:
-    if: inputs.mode == 'build' && inputs.quota_checked && github.actor_id == '337824705'
-    uses: ./.github/workflows/desktop-windows.yml
+  native:
+    uses: ./.github/workflows/desktop-native.yml
     with:
+      target: ${{ inputs.target }}
       phase: ${{ inputs.phase }}
       version: ${{ inputs.version }}
       quota_checked: ${{ inputs.quota_checked }}
       quota_record: ${{ inputs.quota_record }}
       upload_packages: ${{ inputs.upload_packages }}
       transfer_packages: ${{ inputs.transfer_packages }}
-      remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}
-  qualification:
-    if: inputs.mode == 'qualify' && inputs.quota_checked && github.actor_id == '337824705'
-    uses: ./.github/workflows/desktop-windows-qualify.yml
-    with:
-      quota_record: ${{ inputs.quota_record }}
-      remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}
-  runtime-slice:
-    if: inputs.mode == 'runtime-slice' && inputs.quota_checked && github.actor_id == '337824705'
-    uses: ./.github/workflows/desktop-windows-runtime-slice.yml
-    with:
-      quota_record: ${{ inputs.quota_record }}
       remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}

@@ -6,6 +6,10 @@
 html { scroll-padding-bottom:32px; }
 body { background:#140c16; padding-bottom:0; }
 #workspace { padding-bottom:36px; }
+#session-basics > .settings-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.session-launch { margin-top:18px; padding:12px 18px; background:var(--pink); color:#32172b; font-weight:600; }
+.session-launch:hover { background:#f2b9d9; }
+#session-flow-settings { display:block; margin-top:18px; }
 .settings-navigation { background:#140c16f5; }
 .stage { border-radius:18px; height:calc(100dvh - 110px); border-color:#ecd2e818; background:#09060b; }
 .stage .stage-top { top:20px; bottom:auto; pointer-events:none; opacity:.6; }
@@ -71,6 +75,8 @@ body { background:#140c16; padding-bottom:0; }
 @media(max-width:980px) { .stage { height:calc(100dvh - 128px); } }
 @media(max-width:600px) {
  .stage { min-height:400px; height:calc(100dvh - 150px); border-radius:14px; }
+ .experience-choice { padding:12px 10px; }
+ .experience-choice span { font-size:12px; }
  #app .stage .session-dock { width:calc(100% - 16px); bottom:8px; padding:10px 12px; border-radius:14px; }
  #app .stage .session-essentials { grid-template-columns:auto minmax(0,1fr); gap:6px; }
  #app .stage .session-play { min-width:74px; padding:9px 10px; }

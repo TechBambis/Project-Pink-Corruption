@@ -46,7 +46,7 @@ export const DeviceSettingsSchema=z.object({
 export type DeviceSettings=z.infer<typeof DeviceSettingsSchema>;
 export type DeviceCueOrigin='speech';
 
-export const DeviceSessionSchema=z.object({running:z.boolean(),paused:z.boolean(),elapsed:z.number().finite().min(0).max(86400),duration:z.number().finite().min(1).max(86400),tickBpm:z.number().finite().min(0).max(120).optional(),tickPhaseMs:z.number().finite().min(0).max(3000).optional()}).strict();
+export const DeviceSessionSchema=z.object({running:z.boolean(),paused:z.boolean(),elapsed:z.number().finite().min(0).max(Number.MAX_SAFE_INTEGER),duration:z.number().finite().min(1).max(86400),continuous:z.boolean().optional(),tickBpm:z.number().finite().min(0).max(120).optional(),tickPhaseMs:z.number().finite().min(0).max(3000).optional()}).strict();
 export type DeviceSession=z.infer<typeof DeviceSessionSchema>;
 
 export function devicePrompt(enabled:boolean){return enabled?[

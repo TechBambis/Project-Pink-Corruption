@@ -1,9 +1,0 @@
-{
-  "baseline-32k": {"context":32768,"batch":2048,"ubatch":512,"threads":0,"threadsBatch":0,"cacheK":"q8_0","cacheV":"q8_0","cacheRAM":8192,"graphOpt":0},
-  "batch-32k": {"context":32768,"batch":4096,"ubatch":1024,"threads":4,"threadsBatch":8,"cacheK":"q8_0","cacheV":"q8_0","cacheRAM":8192,"graphOpt":0},
-  "streams-32k": {"context":32768,"batch":4096,"ubatch":1024,"threads":4,"threadsBatch":8,"cacheK":"q8_0","cacheV":"q8_0","cacheRAM":8192,"graphOpt":1},
-  "wide-64k": {"context":65536,"batch":4096,"ubatch":1024,"threads":4,"threadsBatch":8,"cacheK":"q8_0","cacheV":"q8_0","cacheRAM":8192,"graphOpt":1},
-  "balanced-64k": {"context":65536,"batch":4096,"ubatch":1024,"threads":4,"threadsBatch":8,"cacheK":"q8_0","cacheV":"q8_0","cacheRAM":8192,"graphOpt":0},
-  "wide-128k": {"context":131072,"batch":4096,"ubatch":1024,"threads":4,"threadsBatch":8,"cacheK":"q8_0","cacheV":"q8_0","cacheRAM":8192,"graphOpt":1},
-  "float-64k": {"context":65536,"batch":4096,"ubatch":1024,"threads":4,"threadsBatch":8,"cacheK":"f16","cacheV":"f16","cacheRAM":8192,"graphOpt":1}
-}

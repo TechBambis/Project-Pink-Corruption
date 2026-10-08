@@ -74,6 +74,25 @@ class AudioTests(unittest.TestCase):
             with self.subTest(original=original):
                 self.assertEqual(spoken_input(original), expected)
 
+    def test_iq_pronunciation_expands_only_at_synthesis_boundary(self):
+        from packages.speech.local.spoken import pronunciation_input
+        for text in ['IQ Lock.', 'iq drop.', 'Your IQ stays clear.']:
+            self.assertEqual(spoken_input(text), text)
+            self.assertIn('I Q', pronunciation_input(text))
+        for text in ['Iraq.', 'Unique.', 'I Q Lock.', 'Liquid IQs.']:
+            self.assertEqual(pronunciation_input(text), text)
+        self.assertEqual([p.text for p in phrases('IQ Lock. IQ Drop.')], ['IQ Lock.', 'IQ Drop.'])
+
+    def test_expanded_letters_align_to_one_original_iq_word(self):
+        from packages.speech.local.alignment import word_timings
+        tokenizer = SimpleNamespace(phonemize=lambda word, lang: {'I Q':'aɪkju', 'Lock':'lɑk'}[word])
+        timings = [SimpleNamespace(phoneme=c, start=i*.1, end=(i+1)*.1) for i,c in enumerate('aɪkjulɑk')]
+        aligned = word_timings('IQ Lock', timings, tokenizer)
+        self.assertEqual([w['word'] for w in aligned], ['IQ','Lock'])
+        self.assertEqual(aligned[0]['start_time'], 0)
+        self.assertEqual(aligned[0]['end_time'], .5)
+        self.assertEqual(aligned[1]['start_time'], .5)
+
     def test_filler_only_text_never_becomes_a_spoken_phrase(self):
         self.assertEqual(phrases('Mm. Mmmmmm… hmmmmmmm? [hums]'), [])
         self.assertEqual([(p.text,p.pause_ms) for p in phrases('Mm. [pause:900] Ready.')], [('',900),('Ready.',350)])
@@ -259,6 +278,24 @@ class OfflineIntegrationTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.temporary.cleanup()
+
+    def test_real_iq_initialism_keeps_original_trigger_timing_and_cached_identity(self):
+        with patch.object(self.provider.engine, 'create_timed', wraps=self.provider.engine.create_timed) as create:
+            samples, rate, words = self.provider.synthesize_timed('IQ Lock.', 'af_heart', .78)
+        self.assertEqual(create.call_args.args[0], 'I Q Lock.')
+        self.assertIn('aɪ', self.provider.engine.tokenizer.phonemize(create.call_args.args[0], 'en-us'))
+        self.assertIn('ju', self.provider.engine.tokenizer.phonemize(create.call_args.args[0], 'en-us').replace('ˈ','').replace('ː',''))
+        self.assertEqual([w['word'] for w in words], ['IQ','Lock'])
+        self.assertGreater(words[0]['end_time'], words[0]['start_time'])
+        self.assertLessEqual(words[0]['end_time'], words[1]['start_time'])
+        self.assertGreater(len(samples), 2400)
+        self.assertEqual(rate, 24000)
+        hits = self.provider.cache_hits
+        self.assertEqual(self.provider.synthesize_timed('IQ Lock.', 'af_heart', .78)[2], words)
+        self.assertEqual(self.provider.cache_hits, hits+1)
+        # Expanded display input has the same pronunciation but its own caption identity.
+        expanded = self.provider.synthesize_timed('I Q Lock.', 'af_heart', .78)[2]
+        self.assertEqual([w['word'] for w in expanded], ['I','Q','Lock'])
 
     def test_real_offline_model_to_timing_dsp_stereo_wav_and_cache(self):
         config=load_preset('bambi_classic')

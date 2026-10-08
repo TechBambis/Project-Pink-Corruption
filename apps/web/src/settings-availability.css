@@ -1,0 +1,23 @@
+/* SPDX-FileCopyrightText: 2026 BambiOS
+ * SPDX-License-Identifier: AGPL-3.0-only */
+.setting-availability {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.setting-availability:disabled > :first-child {
+  opacity: .48;
+}
+.setting-availability:disabled input,
+.setting-availability:disabled select,
+.setting-availability:disabled button {
+  cursor: not-allowed;
+}
+.setting-unavailable-note {
+  margin: .15rem 0 .65rem;
+  color: #b9a4b3;
+  font-size: .72rem;
+  line-height: 1.4;
+}
+.setting-unavailable-note[hidden] { display: none; }

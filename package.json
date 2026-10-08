@@ -24,6 +24,10 @@
     "setup:streaming-speech": "python3 scripts/setup-streaming-speech.py",
     "eval:memory": "tsx scripts/memory-eval.ts",
     "eval:conversation": "tsx scripts/conversation-eval.ts",
+    "pretest:navigation": "npm run build",
+    "test:navigation": "node scripts/navigation-browser-check.mjs",
+    "pretest:model-setup": "npm run build",
+    "test:model-setup": "node scripts/model-setup-browser-check.mjs",
     "pretest:integration": "npm run build",
     "test:integration": "node scripts/high-impact-browser-check.mjs",
     "desktop:build": "node scripts/desktop-build.mjs",
@@ -32,7 +36,9 @@
     "desktop:smoke": "node scripts/desktop-smoke.mjs",
     "desktop:windows-build": "node scripts/desktop-windows-build.mjs",
     "desktop:windows-check": "node scripts/desktop-windows-check.mjs",
-    "desktop:windows-ai-check": "node scripts/desktop-windows-ai-check.mjs"
+    "desktop:windows-ai-check": "node scripts/desktop-windows-ai-check.mjs",
+    "desktop:release": "node scripts/desktop-release.mjs",
+    "desktop:update": "tsx scripts/desktop-update.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0",

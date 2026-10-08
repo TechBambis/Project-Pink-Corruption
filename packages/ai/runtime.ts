@@ -25,7 +25,7 @@ async function command(args: string[], timeout: number, signal?: AbortSignal) {
   }
 }
 export async function prepareNativeModel(model: string, context: number = BAMBISLEEP_SAMPLING.context, signal?: AbortSignal) {
-  if(desktopAlpha){if(model!==alphaModels.alias||context!==alphaModels.context)throw Error('Unsupported desktop model/context.');await desktopSetup!.prepare(signal);return;}
+  if(desktopAlpha){if(model!==desktopSetup!.model||context!==desktopSetup!.context)throw Error('Select and verify this model in Local AI setup first.');await desktopSetup!.prepare(signal);return;}
   await command(['start', '--model', model, '--context', String(context)],120000,signal);
 }
 export async function stopNativeModel(signal?: AbortSignal) {

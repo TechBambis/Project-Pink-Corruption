@@ -3,8 +3,7 @@ setlocal
 pushd "%~dp0.."
 if errorlevel 1 exit /b 1
 set "BAMBI_BUILD_ROOT=%CD%"
-rem A cmd.exe grandchild must not feed PowerShell 7 module paths to inbox 5.1.
-rem Clear only this local process environment; Windows PowerShell builds its defaults.
+rem Keep inbox PowerShell from inheriting incompatible PowerShell 7 module paths.
 set "PSModulePath="
 rem Build tools remain local to the source tree. Tester machines do not run this.
 rem This uses ordinary inbox PowerShell commands without changing execution policy.
@@ -13,15 +12,9 @@ if errorlevel 1 goto failed
 set "BAMBI_BUILD_NODE=%CD%\.runtime\desktop-windows-tools\node-v24.18.1-win-x64"
 set "PATH=%BAMBI_BUILD_NODE%;%PATH%"
 set "ELECTRON_SKIP_BINARY_DOWNLOAD=1"
-if /I "%~1"=="runtime-slice" goto runtime_slice
 "%BAMBI_BUILD_NODE%\node.exe" "%BAMBI_BUILD_NODE%\node_modules\npm\bin\npm-cli.js" ci --ignore-scripts
 if errorlevel 1 goto failed
 "%BAMBI_BUILD_NODE%\node.exe" scripts\desktop-windows-build.mjs %*
-if errorlevel 1 goto failed
-popd
-exit /b 0
-:runtime_slice
-"%BAMBI_BUILD_NODE%\node.exe" scripts\desktop-windows-runtime-slice.mjs
 if errorlevel 1 goto failed
 popd
 exit /b 0

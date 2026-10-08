@@ -2,6 +2,8 @@
 
 Bug reports and suggestions are welcome without signing a CLA. Please keep personal data, credentials, recordings and private conversation history out of issues and PRs.
 
+Use English for repository documentation, UI text, code comments, examples and test fixtures. Preserve third-party attribution, license notices and pinned upstream content.
+
 ## Licensing before submitting code
 
 Read [LICENSING.md](LICENSING.md) and the [Contributor License Agreement](CLA.md). Contributions need explicit acceptance of the CLA, or separately verified permissions sufficient for the same licensing model, before merging. A PR alone is not acceptance. The CLA permits proprietary/commercial relicensing without royalties; you retain copyright. If that does not work for you, do not submit work for inclusion.

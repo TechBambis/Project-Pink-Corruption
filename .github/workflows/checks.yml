@@ -1,8 +1,5 @@
 name: Application checks
-on:
-  push:
-    branches-ignore: ['build/windows-smoke-*', 'build/windows-alpha-*']
-  pull_request:
+on: [push, pull_request]
 permissions:
   contents: read
 concurrency:
@@ -28,9 +25,21 @@ jobs:
       - run: npm run repo:check
       - run: npm run check
       - run: npm test
-      - run: npm run build
       - run: node scripts/build-extension.mjs
       - run: npm run eval:conversation
+      - name: Install browser fixture dependencies
+        run: npx playwright install --with-deps chromium --only-shell
+      - name: Check built app in an isolated browser fixture
+        run: npm run test:integration
+      - name: Save browser diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-diagnostics-node-${{ matrix.node }}
+          path: |
+            runtime/high-impact-browser-check.json
+            runtime/session-studio-*.png
+          if-no-files-found: ignore
   secrets:
     runs-on: ubuntu-24.04
     timeout-minutes: 10

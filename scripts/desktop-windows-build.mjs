@@ -5,12 +5,13 @@ import {readFileSync,writeFileSync,mkdirSync,readdirSync,rmSync,existsSync,statf
 import {resolve,dirname,join,relative,isAbsolute} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {releaseIdentity} from './desktop-source.mjs';
 import {buildOptions,downloadPinned,hashFile,files,copy,copyTree,inventory,logicalPath,sourcePathAllowed,llamaEntries,assertNativeTree,assertWindowsX64,stageWindowsSource,windowsDependencyReport} from './desktop-windows-support.mjs';
 
 const root=resolve(fileURLToPath(new URL('../',import.meta.url)));
 process.chdir(root);
 if(process.argv.includes('--help')){
- console.log('Native Windows x64: node scripts/desktop-windows-build.mjs smoke|alpha [0.1.0-smoke.N|0.1.0-alpha.N]. Default: smoke 0.1.0-smoke.5.');process.exit(0);
+ console.log('Native Windows x64: node scripts/desktop-windows-build.mjs smoke|alpha [0.1.0-smoke.N|0.1.0-alpha.N]. Default: smoke 0.1.0-smoke.2.');process.exit(0);
 }
 const {phase,version,alpha}=buildOptions(process.argv.slice(2),process.env);
 if(process.platform!=='win32'||process.arch!=='x64')throw Error('Use a native Windows x64 build host for this target.');
@@ -84,6 +85,7 @@ async function build(){
  writeFileSync(join(notices,'DEPENDENCIES.json'),JSON.stringify([...dependencies].map(([path,pkg])=>({path:logicalPath(relative(root,path)),name:pkg.name,version:pkg.version,license:pkg.license,repository:pkg.repository})),null,2)+'\n');
  const {writeSamples}=await import('./desktop-windows-sample.mjs');writeSamples(join(backend,'dist/web/samples'),alpha);
  const source=join(stage,'source'),sourceManifest=await stageWindowsSource(root,source,version),{sourceDigest}=sourceManifest;
+ const release=await releaseIdentity(root,sourceManifest);
  writeFileSync(join(source,'SOURCE-MANIFEST.json'),JSON.stringify(sourceManifest,null,2)+'\n');
  run('tar',['-czf',join(backend,'dist/web/corresponding-source.tar.gz'),'-C',source,'.']);
  const guide=readFileSync('docs/DESKTOP_WINDOWS.md','utf8').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
@@ -93,11 +95,11 @@ async function build(){
  writeFileSync(join(notices,'WINDOWS-DLL-IMPORTS.json'),JSON.stringify(dependencyReport,null,2)+'\n');
  if(dependencyReport.unresolved.length)throw Error('Bundled native DLL dependencies are incomplete: '+JSON.stringify(dependencyReport.unresolved));
  const shell=join(stage,'shell');mkdirSync(shell);
- for(const name of ['main.cjs','preload.cjs','runtime-environment.cjs'])copy(resolve('apps/desktop',name),join(shell,name));
+ for(const name of ['main.cjs','preload.cjs','runtime-environment.cjs','permission-policy.cjs'])copy(resolve('apps/desktop',name),join(shell,name));
  writeFileSync(join(shell,'package.json'),JSON.stringify({name:alpha?'bambi-local-alpha':'bambi-local-smoke',version,main:'main.cjs',author:'BambiOS',license:'AGPL-3.0-only'},null,2)+'\n');
- const manifest={version,phase,platform:'win32',architecture:'x64',builtAt:new Date().toISOString(),sourceDigest,
+ const manifest={version,phase,release,platform:'win32',architecture:'x64',builtAt:new Date().toISOString(),sourceDigest,
   qualification:{status:'built-unqualified',nativeNodeSQLite:bundledCheck,installer:false,conversation:false,physicalAudio:false,gpu:false},
-  shell:{mainSha256:await hashFile(join(shell,'main.cjs')),preloadSha256:await hashFile(join(shell,'preload.cjs')),runtimeEnvironmentSha256:await hashFile(join(shell,'runtime-environment.cjs'))},
+  shell:{mainSha256:await hashFile(join(shell,'main.cjs')),permissionPolicySha256:await hashFile(join(shell,'permission-policy.cjs')),preloadSha256:await hashFile(join(shell,'preload.cjs')),runtimeEnvironmentSha256:await hashFile(join(shell,'runtime-environment.cjs'))},
   node:pins.node,electron:pins.electron,builder:pins.builder,loader:'tsx@4.20.6',
   native:{ownership:{source:'apps/desktop/windows-job.cs',jobLimit:'JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE'},...(alpha?{llama:pins.llama,speech:speechBuild}:{})},
   capabilities:{sample:true,ai:alpha,speech:alpha,devices:false,onlineMedia:false},

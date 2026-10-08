@@ -6,14 +6,14 @@ import {PrefillEchoFilter} from './prefill';
 import { modelSampling,nativeModelSampling } from './models';
 import { BAMBISLEEP_SAMPLING, type SamplingProfile } from '../../config/sampling';
 export interface Message { role:'system'|'user'|'assistant'; content:string }
-export interface LLMBackend { name:string; supportsPrefill?:boolean; models():Promise<string[]>; countTokens?(messages:Message[],signal:AbortSignal):Promise<number>; structured?(messages:Message[],model:string,signal:AbortSignal,context:number,schema:unknown):Promise<unknown>; stream(messages:Message[],model:string,signal:AbortSignal,context?:number,maxTokens?:number,sampling?:SamplingProfile,grammar?:string):AsyncGenerator<{text:string;stats?:unknown}> }
+export interface LLMBackend { name:string; supportsPrefill?:boolean; supportsTurnGrammar?:boolean; models():Promise<string[]>; countTokens?(messages:Message[],signal:AbortSignal):Promise<number>; structured?(messages:Message[],model:string,signal:AbortSignal,context:number,schema:unknown):Promise<unknown>; stream(messages:Message[],model:string,signal:AbortSignal,context?:number,maxTokens?:number,sampling?:SamplingProfile,grammar?:string):AsyncGenerator<{text:string;stats?:unknown}> }
 export async function* lines(response:Response) {
  if(!response.ok)throw Error(`Local AI HTTP ${response.status}: ${(await response.text()).slice(0,200)}`);
  const reader=response.body!.getReader(),decoder=new TextDecoder();let buffer='';
  try{while(true){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let idx;while((idx=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,idx).trim();buffer=buffer.slice(idx+1);if(line)yield line;}}if(buffer.trim())yield buffer.trim();}finally{await reader.cancel().catch(()=>{});}
 }
 export class OllamaBackend implements LLMBackend {
- name='ollama';constructor(public url='http://127.0.0.1:11434'){}
+ name='ollama';supportsTurnGrammar=false;constructor(public url='http://127.0.0.1:11434'){}
  async structured(messages:Message[],model:string,signal:AbortSignal,context:number,schema:unknown){const response=await fetch(this.url+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},signal,body:JSON.stringify({model,messages,stream:false,think:false,keep_alive:'10m',format:schema,options:{num_ctx:context,num_predict:32,temperature:0,top_k:1,top_p:1,repeat_penalty:1,seed:0}})});if(!response.ok)throw Error('Listening planner HTTP '+response.status);const data=await response.json();return JSON.parse(data.message.content);}
  async models(){const r=await fetch(this.url+'/api/tags',{signal:AbortSignal.timeout(2500)});if(!r.ok)throw Error('Ollama unavailable');return (await r.json()).models.map((m:{name:string})=>m.name);}
  async *stream(messages:Message[],model:string,signal:AbortSignal,context=4096,maxTokens=220,sampling:SamplingProfile='creative'){
@@ -25,7 +25,7 @@ export class OllamaBackend implements LLMBackend {
  }
 }
 export class LlamaBackend implements LLMBackend {
- name='llama.cpp';supportsPrefill=true;constructor(public url=process.env.BAMBI_LLM_URL||'http://127.0.0.1:8080'){}
+ name='llama.cpp';supportsPrefill=true;supportsTurnGrammar=true;constructor(public url=process.env.BAMBI_LLM_URL||'http://127.0.0.1:8080'){}
  private headers(){return {'Content-Type':'application/json',...(process.env.BAMBI_DESKTOP_ALPHA==='1'?{Authorization:'Bearer '+process.env.BAMBI_LLM_TOKEN}:{} )};}
  async countTokens(messages:Message[],signal:AbortSignal){
   const template=await fetch(this.url+'/apply-template',{method:'POST',headers:this.headers(),signal,body:JSON.stringify({messages,add_generation_prompt:true})});

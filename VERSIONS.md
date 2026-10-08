@@ -13,6 +13,7 @@ The application requires Node.js **22.13+**. [package.json](package.json) define
 | Extension build / esbuild | 0.25.12 |
 | Browser VAD / ONNX Runtime Web | @ricky0123/vad-web 0.0.31 / onnxruntime-web 1.22.0 |
 | Playwright | 1.56.0 |
+| Local memory embeddings / Transformers.js | @huggingface/transformers 4.3.0 |
 | CI secret scanner | Gitleaks 8.30.1; archive SHA-256 checked in the workflow |
 
 ## Local services
@@ -24,9 +25,11 @@ The application requires Node.js **22.13+**. [package.json](package.json) define
 | Kokoro model and voice bundle | [models.json](packages/speech/local/models.json): immutable release URLs and SHA-256 |
 | Optional BLE bridge | [requirements.lock](packages/devices/requirements.lock): Bleak 3.0.2, dbus-fast 5.0.4 on Linux |
 | whisper.cpp | v1.9.4; setup in `scripts/setup-speech.sh`, with separately checked base-model SHA-256 |
+| Optional streaming speech | sherpa-onnx 1.13.8 / NumPy 2.5.3 in a separate environment; English int8 Zipformer revision, sizes and SHA-256 in [streaming-speech-model.json](config/streaming-speech-model.json) |
 | Whisper build tools | CMake 4.4.3 / Ninja 1.13.2 |
 | Native Qwen/Gemma imports | [community-models.json](docs/community-models.json), [qwen36-model.json](docs/qwen36-model.json), [comparison-models.json](docs/comparison-models.json) |
 | Cloud Cydonia model | [cydonia-cloud-model.json](docs/cydonia-cloud-model.json) |
+| Optional CPU memory model | q8 paraphrase-multilingual-MiniLM-L12-v2; revision, sizes and SHA-256 in [memory-model.json](config/memory-model.json) |
 | Cloud llama.cpp build | Revision `11fe02151f79c41d0d4af7da708755d73b9c0da6`, pinned in `scripts/cloud/build-llama.sh` |
 
 Some setup sources use a version tag or a model URL with checksum validation; not every download URL is an immutable commit URL. Review setup scripts and manifests before changing pins.

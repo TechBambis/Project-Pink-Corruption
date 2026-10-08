@@ -12,6 +12,7 @@ import {ChatRequestSchema} from '../packages/ai/request';
 import {ScriptDisplayStream} from '../packages/speech/script';
 import {NarrationFlow,narrationDirective} from '../packages/session-director/narration';
 import {snapshotSession} from '../packages/ai/session-state';
+import {defaultTriggerTiming} from '../packages/session-director/trigger-timing';
 import {preflightReplyContext} from '../packages/ai/preflight';
 
 test('split internal headers never appear in the contribution, and ask ends at its question',()=>{
@@ -34,6 +35,44 @@ test('ordinary output remains usable and malformed internal headers fail without
  }
  const stream=new SituationalTurnStream();assert.equal(stream.push('[turn:guide] Notice the color? You can let it rest.'),'Notice the color? You can let it rest.');
  assert.equal(expectsSituationalReply(stream.action,'Notice the color?'),false,'rhetorical invitations do not stall playback');
+});
+
+test('case, spacing and trailing-colon header variants remain private at every stream split',()=>{
+ for(const header of ['[turn: ask]','[turn:ask]:','[Turn:Ask]','[ TURN : ASK ]']){
+  const source=header+' Which image feels familiar? I will answer myself.';
+  for(let cut=0;cut<=source.length;cut++){
+   const stream=new SituationalTurnStream();
+   const text=stream.push(source.slice(0,cut))+stream.push(source.slice(cut))+stream.flush();
+   assert.equal(text,'Which image feels familiar?',`${header}, split ${cut}`);
+   assert.equal(stream.action,'ask');assert.equal(stream.deliveredAction(text),'ask');
+  }
+ }
+});
+
+test('missing or invalid metadata infers a question only from completely delivered text',()=>{
+ for(const prefix of ['','[turn:unknown] ','[Turn: invalid]: ']){
+  const source=prefix+'Which image feels familiar?',stream=new SituationalTurnStream();let text='';
+  for(const char of source)text+=stream.push(char);
+  text+=stream.flush();assert.equal(text,'Which image feels familiar?');
+  assert.equal(stream.action,'respond','draft punctuation must not assign a delivered action');
+  assert.equal(stream.deliveredAction('Which image feels'),'respond');
+  assert.equal(stream.deliveredAction(''),'respond');
+  assert.equal(stream.deliveredAction(text),'ask');
+  assert.equal(stream.deliveredAction(text,true),'respond','closing cannot infer a question');
+  const state=new SituationalConversation();assert.equal(state.delivered(stream.deliveredAction(text),text),true);
+  assert.match(state.context(),/"deliveredQuestion":"Which image feels familiar\?"/);
+ }
+ const stream=new SituationalTurnStream();
+ const response=stream.push('Why use a lower volume? It preserves comfort.')+stream.flush();
+ assert.equal(stream.deliveredAction(response),'respond','a question followed by an answer is not a reply request');
+ const quoted=new SituationalTurnStream();quoted.push('Which color?');assert.equal(quoted.deliveredAction('Which color?” [pause:medium]'),'ask');
+});
+
+test('an explicit guide or response remains authoritative even when its final sentence ends in a question mark',()=>{
+ for(const action of ['guide','respond','close'] as const){
+  const stream=new SituationalTurnStream(),text=stream.push(`[turn:${action}] Notice the color?`)+stream.flush();
+  assert.equal(stream.deliveredAction(text),action);assert.equal(expectsSituationalReply(stream.deliveredAction(text),text),false);
+ }
 });
 
 test('only an actually delivered complete question waits; answers and new sessions have distinct evidence',()=>{
@@ -69,14 +108,34 @@ test('mode has a separate, preflight-compatible prompt; old API requests retain 
  const session=snapshotSession({elapsedSeconds:295,totalSeconds:300,scene:'Soft Pink',intensityPercent:90,activeTriggers:[],lastTrigger:null});
  const system=buildReplyPrompt(base,'Continue',false,'',session,'',false,true,'situational');
  assert.ok(system.startsWith(buildFixedReplyPrompt(base,'situational')));
- assert.match(system,/Choose \[turn:close\]/);assert.match(system,/not follow a questionnaire/);
- assert.match(situationalReplyDirection('Continue',true),/No question quotas/);
+ assert.match(system,/Choose \[turn:close\]/);assert.match(system,/do not ask a question/);
+ assert.match(system,/No question quotas/);
  assert.match(system,/latest real listener request or correction/);
  const authored=buildRuntimePrompt(request.promptId,request.username,request.selectedTriggers,request.collar,request.collarName).core;
  assert.ok(base.startsWith(authored),'situational interaction must preserve the complete chosen character document');
- assert.ok(system.indexOf('SITUATIONAL CONVERSATION CONTRACT v2')>system.indexOf(authored),'conversation priority follows the authored content');
+ assert.ok(system.indexOf('REAL LISTENER & CONVERSATION EVIDENCE')>system.indexOf(authored),'conversation priority follows the authored content in every mode');
  assert.match(narrationDirective('deepening',false,100,true),/real answer/);
  assert.match(situationalReplyDirection('Please slow down.',false),/Incorporate corrections/);
  const budget=await preflightReplyContext(base,{context:4096,maxTokens:512,narration:true,interaction:'situational',safetyTokens:256,soundDesign:false,selectedTriggers:[],tokenCount:'exact'},async()=>1200);
  assert.ok(budget);
+});
+
+test('compact turn guidance preserves task, phase, actual session facts and only active trigger timing',()=>{
+ const session={...snapshotSession({elapsedSeconds:120,totalSeconds:300,scene:'Soft Pink',intensityPercent:60,activeTriggers:['GOOD GIRL'],lastTrigger:'GOOD GIRL'}),phase:'deepening' as const};
+ const conversation=situationalReplyDirection('Which scene is selected?',false,session);
+ assert.match(conversation,/REAL LISTENER INPUT/);assert.match(conversation,/answer factual questions directly/);
+ assert.match(conversation,/"scene":"Soft Pink"/);assert.match(conversation,/"intensity":3/);
+ assert.doesNotMatch(conversation,/ENGINE CONTINUATION|gradual countdown|CURRENT TRIGGER TIMING|remainingSeconds/);
+ const narration=situationalReplyDirection('Continue.',true,session);
+ assert.match(narration,/ENGINE CONTINUATION, not a listener statement/);assert.match(narration,/gentle countdown/);
+ assert.match(narration,/"remainingSeconds":180/);assert.match(narration,/"allowedCues":\["GOOD GIRL"\]/);
+ assert.doesNotMatch(narration,/CURRENT TRIGGER TIMING/);assert.ok(narration.length<1400);
+ const timing=defaultTriggerTiming(),timed=situationalReplyDirection('Continue.',true,{...session,triggerTiming:timing});
+ assert.match(timed,/CURRENT TRIGGER TIMING: deepening/);assert.match(timed,/GOOD GIRL/);assert.match(timed,/SAFE AND SECURE/);
+ assert.match(timed,/Intensity unlocks no other categories/);assert.doesNotMatch(timed,/"allowedCues"/);assert.ok(timed.length<1900);
+ assert.doesNotMatch(situationalReplyDirection('Continue.',true,{...session,triggerTiming:{...timing,enabled:false}}),/CURRENT TRIGGER TIMING/);
+ assert.match(situationalReplyDirection('Use exactly 12 words.',true,session),/12-12 words total/);
+ assert.match(situationalReplyDirection('In one sentence.',false,session),/exact brevity request/);
+ assert.match(situationalReplyDirection('Continue.',true,{...session,phase:'awakening',continuous:true}),/continuous.*true/);
+ assert.doesNotMatch(situationalReplyDirection('Continue.',true,{...session,phase:'awakening',continuous:true}),/Choose \[turn:close\]|remainingSeconds/);
 });

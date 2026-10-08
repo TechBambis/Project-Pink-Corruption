@@ -1,6 +1,6 @@
 # Windows x64 desktop build and acceptance
 
-The preserved Windows `0.1.0-smoke.5` installer passed 21 application checks and five installer checks in native run `37684622643`. Native runtime slice `37723827630` passed 13 checks including real frozen Kokoro synthesis and streaming recognition. Full Windows alpha conversation and GPU qualification remain pending. Linux results do not qualify Windows. The existing Linux `0.1.0-alpha.1` handoff is a separate, preserved reference.
+The Windows port uses the proven native build and installer acceptance tooling, now integrated with the current application. Use the [shared release controller](DESKTOP_RELEASE.md) for a new frozen source build. Earlier Windows alpha and Linux `0.1.0-alpha.1` handoffs remain separate, preserved references; their results do not qualify newly changed source or establish a full Windows conversation/physical-device pass.
 
 ## Build on native Windows x64
 
@@ -9,7 +9,7 @@ Extract the reviewed source snapshot into a writable local directory. Use Window
 From Command Prompt in that source directory:
 
 ```bat
-scripts\desktop-windows-build.cmd smoke 0.1.0-smoke.5
+scripts\desktop-windows-build.cmd smoke 0.1.0-smoke.2
 ```
 
 This first milestone includes Electron, bundled Node 24.18.1 with SQLite, private user data, the original offline chimes, and the native process ownership helper. It excludes local AI runtimes. Allow at least 2 GiB free for the build; installed size is determined by the actual build.
@@ -17,16 +17,16 @@ This first milestone includes Electron, bundled Node 24.18.1 with SQLite, privat
 Run the packaging acceptance before adding speech and inference:
 
 ```bat
-.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-install-check.mjs "dist\desktop-windows\0.1.0-smoke.5"
+.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-check.mjs "dist\desktop-windows\0.1.0-smoke.2\win-unpacked\Bambi Local Smoke.exe"
 ```
 
 Then build the full alpha:
 
 ```bat
-scripts\desktop-windows-build.cmd alpha 0.1.0-alpha.7
+scripts\desktop-windows-build.cmd alpha 0.1.0-alpha.2
 ```
 
-The alpha creates a fresh environment from the checksum-pinned native CPython 3.12.13 distribution (build 20260610) on Windows and freezes the locked Kokoro/ONNX/streaming services there. It retains the reviewed llama server, CPU variants, optional Vulkan libraries and notices from the checksum-pinned acquisition archive. It does not package an Ollama daemon, CUDA tree, model weights, developer venv, credentials, conversations or recordings. Allow at least 6 GiB free for the build tree and downloads; model setup needs additional space for the reviewed assets and staging reserve. The builder checks native x64 PE headers and normal/delay DLL imports. Vulkan additionally needs the actual driver's `vulkan-1.dll`; that optional driver dependency is recorded separately. Static import closure does not replace native loader/service tests.
+The alpha creates a fresh uv-managed CPython 3.12.13 environment on Windows and freezes the locked Kokoro/ONNX/streaming services there. It retains the reviewed llama server, CPU variants, optional Vulkan libraries and notices from the checksum-pinned acquisition archive. It does not package an Ollama daemon, CUDA tree, model weights, developer venv, credentials, conversations or recordings. Allow at least 6 GiB free for the build tree and downloads; model setup needs additional space for the reviewed assets and staging reserve. The builder checks native x64 PE headers and normal/delay DLL imports. Vulkan additionally needs the actual driver's `vulkan-1.dll`; that optional driver dependency is recorded separately. Static import closure does not replace native loader/service tests.
 
 Version outputs are immutable. For another attempt after an output has been created, use a new suffix. If a build was forcibly interrupted, `.runtime/desktop-windows-build.lock` may remain: verify the PID recorded there has stopped before removing that single stale lock. Never remove an active build's lock.
 
@@ -34,16 +34,14 @@ Each successful native build writes `dist/desktop-windows/VERSION/` with a per-u
 
 ## Native automated acceptance
 
-The installer check installs the actual NSIS executable into a fresh path containing spaces and Unicode, verifies the installed resources and executable against the packaged files, and runs the application acceptance below. It then uninstalls, reinstalls and uninstalls again while checking retention of the disposable fixture database. `INSTALLER-CHECK.json` records these outcomes separately from the application evidence. Silent installation on an administrative hosted Windows Server runner does not qualify ordinary-user Windows 11 installation or browser-received download security.
-
 The check copies an unpacked app outside the repository when needed, launches from a directory containing spaces and Unicode with an empty PATH, and records evidence under `%LOCALAPPDATA%\Bambi qualification`. Test tooling remains on the build/qualification host. It audits source/runtime/shell hashes and PE architecture, SQLite, private NTFS ACLs, sample output PCM, pause/resume, audio mute, End session, persistence, single ownership, ordinary Quit, killed Electron/backend/supervisor/guard, unchanged resources and an unrelated process/listener canary. It does not read private service command lines into its saved evidence.
 
 Run packaging acceptance on the alpha too, then test the reviewed public model data through Setup's folder chooser:
 
 ```bat
-.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-check.mjs "dist\desktop-windows\0.1.0-alpha.7\win-unpacked\Bambi Local.exe"
-.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-ai-check.mjs "dist\desktop-windows\0.1.0-alpha.7\win-unpacked\Bambi Local.exe" "D:\Reviewed model data"
-.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-ai-check.mjs "dist\desktop-windows\0.1.0-alpha.7\win-unpacked\Bambi Local.exe" "D:\Reviewed model data" --cpu
+.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-check.mjs "dist\desktop-windows\0.1.0-alpha.2\win-unpacked\Bambi Local.exe"
+.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-ai-check.mjs "dist\desktop-windows\0.1.0-alpha.2\win-unpacked\Bambi Local.exe" "D:\Reviewed model data"
+.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-ai-check.mjs "dist\desktop-windows\0.1.0-alpha.2\win-unpacked\Bambi Local.exe" "D:\Reviewed model data" --cpu
 ```
 
 These native AI checks cover verified copying, real text and spoken replies, the unchanged `bambi_classic` voice and preset, synthetic microphone recognition, separate audio/mic controls, End session, eight spoken turns, runtime cleanup, model reopen, timings and sampled owned process resources. Both accelerator runs are required to assess Vulkan and CPU separately. A GPU name is not proof of offloading. Record the actual llama offload log lines and conversation result. Working set, private commit and CPU counters have different meanings; the evidence describes the sampling method and limitations. Save complete preparation and first-playback times, hardware, Windows build and driver versions. Do not substitute Linux measurements.
@@ -68,6 +66,4 @@ The backend/services enter a private Windows Job Object with kill-on-close. A he
 
 ## Optional private CI
 
-The manual Windows workflow requires the user's explicit authorization to push, dispatch and retain private artifacts. Before GitHub writes, verify the authenticated user has numeric ID `337824705`. Before any private CI run, inspect actual remaining GitHub Free Actions and shared artifact storage allowances plus zero-spend budgets that prevent further paid usage; record the check time, account and available allowance. Use standard runners only, no paid upgrades or extra quota. The workflow has no automatic trigger, no publishing step, no dependency cache, and no artifact upload by default. Upload only the installer, matching source, notices, manifests, guide, hashes and qualification evidence if explicitly requested and their measured size fits the confirmed remaining shared allowance. Native speech checks download only reviewed public speech assets; app checks start and cancel the pinned full-model transfer without activating it. No model data is uploaded. For the alpha, sequential temporary parts can transport a package within the measured storage allowance; each new part is removed only after local hash verification and durable storage. Old qualified artifacts are preserved. Artifacts expire after one day. See [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
-
-On the separate `build/windows-smoke-*` and `build/windows-alpha-*` branches, `cla.yml` is a manual dispatch entry point that calls `desktop-windows.yml`; GitHub requires a dispatchable workflow path already registered on the default branch. The default branch's CLA workflow is preserved. The build branch excludes itself from automatic source CI. Only the explicitly dispatched, bounded Windows job runs. CI records native install and application outcomes without uploading profiles, process command lines or private service logs; reference-PC qualification remains separate.
+The manual Windows workflow is prepared locally. Do not push or dispatch it without the user's explicit authorization. Before GitHub writes, verify the authenticated user has numeric ID `337824705`. Before any private CI run, inspect actual remaining GitHub Free Actions and shared artifact storage allowances; record the check time, account and available allowance. Use standard runners only, no paid upgrades or extra quota. The workflow has no automatic trigger, no publishing step, no model download, no dependency cache, and no artifact upload by default. Upload only the installer, matching source, manifests, guide and hashes if explicitly requested and their measured size fits the confirmed remaining shared allowance. See [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).

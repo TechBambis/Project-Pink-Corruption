@@ -10,7 +10,7 @@ export function motifSvg(form: Exclude<MotifForm, 'ring'>) {
   const gears = [[100,100,40,1],[39,100,21,-1],[162,100,22,-1],[100,37,23,-1],[100,164,24,-1]];
   const shapes = gears.map(([x,y,r,d],index) => {
     const points = Array.from({length:64},(_,i) => { const a=i/64*Math.PI*2, radius=r*(i%4===0||i%4===3?1:.88);return `${(Math.cos(a)*radius).toFixed(2)},${(Math.sin(a)*radius).toFixed(2)}`; }).join(' ');
-    return `<g transform="translate(${x} ${y})"><g data-gear="${index}" data-direction="${d}" data-radius="${r}"><polygon points="${points}" fill="url(#motif-pink)" stroke="#f6badb" stroke-width="1"/><circle r="${r*.55}" fill="#2a1330" stroke="#d866ac" stroke-width="2"/><path d="M0 0C-9 -8 13 -13 16 0C20 22 -30 28 -28 0" fill="none" stroke="#f6b6d6" stroke-width="2"/></g></g>`;
+    return `<g transform="translate(${x} ${y})"><g data-gear="${index}" data-direction="${d}" data-radius="${r}"><polygon points="${points}" fill="url(#motif-pink)" stroke="#f6badb" stroke-width="1"/><circle r="${r*.55}" fill="#2a1330" stroke="#d866ac" stroke-width="2"/><path d="M0 0C-9 -8 13 -13 16 0C20 22 -30 28 -28 0" transform="scale(${r*.55/30})" fill="none" stroke="#f6b6d6" stroke-width="2"/></g></g>`;
   }).join('');
   return `<svg viewBox="0 0 200 200" aria-hidden="true">${defs}${shapes}</svg>`;
 }

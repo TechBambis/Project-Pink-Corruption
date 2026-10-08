@@ -88,11 +88,11 @@
           <div class="settings-navigation" id="settings-navigation">
             <nav id="primary-navigation" aria-label="Main navigation">
               <a href="#session" class="nav-item" data-nav="session" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 11 7-11 7z"></path></svg><span>Session<small>Start & control</small></span></a>
-              <a href="#voice" class="nav-item" data-nav="voice"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"></path></svg><span>Voice & AI<small>Companion & chat</small></span></a>
-              <a href="#sound" class="nav-item" data-nav="sound"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M8 5v14M12 2v20M16 6v12M20 9v6"></path></svg><span>Sound<small>Mix & rhythm</small></span></a>
-              <a href="#visuals" class="nav-item" data-nav="visuals"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c5 0 10 4 10 10s-4 10-10 10S2 18 2 12s4-7 8-7 7 3 7 7-2 5-5 5-4-2-4-4 2-3 3-3 2 1 2 2"></path></svg><span>Visuals<small>Scenes & spirals</small></span></a>
-              <a href="#devices" class="nav-item" data-nav="devices"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4M16 2v4M6 6h12v5a6 6 0 0 1-12 0zM12 17v5"></path></svg><span>Devices<small>Connection & patterns</small></span></a>
               <a href="#files" class="nav-item" data-nav="files"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h9l5 5v13H5zM14 3v6h5M9 13h6M9 17h6"></path></svg><span>Library<small>Sessions &amp; playlists</small></span></a>
+              <a href="#voice" class="nav-item" data-nav="voice"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"></rect><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"></path></svg><span>Voice & AI<small>Companion & chat</small></span></a>
+              <a href="#visuals" class="nav-item" data-nav="visuals"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c5 0 10 4 10 10s-4 10-10 10S2 18 2 12s4-7 8-7 7 3 7 7-2 5-5 5-4-2-4-4 2-3 3-3 2 1 2 2"></path></svg><span>Visuals<small>Scenes & spirals</small></span></a>
+              <a href="#sound" class="nav-item" data-nav="sound"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M8 5v14M12 2v20M16 6v12M20 9v6"></path></svg><span>Sound<small>Mix & rhythm</small></span></a>
+              <a href="#devices" class="nav-item" data-nav="devices"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4M16 2v4M6 6h12v5a6 6 0 0 1-12 0zM12 17v5"></path></svg><span>Devices<small>Connection & patterns</small></span></a>
               <a href="#extras" class="nav-item" data-nav="extras"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg><span>Extras<small>Sources & tools</small></span></a>
               <button id="settings-search-open" type="button" class="search-open nav-search" aria-haspopup="dialog" aria-controls="settings-search" aria-label="Find a setting"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"></circle><path d="m15 15 6 6"></path></svg><span>Search</span></button>
             </nav>
@@ -101,7 +101,7 @@
             <section id="view-session" class="workspace-view" data-view="session" aria-labelledby="heading-session">
               <div class="view-heading">
                 <h1 id="heading-session" tabindex="-1">Session settings</h1>
-                <p>Choose your session, duration and intensity.</p>
+                <p>Choose how to spend your session. Customize only what you need.</p>
               </div>
               <section id="session-basics" class="settings-group" data-section="Quick setup">
                 <h2>Quick setup</h2>
@@ -110,8 +110,9 @@
                     <legend class="sr-only">
 Choose your session
                     </legend>
-                    <button type="button" class="experience-choice" data-experience="conversation" aria-pressed="true"><span>Bambi Chat</span><small>Talk, type &amp; listen</small></button>
-                    <button type="button" class="experience-choice" data-experience="files" aria-pressed="false"><span>Session library</span><small>Files &amp; playlists</small></button>
+                    <button type="button" class="experience-choice" data-experience="conversation" aria-pressed="false"><span>Chat</span><small>Talk, type &amp; listen</small></button>
+                    <button type="button" class="experience-choice" data-experience="guided" aria-pressed="true"><span>Guided session</span><small>An AI-led journey</small></button>
+                    <button type="button" class="experience-choice" data-experience="files" aria-pressed="false"><span>Library</span><small>Files &amp; playlists</small></button>
                     <select id="mode" hidden aria-hidden="true" tabindex="-1">
                       <option value="local">Play my files</option>
                       <option value="conversation" selected>Bambi Chat</option>
@@ -119,28 +120,72 @@ Choose your session
                       <option value="official">External session</option>
                     </select>
                   </fieldset>
-                  <label>Duration <select id="duration"><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="1200" selected>20 minutes</option><option value="1800">30 minutes</option><option value="3600">60 minutes</option></select></label>
-                  <label class="range-label">Intensity <output id="intensity-label">45</output><input id="intensity" type="range" min="0" max="100" value="45"></label>
+                  <label id="session-duration-control">Duration <select id="duration"><option value="unlimited" selected>Unlimited</option><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="1200">20 minutes</option><option value="1800">30 minutes</option><option value="3600">60 minutes</option></select></label>
+                  <label id="session-intensity-control" class="range-label">Intensity <output id="intensity-label">45</output><input id="intensity" type="range" min="0" max="100" value="45"></label>
                 </div>
                 <div class="experience-help">
                   <p id="experience-description"></p>
                   <a id="experience-files-link" href="#files" data-target="files" hidden>Open your library</a>
                 </div>
                 <label id="experience-join-label" class="check experience-join" hidden><input id="experience-join" type="checkbox"> Let Bambi join in</label>
+                <div class="session-shortcuts" aria-label="Customize session">
+                  <a href="#voice" data-target="voice">Voice <span id="session-voice-name">Heart</span></a>
+                  <a href="#sound" data-target="audio-preset">Sound <span id="session-preset-name">Local Clean</span></a>
+                  <a href="#visuals" data-target="scene">Visuals <span id="session-scene-name">Spiral Focus</span></a>
+                </div>
+                <section id="session-direction-settings" class="session-direction" data-section="Session direction" aria-labelledby="direction-heading" hidden>
+                  <h2 id="direction-heading">Session direction</h2>
+                  <fieldset id="direction-controls">
+                    <legend class="sr-only">Session style and components</legend>
+                    <label>Style <select id="session-direction" aria-describedby="direction-description direction-influence"><option value="balanced">Balanced</option><option value="custom">Custom</option></select></label>
+                    <p id="direction-description" class="hint">Varied scenes, expressive narration and room between peaks.</p>
+                    <p id="direction-influence" class="hint" hidden></p>
+                    <details id="direction-details">
+                      <summary>Fine-tune this style</summary>
+                      <div class="settings-grid">
+                        <label class="range-label">Contrast <output id="direction-contrast-label">50%</output><input id="direction-contrast" type="range" min="0" max="100" value="50" aria-describedby="direction-contrast-help"></label>
+                        <label class="range-label">Repetition <output id="direction-repetition-label">50%</output><input id="direction-repetition" type="range" min="0" max="100" value="50" aria-describedby="direction-repetition-help"></label>
+                        <p id="direction-contrast-help" class="hint">Higher contrast favors sparse holds and sharper switches into layered scenes.</p>
+                        <p id="direction-repetition-help" class="hint">Favor recurring anchors and mantra episodes. Each mantra still repeats three times.</p>
+                        <label>Voice rhythm <select id="direction-rhythm"><option value="expressive">Expressive / varied</option><option value="slow">Slow / spacious</option><option value="driving">Rhythmic / tighter</option></select></label>
+                        <label>Visual motifs <select id="direction-motifs"><option value="mixed">Varied journey</option><option value="ring">Ring &amp; soft reflection</option><option value="heart">Turning heart</option><option value="gears">Linked gears</option></select></label>
+                        <label>Narrative focus <select id="direction-theme"><option value="varied">Varied ideas</option><option value="attention">Focused attention</option><option value="imagination">Imagination</option><option value="perspective">Fictional role &amp; perspective</option><option value="ease">Comfort &amp; settling</option></select></label>
+                      </div>
+                      <fieldset class="direction-mechanisms">
+                        <legend>Include in the journey</legend>
+                        <label class="check"><input id="direction-blink" type="checkbox" checked> Eye-rest cues</label>
+                        <label class="check"><input id="direction-fractionation" type="checkbox" checked> A/B fractionation</label>
+                        <label class="check"><input id="direction-mindwipe" type="checkbox" checked> Mindwipe / blank &amp; reanchor</label>
+                        <label class="check"><input id="direction-reset" type="checkbox" checked> Chapter resets</label>
+                        <label class="check"><input id="direction-self" type="checkbox" checked> Original / Old Self</label>
+                        <label class="check"><input id="direction-mantra" type="checkbox" checked> Mantra loops</label>
+                        <label class="check"><input id="direction-peak" type="checkbox" checked> Layered peaks</label>
+                      </fieldset>
+                      <p class="hint">Enabled moments remain subject to the session phase, available voice and reduced motion. Quiet recovery stays part of the journey.</p>
+                    </details>
+                  </fieldset>
+                  <details id="guided-narration-style-settings" data-section="Guided narration style">
+                    <summary>Narration style</summary>
+                    <label>How Bambi tells the story <textarea id="guided-style" maxlength="300" rows="2" placeholder="Quiet, certain, short sentences" aria-describedby="guided-style-help">Soft, playful, dreamy and affectionate</textarea></label>
+                    <p id="guided-style-help" class="hint">Optional wording and tone for Guided narration. Session direction controls pacing, repetition and effects. Prepared passages keep their current style.</p>
+                  </details>
+                  <p class="hint direction-timing">Changes guide upcoming passages; prepared moments finish as scheduled. Intensity, voice and volume stay yours to set.</p>
+                </section>
+                <button id="session-launch" type="button" class="session-launch" hidden>Start guided session</button>
                 <div id="official-note" class="hint hidden">
 Open your official session in its own tab, then start the local clock alongside it. Access and playback stay with the provider.
                 </div>
                 <details id="session-flow-settings" class="settings-fold" data-section="Session flow">
-                  <summary>Session flow</summary>
+                  <summary>Advanced session controls</summary>
                   <div class="fold-content">
-                    <label class="check"><input id="session-events" type="checkbox"> Choreographed session events (development)</label>
-                    <p class="hint">Timed changes of focus, brief pauses and a gentle closing. Your conversation can interrupt a passage; Pause and Stop remain available.</p>
+                    <label class="check"><input id="session-events" type="checkbox" checked> Adaptive session direction (development)</label>
+                    <p class="hint">A changing visual journey with varied voice pace, quieter passages and a gentle closing. Your conversation can interrupt a passage; Pause and Stop remain available.</p>
                     <label class="check"><input id="event-haptics" type="checkbox"> Optional event vibration cues</label>
                     <label class="file-button">Load authored event program (JSON)<input id="event-program-file" type="file" accept=".json,application/json"></label>
-                    <button id="event-program-clear" class="quiet" type="button">Use development sequence</button>
-                    <p id="event-status" class="hint">Original development sequence</p>
+                    <button id="event-program-clear" class="quiet" type="button">Use adaptive direction</button>
+                    <p id="event-status" class="hint">Adaptive session direction</p>
                     <label class="check"><input id="narration-enabled" type="checkbox" checked> Continuous narration</label>
-                    <p class="hint">Start a session to listen without sending a message for each passage. Narration ends after your chosen duration. Space pauses playback.</p>
+                    <p class="hint">Start a session to listen without sending a message for each passage. Unlimited continues until you end it; timed sessions end after your chosen duration. Space pauses playback.</p>
                     <div class="settings-grid">
                       <label>Induction pause (seconds)<input id="narration-pause-induction" type="number" min="0" max="30" step="0.5" value="4"></label>
                       <label>Deepening pause (seconds)<input id="narration-pause-deepening" type="number" min="0" max="30" step="0.5" value="5"></label>
@@ -151,11 +196,6 @@ Open your official session in its own tab, then start the local clock alongside 
                     <label>Flow <select id="curve"><option value="slow-build">Slow build</option><option value="wave">Waves</option><option value="peak-and-cool">Peak & cool</option><option value="linear">Linear</option></select></label>
                   </div>
                 </details>
-                <div class="session-shortcuts" aria-label="Customize session">
-                  <a href="#voice" data-target="voice">Voice <span id="session-voice-name">Heart</span></a>
-                  <a href="#sound" data-target="audio-preset">Sound <span id="session-preset-name">Local Clean</span></a>
-                  <a href="#visuals" data-target="scene">Visuals <span id="session-scene-name">Spiral Focus</span></a>
-                </div>
               </section>
             </section>
             <section id="view-voice" class="workspace-view" data-view="voice" aria-labelledby="heading-voice" hidden>
@@ -184,15 +224,21 @@ Open your official session in its own tab, then start the local clock alongside 
                   </select>
                   <label>Voice <select id="voice"><option value="af_heart">Heart</option><option value="af_bella">Bella</option><option value="af_sarah">Sarah</option><option value="af_nicole">Nicole</option><option value="af_sky">Sky</option><option value="af_river">River</option><option value="af_aoede">Aoede</option><option value="bambi_classic">Bambi Classic (custom blend)</option></select></label>
                   <label>Speaking speed <input id="speed" type="number" min="0.5" max="1.5" step="0.01" value="0.78"></label>
-                  <label class="check"><input id="adaptive-delivery" type="checkbox" checked> Adaptive narration: pace, pauses &amp; mix</label>
-                  <label>Companion / prompt <select id="prompt-template"><option value="bambisleep-classic">BambiSleep Classic</option><option value="gentle-induction">Gentle Induction</option><option value="custom">Your own companion</option></select></label>
+                  <label class="check"><input id="adaptive-delivery" type="checkbox" checked> Classic narration: adaptive pace, pauses &amp; mix</label>
                   <label>Your name <input id="bambi-name" maxlength="50" value="Bambi"></label>
-                </div>
-                <div id="prompt-description" class="hint">
                 </div>
                 <a class="text-link" href="/voice-lab" target="_blank" rel="noopener">Find your favorite voice in the Voice Lab</a>
                 <p id="companion-description" class="hint"></p>
               </section>
+              <details id="chat-personality-settings" class="settings-fold" data-section="Chat personality">
+                <summary>Chat personality</summary>
+                <div class="fold-content">
+                  <label>Personality <select id="prompt-template" aria-describedby="chat-personality-help"><option value="bambisleep-classic">BambiSleep Classic</option><option value="gentle-induction">Gentle Induction</option><option value="custom">Custom</option></select></label>
+                  <p id="prompt-description" class="hint"></p>
+                  <label>Your custom personality <textarea id="persona" maxlength="300" rows="2" placeholder="Describe her tone and personality" aria-describedby="chat-personality-help">Soft, playful, dreamy and affectionate</textarea></label>
+                  <p id="chat-personality-help" class="hint">For chat replies and classic narration. Choose Custom to use your own personality text. Guided uses Narration style in Session direction.</p>
+                </div>
+              </details>
               <details id="microphone-settings" data-section="Microphone &amp; conversation">
                 <summary>Microphone &amp; conversation</summary>
                 <label>Recognition<select id="mic-recognizer"><option value="auto" selected>Automatic · streaming when installed</option><option value="whisper">Whisper · complete speech segments</option><option value="streaming">Streaming · English, local CPU</option></select></label>
@@ -209,7 +255,7 @@ Open your official session in its own tab, then start the local clock alongside 
               </details>
               <section id="conversation-settings" class="settings-group" data-section="Conversation &amp; memories">
                 <h2>Conversation &amp; memories</h2>
-                <label>Conversation style<select id="conversation-style"><option value="situational" selected>Situational · follow the conversation</option><option value="reactive">Classic · replies &amp; continuous narration</option></select></label>
+                <label>Conversation style<select id="conversation-style"><option value="situational">Situational · follow the conversation</option><option value="reactive" selected>Classic · replies &amp; continuous narration</option></select></label>
                 <p class="hint">Situational follows your words, asks when an answer matters and builds the next passage from your reply. Real questions leave room for you to answer.</p>
                 <p class="hint">Type directly in the player. Your latest reply stays there until the next one.</p>
                 <div class="conversation-tools">
@@ -218,17 +264,16 @@ Open your official session in its own tab, then start the local clock alongside 
                 </div>
                 <p class="hint">New conversation clears the current conversational context. Saved preferences and searchable earlier chats remain available.</p>
               </section>
-              <details id="voice-blend-settings" class="settings-fold" data-section="Voice blend &amp; persona">
-                <summary>Voice blend & persona</summary>
+              <details id="voice-blend-settings" class="settings-fold" data-section="Voice blend">
+                <summary>Voice blend</summary>
                 <div class="fold-content">
                   <div class="settings-grid">
                     <label>Second voice <select id="voice2"><option value="">No blend</option></select></label>
                     <label>Blend amount <input id="voice-mix" type="range" min="0" max="1" step="0.05" value="0.25"></label>
                   </div>
-                  <label class="check"><input id="dual-voice" type="checkbox"> Dual Voice</label>
-                  <p class="hint">During guided passages, a softer Bambi voice speaks in the main voice’s pauses and grows more present through the session.</p>
+                  <label class="check"><input id="dual-voice" type="checkbox"> Dual Voice · classic narration</label>
+                  <p class="hint">In classic continuous narration, a softer second layer speaks in the main voice’s pauses. Guided engine events provide their own voice layers.</p>
                   <label class="check"><input id="voice-echoes" type="checkbox" checked> Soft voice echoes in induction and awakening</label>
-                  <label>Custom persona <input id="persona" maxlength="300" value="Soft, playful, dreamy and affectionate"></label>
                 </div>
                 <label class="check"><input id="voice-occasional" type="checkbox"> Let Bambi speak occasionally on her own</label>
                 <p class="hint">Adds occasional spoken moments during a running session.</p>
@@ -348,7 +393,7 @@ Open your official session in its own tab, then start the local clock alongside 
               </details>
               <details id="trigger-audio-settings" data-section="Trigger sequence &amp; sounds">
                 <summary>Trigger sequence &amp; sounds</summary>
-                <label class="check"><input id="triggers-enabled" type="checkbox" checked>Highlight triggers in text </label>
+                <label class="check"><input id="triggers-enabled" type="checkbox" checked>Enable trigger words &amp; effects </label>
                 <label class="check"><input id="trigger-sound" type="checkbox" checked>Play trigger sounds </label>
                 <label class="check"><input id="trigger-snap" type="checkbox" checked> Snap with each spoken trigger</label>
                 <label class="check"><input id="trigger-moan" type="checkbox" checked> Soft moan with each trigger</label>
@@ -605,7 +650,9 @@ Open your official session in its own tab, then start the local clock alongside 
                 <div class="tool-links">
                   <a class="tool-link" href="#conversation-settings" data-target="conversation-settings">Conversation &amp; memories <span>Saved preferences and recent chats</span></a>
                   <a class="tool-link" href="/studio" target="_blank" rel="noopener">Session Studio <span>Create and export sessions</span></a>
-                  <a class="tool-link" href="/setup" target="_blank" rel="noopener">Setup <span>Check services and reply timing</span></a>
+                  <button id="local-models-open" type="button" class="tool-link">Local AI models &amp; setup <span>Hardware recommendations, downloads and first-run guide</span></button>
+                  <button id="privacy-access-open" type="button" class="tool-link">Privacy &amp; access <span id="privacy-access-summary">Optional permissions and local session context</span></button>
+                  <a class="tool-link" href="/setup">Setup &amp; diagnostics <span>Check services and reply timing</span></a>
                   <a class="tool-link" href="/voice-lab" target="_blank" rel="noopener">Voice Lab <span>Compare voices and sounds</span></a>
                   <button type="button" class="tool-link" data-open-performance>Show performance <span>FPS, AI speed and audio status</span></button>
                 </div>

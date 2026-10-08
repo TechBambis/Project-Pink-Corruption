@@ -3,13 +3,15 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import { z } from 'zod';
+import { wipeNarrationFacts } from './presentation';
 import { ChatRequestSchema } from '../../ai/request';
 import { EventSchema, MotifSchema, type BambiEvent, type PresentationState } from './contract';
 import { compileEvent, speechInstruction } from './runtime';
 import { giggleOffset } from '../../audio/giggle';
 import { pinkWordOffsets } from '../../visuals/spoken-cues';
 
-export const EventSpeechRequestSchema = ChatRequestSchema.pick({ model: true, voice: true, speed: true, preset: true, sampling: true, context: true, persona: true, username: true }).extend({ event: EventSchema, payloadId: z.string().min(1).max(160), allowedTriggers: z.array(z.string().max(100)).max(100), motif: MotifSchema.optional(), precedingNarration: z.string().max(1200).optional(), presentationPreferences: z.object({ visualsEnabled: z.boolean(), reducedMotion: z.boolean() }).strict().optional() }).strict();
+// Older event clients supplied only persona text; retain that custom-character default.
+export const EventSpeechRequestSchema = ChatRequestSchema.pick({ model: true, voice: true, speed: true, preset: true, sampling: true, context: true, persona: true, username: true, selectedTriggers: true, collar: true, collarName: true, localContext: true }).extend({ promptId: ChatRequestSchema.shape.promptId.default('custom'), narrationStyle: z.string().max(300).optional(), event: EventSchema, payloadId: z.string().min(1).max(160), allowedTriggers: z.array(z.string().max(100)).max(100), motif: MotifSchema.optional(), precedingNarration: z.string().max(1200).optional(), presentationPreferences: z.object({ visualsEnabled: z.boolean(), reducedMotion: z.boolean(), effectsEnabled: z.boolean().optional() }).strict().optional() }).strict();
 export type EventSpeechRequest = z.infer<typeof EventSpeechRequestSchema>;
 export interface RenderedEventSpeech { payloadId: string; text: string; audio: string; durationMs: number; targetMs: number; textAttempts: number; triggerOffsetMs?: number; cueOffsetMs?: number; giggleOffsetMs?: number; pinkOffsetsMs?: number[]; words?: { word: string; atMs: number }[] }
 export class SpeechWindowError extends Error {
@@ -148,11 +150,12 @@ export async function renderEventSpeech(raw: EventSpeechRequest, dependencies: {
   const screenFacts = !visible ? 'The screen is dark or visuals are disabled. Do not describe visible objects or movement.' : state.activeLayers.includes('motif_visual')
     ? scan ? `The ${object} ${movement}. You may describe this present movement.` : `The ${object} stays steady. Do not describe it pulsing, rotating, scanning or moving.`
     : 'Use only the engine-supplied visible scene.';
-  const presentationContract = `\nPRESENTATION CONTRACT: ${screenFacts} Do not speak the standalone command word Blink outside its dedicated engine-owned cue. Use natural blinking or eye rest for explanation. Describe only current scheduled actions, in present tense; never invent a flash, sound, device action or future visual transition. Blink instructions may explain what a later displayed cue means; do not claim that cue is appearing now. Imagined sensations must be clearly framed as imagination, not as screen/audio events.`;
+  const presentationContract = `\nPRESENTATION CONTRACT: ${screenFacts} ${wipeNarrationFacts(request.event, slot.atMs, preferences)} Do not speak the standalone command word Blink outside its dedicated engine-owned cue. Use natural blinking or eye rest for explanation. Describe only current scheduled actions, in present tense; never invent a flash, sound, device action or future visual transition. Blink instructions may explain what a later displayed cue means; do not claim that cue is appearing now. Imagined sensations must be clearly framed as imagination, not as screen/audio events.`;
   const reserved = [...new Set(dependencies.knownTriggers)].filter(phrase => phrase.toLowerCase() !== slot.speech.requiredTrigger?.toLowerCase());
   // Put style before the engine contract. A reserved listener name is not narration input.
   const listenerIsReserved = dependencies.knownTriggers.some(phrase => new RegExp(`\\b${escape(phrase)}\\b`, 'i').test(request.username));
-  const instruction = `Persona: ${JSON.stringify(request.persona)}.`
+  const instruction = 'Use the selected character supplied in the system instructions.'
+    + (request.narrationStyle ? `\nNarration delivery preference (tone and pacing within the selected character and engine contract): ${JSON.stringify(request.narrationStyle)}.` : '')
     + (listenerIsReserved ? '' : `\nListener label (metadata, not a required salutation): ${JSON.stringify(request.username)}.`)
     + '\n' + speechInstruction({ ...slot, speech: { ...slot.speech, wordTarget: words } }, request.event.softReturn?.final ? undefined : motif, frame ? { state: frame.state, label: frame.label } : undefined)
     + presentationContract

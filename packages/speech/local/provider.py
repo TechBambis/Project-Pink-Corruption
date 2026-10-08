@@ -12,7 +12,7 @@ import onnxruntime as ort
 from kokoro_onnx import Kokoro
 from .config import ROOT, DATA, MODELS
 from .voices import VoiceRegistry
-from .spoken import spoken_input
+from .spoken import spoken_input, pronunciation_input
 from .alignment import word_timings
 
 class KokoroProvider:
@@ -54,10 +54,10 @@ class KokoroProvider:
             raise ValueError('Kokoro expects a short spoken phrase of at most 180 characters')
         if not .25 <= speed <= 1.5:
             raise ValueError('Effective speech speed must be 0.25–1.5')
-        synthesis_text = text
+        synthesis_text = pronunciation_input(text)
         synthesis_speed = speed
         style = self.registry.style(voice)
-        cache_key = [self.model_id, self.registry.fingerprint(voice), synthesis_text, synthesis_speed, 'en-us', 'kokoro-onnx-0.6.1', 'word-timing-v3-partial']
+        cache_key = [self.model_id, self.registry.fingerprint(voice), text, synthesis_text, synthesis_speed, 'en-us', 'kokoro-onnx-0.6.1', 'word-timing-v4-initialisms']
         key = hashlib.sha256(json.dumps(cache_key).encode()).hexdigest()
         path = self.cache / f'{key}.npy'
         timing_path = path.with_suffix('.json')

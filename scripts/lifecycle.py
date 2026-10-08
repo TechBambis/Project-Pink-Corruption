@@ -3,18 +3,22 @@
 # Separate commercial permissions: see LICENSING.md.
 
 import fcntl, hashlib, json, os, pathlib, shutil, signal, subprocess, sys, time, urllib.request
+from runtime_process import identity, recover_llama, registry, save_state, stop_llama, RUNTIME_PROFILE
 root=pathlib.Path(__file__).resolve().parents[1];os.chdir(root)
 runtime=root/'runtime';runtime.mkdir(exist_ok=True)
 lock=open(runtime/'lifecycle.lock','w');fcntl.flock(lock,fcntl.LOCK_EX)
 statepath=runtime/'owned-processes.json'
 try: state=json.loads(statepath.read_text())
 except (FileNotFoundError,json.JSONDecodeError): state={}
-def save():statepath.write_text(json.dumps(state,indent=2))
-def identity(pid):
- try:
-  # Linux /proc stat comm may contain spaces; starttime is field 22.
-  return pathlib.Path(f'/proc/{pid}/stat').read_text().rsplit(')',1)[1].split()[19]
- except (FileNotFoundError,ProcessLookupError):return None
+def save():save_state(statepath,state)
+
+# A server can survive an interrupted launcher or a lost registry entry.
+llama_pins=registry(root)
+recovered_llama=recover_llama(root,llama_pins,RUNTIME_PROFILE)
+if recovered_llama:
+ state['llama']={**(state.get('llama',{}) if state.get('llama',{}).get('pid')==recovered_llama['pid'] else {}),**recovered_llama}
+ save()
+
 def request(path,method='GET'):
  try:
   with urllib.request.urlopen(urllib.request.Request(path,method=method),timeout=3) as r:
@@ -30,6 +34,7 @@ def server_fingerprint():
  for path in sorted((root/'presets/audio').glob('*.json')):h.update(path.read_bytes())
  h.update((root/'packages/content/session-phases-neutral.json').read_bytes())
  h.update((root/'packages/content/script-direction.json').read_bytes())
+ h.update((root/'packages/content/bambicloud-triggers.json').read_bytes())
  for path in sorted((root/'packages/content/stable-2.0/workers/prompts').glob('*.json')):h.update(path.read_bytes())
  h.update((root/'package-lock.json').read_bytes())
  cloud_config=root/'.env.cloud'
@@ -45,7 +50,7 @@ def tts_fingerprint():
 
 def restart_owned(name,fingerprint,force=False):
  entry=state.get(name)
- if not entry or (not force and entry.get('fingerprint')==fingerprint) or identity(entry['pid'])!=entry['starttime']:return
+ if not entry or (not force and entry.get('fingerprint')==fingerprint) or not entry.get('starttime') or identity(entry['pid'])!=entry['starttime']:return
  if entry.get('root')!=str(root) or os.getpgid(entry['pid'])!=entry['pid']:
   raise RuntimeError('Refusing to restart unowned process')
  if name=='server':request('http://127.0.0.1:6969/api/panic','POST')
@@ -59,7 +64,7 @@ def restart_owned(name,fingerprint,force=False):
 
 def launch(name,args):
  existing=state.get(name)
- if existing and identity(existing['pid'])==existing['starttime']:return
+ if existing and existing.get('starttime') and identity(existing['pid'])==existing['starttime']:return
  log=open(runtime/(name+'.log'),'ab',buffering=0)
  p=subprocess.Popen(args,cwd=root,stdout=log,stderr=log,stdin=subprocess.DEVNULL,start_new_session=True,env=os.environ.copy())
  state[name]={'fingerprint':server_fingerprint() if name=='server' else tts_fingerprint() if name=='tts' else None,'pid':p.pid,'starttime':identity(p.pid),'command':args,'root':str(root)};save()
@@ -69,6 +74,15 @@ def wait(url,seconds):
   if request(url):return True
   time.sleep(.3)
  return False
+def node_executable():
+ # An editor-provided wrapper can exist on the host but point inside Flatpak.
+ # Validate the executable before recording an owned server launch.
+ for candidate in dict.fromkeys([shutil.which('node'),'/usr/bin/node']):
+  if not candidate:continue
+  try:
+   if subprocess.run([candidate,'--version'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=5).returncode==0:return candidate
+  except (OSError,subprocess.TimeoutExpired):pass
+ raise RuntimeError('No working Node.js executable found; install Node.js 22.13+ and retry.')
 def container_owned():
  p=subprocess.run(['podman','inspect','bambi-local-kokoro'],capture_output=True,text=True)
  if p.returncode:return False
@@ -83,8 +97,7 @@ if command=='restart-server':
  ensure_cloud_tunnel()
  restart_owned('server',server_fingerprint(),force=True)
  if not request('http://127.0.0.1:6969/api/health'):
-  node_binary=shutil.which('node')
-  if not node_binary:raise RuntimeError('Node.js missing from PATH; run scripts/env.sh first.')
+  node_binary=node_executable()
   launch('server',[node_binary,'--import','tsx','apps/server/index.ts'])
   if not wait('http://127.0.0.1:6969/api/health',15):print('Server failed. See runtime/server.log.');sys.exit(1)
  print('Bambi Local server READY\nhttp://127.0.0.1:6969');sys.exit(0)
@@ -92,7 +105,12 @@ if command in ['stop','panic']:
  request('http://127.0.0.1:6969/api/panic','POST')
  for name in ['server','tts','llama','whisper','ollama','cloud-tunnel']:
   entry=state.get(name)
-  if entry and entry.get('root')==str(root) and identity(entry['pid'])==entry['starttime']:
+  if name=='llama':
+   if recovered_llama:
+    stop_llama(root,recovered_llama,llama_pins,RUNTIME_PROFILE)
+   state.pop(name,None)
+   continue
+  if entry and entry.get('starttime') and entry.get('root')==str(root) and identity(entry['pid'])==entry['starttime']:
    try:
     if os.getpgid(entry['pid'])==entry['pid']:os.killpg(entry['pid'],signal.SIGTERM)
    except ProcessLookupError:pass
@@ -147,8 +165,7 @@ if command=='services':
 restart_owned('server',server_fingerprint())
 
 if not request('http://127.0.0.1:6969/api/health'):
- node_binary=shutil.which('node')
- if not node_binary:raise RuntimeError('Node.js missing from PATH; run scripts/env.sh first.')
+ node_binary=node_executable()
  launch('server',[node_binary,'--import','tsx','apps/server/index.ts'])
  if not wait('http://127.0.0.1:6969/api/health',15):print('Server failed. See runtime/server.log.');sys.exit(1)
 print('Bambi Local READY\nhttp://127.0.0.1:6969')

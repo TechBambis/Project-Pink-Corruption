@@ -1,34 +1,29 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
-// Separate commercial permissions: see LICENSING.md.
-
-import {existsSync,readFileSync,statSync} from 'node:fs';
-import {resolve,basename} from 'node:path';
+import {statSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {z} from 'zod';
-import {modelContext,modelLabel,nativeSamplingModels,communityQwen} from './models';
+import {modelContext,modelLabel,nativeSamplingModels} from './models';
+import {localModelCatalog} from './model-catalog';
+import {NATIVE_CONTEXT} from '../../config/sampling';
 import type {ModelCandidate} from './recommendation';
 
-const pinSchema=z.object({alias:z.string().min(1).max(200),file:z.string().min(1).max(250),bytes:z.number().positive().finite()});
 const tagSchema=z.object({name:z.string().min(1).max(200),size:z.number().positive().finite().optional()});
-export function modelInventory(tags:unknown):ModelCandidate[]{
+export function modelInventory(tags:unknown,options:{desktop?:boolean;directory?:string;installedModel?:string;verified?:boolean}={}):ModelCandidate[]{
  const candidates=new Map<string,ModelCandidate>();
- for(const path of ['docs/community-models.json','docs/qwen36-model.json','docs/comparison-models.json']){
-  if(!existsSync(path))continue;
-  try{const parsed=JSON.parse(readFileSync(path,'utf8'));
-   for(const value of (Array.isArray(parsed)?parsed:[parsed]).slice(0,64)){
-    const result=pinSchema.safeParse(value);if(!result.success||basename(result.data.file)!==result.data.file)continue;
-    const pin=result.data;
-    const file=resolve('models/community',pin.file);
-    let installed=false;try{installed=statSync(file).isFile()&&statSync(file).size===pin.bytes;}catch{}
-    candidates.set(pin.alias,{id:pin.alias,label:modelLabel(pin.alias),weightsBytes:pin.bytes,contextTokens:modelContext(pin.alias,'bambisleep-classic'),backend:nativeSamplingModels.includes(pin.alias)?'llama.cpp':'ollama',installed:nativeSamplingModels.includes(pin.alias)&&installed,priority:pin.alias===communityQwen?100:50});
-   }
-  }catch{}
+ for(const pin of localModelCatalog){
+  let installed=false;
+  if(options.desktop)installed=options.verified===true&&options.installedModel===pin.alias;
+  else try{const file=statSync(resolve(options.directory??'models','community',pin.file));installed=file.isFile()&&file.size===pin.bytes;}catch{}
+  const native=nativeSamplingModels.includes(pin.alias),contextTokens=options.desktop?pin.context:modelContext(pin.alias,'bambisleep-classic');
+  candidates.set(pin.alias,{id:pin.alias,label:modelLabel(pin.alias),weightsBytes:pin.bytes,contextTokens,backend:native?'llama.cpp':'ollama',installed:native&&installed,priority:pin.priority,desktopSupported:options.desktop?pin.desktopSupported:undefined,qualification:pin.qualification,description:pin.description,sourceUrl:`https://huggingface.co/${pin.repo}/tree/${pin.revision}`,downloadBytes:pin.bytes,canDownload:pin.desktopSupported&&pin.license==='apache-2.0',promptCompatible:contextTokens>=NATIVE_CONTEXT});
  }
  const list=z.object({models:z.array(z.unknown()).max(256)}).safeParse(tags);
  if(list.success)for(const value of list.data.models){
   const parsed=tagSchema.safeParse(value);if(!parsed.success)continue;
   const tag=parsed.data,known=candidates.get(tag.name),native=nativeSamplingModels.includes(tag.name);
-  candidates.set(tag.name,{id:tag.name,label:modelLabel(tag.name),weightsBytes:known?.weightsBytes??tag.size??null,contextTokens:modelContext(tag.name,'bambisleep-classic'),backend:native?'llama.cpp':'ollama',installed:native?known?.installed??false:true,priority:known?.priority??(tag.name==='qwen3.5:4b'?70:10)});
+  const contextTokens=known?.contextTokens??modelContext(tag.name,'bambisleep-classic');
+  candidates.set(tag.name,{...known,id:tag.name,label:modelLabel(tag.name),weightsBytes:known?.weightsBytes??tag.size??null,contextTokens,backend:native?'llama.cpp':'ollama',installed:native?known?.installed??false:true,priority:known?.priority??(tag.name==='qwen3.5:4b'?70:10),canDownload:known?.canDownload??false,promptCompatible:contextTokens>=NATIVE_CONTEXT});
  }
  return [...candidates.values()];
 }

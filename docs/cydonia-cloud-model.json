@@ -1,9 +1,0 @@
-{
-  "repository": "bartowski/TheDrummer_Cydonia-24B-v4.3-GGUF",
-  "file": "TheDrummer_Cydonia-24B-v4.3-Q5_K_M.gguf",
-  "bytes": 16763985312,
-  "sha256": "dc7015bf551de7e9196340a2e80dfe0f170d2fbb34264532d1786100b7985038",
-  "verifiedAt": "2026-10-05",
-  "source": "https://huggingface.co/bartowski/TheDrummer_Cydonia-24B-v4.3-GGUF",
-  "revision": "49d2274b89f91c5e4ea21ff342113e1a6235eaf0"
-}

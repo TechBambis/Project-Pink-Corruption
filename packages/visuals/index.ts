@@ -8,6 +8,8 @@ import { StableSpiral, type StableSpiralSettings } from './stable';
 import { clamp, sceneNames } from '../safety/actions';
 import { TriggerVisualState, emptyTriggerFrame, triggerEffectFor, type TriggerEffect } from './trigger-effects';
 import { TriggerOverlay } from './trigger-overlay';
+import {WiperOverlay} from './wiper';
+import {emptyWiperFrame} from '../audio/wiper';
 import {DescentVisualState,DescentOverlay,emptyDescentFrame} from './descent';
 import { CanvasRenderer } from './canvas-renderer';
 import { visualResolution } from './resolution';
@@ -36,6 +38,7 @@ export class VisualEngine {
  private fixationLayer=document.createElement('div');
  stable!:StableSpiral;stableSettings:StableSpiralSettings={speed:1,complexity:1,alpha:1,colorA:'#c700c7',colorB:'#ff82ff',mode:'classic'};
  private lastPulseTime=0;private triggers=new TriggerVisualState();private overlay:TriggerOverlay;opacity=1;gl!:WebGLRenderingContext;private program!:WebGLProgram;private quad!:WebGLBuffer;scene:Scene='Spiral Focus';reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;quality=1;fps=60;private frames=0;private last=0;private sample=0;private frameMs=16.7;pulse=0;effect:'pulse'|'spiral'|'particles'='pulse';motion=1;density=.7;private observer:ResizeObserver;
+ private wiperOverlay:WiperOverlay;
  private breath=new BreathVisualState();private breathOverlay:BreathOverlay;
  private descent=new DescentVisualState();
  private descentOverlay:DescentOverlay;
@@ -57,6 +60,7 @@ export class VisualEngine {
   this.breathOverlay=new BreathOverlay(canvas);
   this.descentOverlay=new DescentOverlay(canvas);
   this.overlay=new TriggerOverlay(canvas,effectHost);
+  this.wiperOverlay=new WiperOverlay(canvas);
   canvas.parentElement?.style.setProperty('--heart-clear-size','clamp(144px,20vmin,216px)');
   this.focusWell.dataset.focusWell='heart';this.focusWell.setAttribute('aria-hidden','true');
   this.focusWell.style.cssText='position:absolute;left:50%;top:50%;width:var(--heart-clear-size,clamp(144px,20vmin,216px));height:var(--heart-clear-size,clamp(144px,20vmin,216px));display:none;pointer-events:none;z-index:3;transform:translate(-50%,-50%);background:radial-gradient(circle closest-side,#140c1d 0 68%,#140c1d00 100%);';
@@ -92,7 +96,7 @@ export class VisualEngine {
  private visible=true;
  get enabled(){return this.visible;}
  set enabled(value:boolean){value=value&&!this.failed;if(value!==this.visible||!value){this.blend?.clear();this.transition.reset();this.previousScene=null;this.pulse=0;this.clearVoiceReaction();this.clearTrigger();this.clearDescent();this.clearBreath();}this.visible=value;this.canvas.style.visibility=value?'visible':'hidden';if(!value){this.fixationLayer.style.display='none';this.focusWell.style.display='none';if(this.canvas.parentElement)this.canvas.parentElement.dataset.centerFocus='none';this.canvas.style.maskImage='none';this.canvas.style.setProperty('-webkit-mask-image','none');}}
- render(time:number,intensity:number,audio:number,wall:number,effectTime=time,descentTime=effectTime,signal:AudioVisualSignal=silentVisualSignal){const fullscreen=!!document.fullscreenElement&&document.fullscreenElement===this.canvas.parentElement;if(fullscreen!==this.wasFullscreen){this.wasFullscreen=fullscreen;this.resize();}if(!this.enabled){this.lastPulseTime=time;this.last=wall;this.sample=wall;this.frames=0;this.slowSamples=this.fastSamples=0;this.cadence.reset();return;}if(!this.fallback&&this.quality!==1){this.quality=1;this.resize();}if(this.sampledBusy!==this.busy){this.sampledBusy=this.busy;this.sample=wall;this.frames=0;this.slowSamples=this.fastSamples=0;}if(!this.cadence.frame(wall,this.busy))return;const targetFps=this.cadence.targetFps(this.busy);const breathing=this.breath.frame(descentTime,this.reduced);this.breathOverlay.update(breathing);this.descentOverlay.update(this.descent.frame(descentTime,this.reduced));const trigger=this.triggers.frame(effectTime,this.reduced);this.overlay.update(trigger);const decay=Math.exp(-Math.max(0,time-this.lastPulseTime)*3.7);this.lastPulseTime=time;this.pulse*=decay;this.canvas.style.setProperty('--visual-opacity',String(clamp(this.opacity)));this.frameMs=this.frameMs*.95+(wall-this.last)*.05;this.last=wall;if(!this.sample)this.sample=wall;this.frames++;if(wall-this.sample>=1000){this.fps=this.frames*1000/(wall-this.sample);this.frames=0;this.sample=wall;this.adaptFallbackResolution(targetFps);}
+ render(time:number,intensity:number,audio:number,wall:number,effectTime=time,descentTime=effectTime,signal:AudioVisualSignal=silentVisualSignal){const fullscreen=!!document.fullscreenElement&&document.fullscreenElement===this.canvas.parentElement;if(fullscreen!==this.wasFullscreen){this.wasFullscreen=fullscreen;this.resize();}if(!this.enabled){this.lastPulseTime=time;this.last=wall;this.sample=wall;this.frames=0;this.slowSamples=this.fastSamples=0;this.cadence.reset();return;}if(!this.fallback&&this.quality!==1){this.quality=1;this.resize();}if(this.sampledBusy!==this.busy){this.sampledBusy=this.busy;this.sample=wall;this.frames=0;this.slowSamples=this.fastSamples=0;}if(!this.cadence.frame(wall,this.busy))return;const targetFps=this.cadence.targetFps(this.busy);const breathing=this.breath.frame(descentTime,this.reduced);this.breathOverlay.update(breathing);this.descentOverlay.update(this.descent.frame(descentTime,this.reduced));const trigger=this.triggers.frame(effectTime,this.reduced);this.overlay.update(trigger);this.wiperOverlay.update(signal.wiper??emptyWiperFrame,this.reduced);const decay=Math.exp(-Math.max(0,time-this.lastPulseTime)*3.7);this.lastPulseTime=time;this.pulse*=decay;this.canvas.style.setProperty('--visual-opacity',String(clamp(this.opacity)));this.frameMs=this.frameMs*.95+(wall-this.last)*.05;this.last=wall;if(!this.sample)this.sample=wall;this.frames++;if(wall-this.sample>=1000){this.fps=this.frames*1000/(wall-this.sample);this.frames=0;this.sample=wall;this.adaptFallbackResolution(targetFps);}
  const gl=this.gl;const t=this.reduced?0:time*this.motion;const scene=sceneNames.indexOf(this.scene);const combinedPulse=this.reduced?0:Math.max(this.pulse,trigger.impulse);
  this.reactiveAmount=this.reactivity.frame(signal,this.reactionStrength,this.voiceSync,this.tickSync,this.reduced);
  const visualAmount=scene===0&&this.stableSettings.style==='orb'?this.reactiveAmount:this.reactivity.voiceAmount;
@@ -156,7 +160,7 @@ export class VisualEngine {
  clearDescent(){this.descent.clear();this.descentOverlay.update({...emptyDescentFrame});}
  triggerPulse(time:number,effect:TriggerEffect=triggerEffectFor('')){if(this.enabled)this.triggers.start(time,effect,this.reduced);}
  pinkPulse(time:number){if(this.enabled)this.triggers.pinkPulse(time,this.reduced);}
- clearTrigger(preserveEye=false){this.triggers.clear(preserveEye);if(!preserveEye)this.overlay.update({...emptyTriggerFrame});}
+ clearTrigger(preserveEye=false){this.wiperOverlay.update(emptyWiperFrame,this.reduced);this.triggers.clear(preserveEye);if(!preserveEye)this.overlay.update({...emptyTriggerFrame});}
  clearVoiceReaction(){this.reactivity.clear();this.reactiveAmount=0;this.canvas.style.filter='brightness(1)';this.fixationLayer.style.filter='brightness(1)';}
  stop(){this.clearTrigger();this.enabled=false;this.pulse=0;if(this.fallback)this.fallback.clear();else if(this.backend==='webgl'){this.gl.clearColor(.025,.015,.035,1);this.gl.clear(this.gl.COLOR_BUFFER_BIT);}}
 }

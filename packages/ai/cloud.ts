@@ -51,7 +51,7 @@ export class CloudBackend implements LLMBackend {
   name = 'cloud';
   supportsPrefill = false;
   countTokens?: (messages: Message[], signal: AbortSignal) => Promise<number>;
-  constructor(readonly config: CloudConfiguration) {
+  constructor(readonly config: CloudConfiguration,private access?:{signal:()=>AbortSignal}) {
     if (config.kind === 'llama.cpp') {
       this.supportsPrefill = true;
       this.countTokens = async (messages, signal) => {
@@ -77,11 +77,12 @@ export class CloudBackend implements LLMBackend {
       ...(this.config.gatewayKey ? { 'Salad-Api-Key': this.config.gatewayKey } : {}) };
   }
   private async request(path: string, body: unknown, signal: AbortSignal,endpoint=this.config.url) {
+    const accessSignal=this.access?.signal();
     const root = endpoint.replace(/\/v1$/, '').replace(/\/$/,'');
     let response: Response;
     try {
       response = await fetch(root + path, { method: 'POST', headers: this.headers(true), body: JSON.stringify(body),
-        signal: AbortSignal.any([signal, AbortSignal.timeout(this.config.timeoutMs)]) });
+        signal: AbortSignal.any([signal, AbortSignal.timeout(this.config.timeoutMs),...(accessSignal?[accessSignal]:[])]) });
     } catch (error) {
       if (signal.aborted) throw error;
       throw Error('Cloud inference is unavailable. Check the inference server and reconnect the cloud connection.');
@@ -91,8 +92,9 @@ export class CloudBackend implements LLMBackend {
     return response;
   }
   async models() {
+    const accessSignal=this.access?.signal();
     const response = await fetch(this.config.url.replace(/\/v1$/, '') + (this.config.kind === 'ollama' ? '/api/tags' : '/v1/models'), {
-      headers: this.headers(), signal: AbortSignal.timeout(3000) });
+      headers: this.headers(), signal: AbortSignal.any([AbortSignal.timeout(3000),...(accessSignal?[accessSignal]:[])]) });
     if (!response.ok) throw Error('Cloud inference is unavailable');
     const data = await response.json();
     const available = this.config.kind === 'ollama' ? data.models : data.data;

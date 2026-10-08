@@ -65,8 +65,9 @@ test('conversational greetings acknowledge presence in-character without startin
   const immediate=direction.split('\n').find(line=>line.startsWith('Immediate task:'));
   assert.ok(immediate,greeting);
   assert.match(immediate,/one or two short in-character sentences/);
-  assert.match(immediate,/Acknowledge her presence/);
-  assert.match(immediate,/possessive, certain, quiet/);
+  assert.match(immediate,/Acknowledge the listener's presence/);
+  assert.match(immediate,/selected character's own tone and vocabulary/);
+  assert.doesNotMatch(immediate,/possessive, certain|sometimes cold|You came back/);
   assert.match(immediate,/A session has not been requested/);
   assert.match(immediate,/Do not give instructions to relax, breathe, sit, lie down or close eyes/);
   assert.match(immediate,/Do not describe the listener's body, surroundings, voice or prior visits/);

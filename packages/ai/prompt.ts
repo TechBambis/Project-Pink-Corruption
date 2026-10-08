@@ -7,7 +7,7 @@ import {scriptFormatDirection,scriptSoundDirection,scriptCommandDirection} from 
 import {appendSoundDirection} from '../content/sound-direction';
 import {appendPhasePrompt} from '../content/phases';
 import {appendSessionState,type SessionState} from './session-state';
-import {bambiVoiceDirection} from '../content/voice';
+import {buildCharacterPrefix} from './character';
 import {narrationLengthDirection,replyTaskDirection} from './response';
 import {situationalVoiceDirection} from '../content/situational';
 import {situationalReplyDirection} from './situational';
@@ -15,7 +15,7 @@ import type {Interaction} from './request';
 
 /** Flags belong after this prefix: changing them must not invalidate its recurrent state. */
 export function buildFixedReplyPrompt(base:string,interaction:Interaction='reactive'){
- return [base,bambiVoiceDirection,scriptFormatDirection,...(interaction==='situational'?[situationalVoiceDirection]:[])].join('\n\n');
+ return [buildCharacterPrefix(base),scriptFormatDirection,...(interaction==='situational'?[situationalVoiceDirection]:[])].join('\n\n');
 }
 
 /** Keep the full fixed instructions before changing state so inference can reuse its prefix. */

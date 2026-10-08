@@ -3,8 +3,19 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import type { Bus } from '../../audio';
-import type { PresentationState } from './contract';
+import type { BambiEvent, PresentationState } from './contract';
 import type { CompiledEvent, EngineSnapshot } from './runtime';
+
+/** Capabilities, rather than persona prose, decide which wipe claims are actually true. */
+export function wipeNarrationFacts(event: BambiEvent, atMs: number, preferences?: { visualsEnabled: boolean; reducedMotion: boolean; effectsEnabled?: boolean }) {
+  const wipe = event.wipe;
+  if (!wipe || atMs < event.atMs + wipe.offsetMs || atMs >= event.atMs + wipe.offsetMs + wipe.durationMs) return '';
+  if (preferences?.effectsEnabled === false) return 'The wipe effect is disabled. Override any wipe description: use a simple imagined quiet point; do not claim that a word is being erased, that a wiper is moving, or that rubbing sounds are playing.';
+  const visual = preferences?.visualsEnabled === false ? 'Visuals are disabled; do not describe a visible wiper or text.'
+    : preferences?.reducedMotion ? `The word ${JSON.stringify(wipe.text)} fades gently, without a moving wiper.`
+      : `A dark rubber windshield blade on a pink-accented metal arm sweeps in an arc from a fixed bottom pivot, erasing the word ${JSON.stringify(wipe.text)} over the retained background, alternating direction with acoustic strokes and resting at the endpoints between them.`;
+  return `${visual} The selected rubbing sound accompanies this engine-owned wipe. Use short original clauses about the present scene; do not decide its pace or duration.`;
+}
 
 export function stateGains(state: PresentationState): Partial<Record<Bus, number>> {
   const has = (layer: string) => state.activeLayers.includes(layer as never);

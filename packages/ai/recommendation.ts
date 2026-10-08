@@ -12,6 +12,13 @@ export interface ModelCandidate {
  backend:'ollama'|'llama.cpp';
  installed:boolean;
  priority:number;
+ desktopSupported?:boolean;
+ qualification?:'reference-tested'|'experimental'|'development-only';
+ description?:string;
+ sourceUrl?:string;
+ downloadBytes?:number;
+ canDownload?:boolean;
+ promptCompatible?:boolean;
 }
 export interface ModelAssessment extends ModelCandidate {
  estimatedWorkingBytes:number|null;
@@ -29,13 +36,13 @@ export interface ModelRecommendation {
  method:'memory-estimate';
 }
 const GiB=1024**3;
-export function recommendModels(hardware:HardwareProfile,candidates:ModelCandidate[],backends:{ollama:boolean;native:boolean}):ModelRecommendation {
+export function recommendModels(hardware:HardwareProfile,candidates:ModelCandidate[],backends:{ollama:boolean;native:boolean;platformReady?:boolean}):ModelRecommendation {
  // Explicit estimates, not measured model requirements or speed guarantees.
  const reserveBytes=Math.max(4*GiB,hardware.ramTotal*.2);
  const ramBudget=Math.max(0,hardware.ramTotal-reserveBytes);
  const largestGPU=hardware.gpus.reduce((largest,gpu)=>Math.max(largest,gpu.memoryTotal??0),0);
  const gpuBudget=Math.max(0,largestGPU-1.5*GiB);
- const platformReady=hardware.platform==='linux'&&hardware.architecture==='x64';
+ const platformReady=backends.platformReady??(hardware.platform==='linux'&&hardware.architecture==='x64');
  const alternatives:ModelAssessment[]=candidates.map(candidate=>{
   const weights=candidate.weightsBytes;
   const estimatedWorkingBytes=weights!==null&&Number.isFinite(weights)&&weights>0&&Number.isFinite(candidate.contextTokens)&&candidate.contextTokens>0
@@ -56,13 +63,14 @@ export function recommendModels(hardware:HardwareProfile,candidates:ModelCandida
   else if(fitsRAM)reasons.push('Full GPU offloading is not established; CPU or partial offloading may be slower.');
   if(runtime==='platform-pending')reasons.push('The app’s local AI start/stop integration is currently Linux x64 only. This is a hardware suggestion for a future platform test.');
   else if(runtime==='setup-needed')reasons.push(candidate.installed?'The local backend still needs setup or a runtime check.':'This model is not installed.');
+  if(candidate.promptCompatible===false)reasons.push('The configured context is too short for the complete default companion prompt. It is not recommended for that session.');
   return {...candidate,estimatedWorkingBytes,memoryFit,execution,runtime,reasons};
  });
- const fit=alternatives.filter(model=>model.memoryFit==='fits');
- fit.sort((a,b)=>Number(b.runtime==='available')-Number(a.runtime==='available')||Number(b.installed)-Number(a.installed)||Number(b.execution==='gpu')-Number(a.execution==='gpu')||b.priority-a.priority||(a.estimatedWorkingBytes??Infinity)-(b.estimatedWorkingBytes??Infinity));
+ const fit=alternatives.filter(model=>model.memoryFit==='fits'&&model.desktopSupported!==false&&model.promptCompatible!==false);
+ fit.sort((a,b)=>Number(b.qualification==='reference-tested')-Number(a.qualification==='reference-tested')||Number(b.runtime==='available')-Number(a.runtime==='available')||Number(b.installed)-Number(a.installed)||Number(b.execution==='gpu')-Number(a.execution==='gpu')||b.priority-a.priority||(a.estimatedWorkingBytes??Infinity)-(b.estimatedWorkingBytes??Infinity));
  const warnings=[...hardware.warnings,'Memory fit is an estimate. A real first-run timing and memory check is still required.'];
  if(hardware.ramAvailable<Math.max(2*GiB,hardware.ramTotal*.15))warnings.push('Available RAM is low right now. Close other apps or account for an already loaded model before testing.');
  if(!platformReady)warnings.push('Local model launch on this operating system is not ready in this app yet.');
- if(!fit.length)warnings.push('No model with a known size fits the conservative budget. A smaller reviewed model or a different setup is needed.');
+ if(!fit.length)warnings.push('No supported model with sufficient context fits the conservative memory budget. A smaller reviewed model or a different setup is needed.');
  return {hardware,recommended:fit[0]??null,alternatives,reserveBytes,warnings,method:'memory-estimate'};
 }

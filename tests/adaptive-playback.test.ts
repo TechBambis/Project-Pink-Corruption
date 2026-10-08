@@ -36,6 +36,20 @@ function rendered(body: { payloadId: string }) {
   return Response.json({ payloadId: body.payloadId, text: 'Stay with the familiar scene.', audio: btoa('fixture'), durationMs: 1000 });
 }
 
+test('Unlimited adapter keeps its plan beyond the first journey, supports later seek and releases on Stop',async()=>{
+ const f=fixture(),original=globalThis.fetch;
+ try{
+  globalThis.fetch=async(_url,init)=>rendered(JSON.parse(init!.body as string));
+  await f.adapter.prepare(1200000,.7,new AbortController().signal,undefined,true);f.internal.started=true;
+  assert.equal(f.adapter.program!.continuous,true);
+  f.adapter.tick(0);f.adapter.seek(1200000+500000);f.adapter.tick(1700000);
+  assert.equal(f.adapter.snapshot!.complete,false);assert.equal(f.adapter.program!.events[0].phase,'conditioning');
+  f.adapter.seek(86400000+500000);f.adapter.tick(86900000);
+  assert.equal(f.adapter.snapshot!.complete,false);assert.ok(f.adapter.program!.events.some(e=>e.atMs>=86900000));
+  f.adapter.pause();f.adapter.resume();f.adapter.stop();assert.equal(f.adapter.active,false);assert.equal(f.adapter.program,undefined);
+ }finally{f.adapter.stop();globalThis.fetch=original;}
+});
+
 test('native preparation retries a busy renderer once and caches only the successful response', async () => {
   const f = fixture(), original = globalThis.fetch; let calls = 0;
   try {
@@ -46,7 +60,7 @@ test('native preparation retries a busy renderer once and caches only the succes
 });
 
 test('a clock jump across an unprepared episode entry replaces it before any speech or bound cue fires', async () => {
-  const f = fixture(), original = globalThis.fetch; let calls = 0, release: (response: Response) => void = () => {}, pendingBody: { payloadId: string } | undefined;
+  const f = fixture(), original = globalThis.fetch; let calls = 0, release: (response: Response) => void = () => {}, pendingBody: { payloadId: string; precedingNarration?: string } | undefined;
   try {
     globalThis.fetch = async (_url, init) => {
       const body = JSON.parse(init!.body as string); if (++calls === 1) return rendered(body);
@@ -55,12 +69,25 @@ test('a clock jump across an unprepared episode entry replaces it before any spe
     await f.adapter.prepare(1200000, .7, new AbortController().signal); f.internal.started = true;
     f.adapter.tick(0); f.adapter.tick(100);
     const pending = f.internal.runtime.compiled.at(-1)!; assert.ok(pending.event.atMs > 100 && pending.speech.length > 0);
+    assert.notEqual(pendingBody!.precedingNarration, 'Stay with the familiar scene.', 'Unheard queued words do not become continuity history');
     const request = f.internal.request!; f.adapter.tick(pending.event.atMs + 500);
     assert.equal(request.signal.aborted, true); assert.equal(f.internal.runtime.compiled.find(c => c.event.id === pending.event.id)!.speech.length, 0);
     assert.equal(f.adapter.decisions.find(d => d.eventId === pending.event.id)!.fallback, true);
     release(rendered(pendingBody!)); await new Promise(resolve => setImmediate(resolve));
     assert.equal(f.internal.payloads.has(pendingBody!.payloadId), false); assert.equal(f.voices.length, 1);
   } finally { release(rendered(pendingBody ?? { payloadId: 'unused' })); f.adapter.stop(); globalThis.fetch = original; }
+});
+
+test('ordinary narration tolerates one late control tick inside its unchanged window', async () => {
+  const f = fixture(), original = globalThis.fetch;
+  try {
+    globalThis.fetch = async (_url, init) => rendered(JSON.parse(init!.body as string));
+    await f.adapter.prepare(1200000, .7, new AbortController().signal); f.internal.started = true;
+    const deadline = f.internal.runtime.slots[0].endMs;
+    f.adapter.tick(60); assert.equal(f.voices.length, 1);
+    assert.equal(f.internal.runtime.slots[0].endMs, deadline);
+    assert.equal((f.adapter as unknown as { caption: { startMs: number } }).caption.startMs, 60);
+  } finally { f.adapter.stop(); globalThis.fetch = original; }
 });
 
 test('a no-text interval can prepare a future voice without generating text for itself; Pause aborts it', async () => {

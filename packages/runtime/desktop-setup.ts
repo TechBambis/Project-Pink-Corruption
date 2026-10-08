@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
 import {createReadStream,createWriteStream,readFileSync} from 'node:fs';
-import {mkdir,lstat,realpath,rename,rm,statfs,readdir} from 'node:fs/promises';
+import {mkdir,lstat,realpath,rename,rm,statfs,readdir,writeFile} from 'node:fs/promises';
 import {createHash,randomUUID} from 'node:crypto';
 import {resolve,dirname,basename,sep} from 'node:path';
 import {Transform,Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {resourcePath} from './paths';
 import {desktopServices} from './desktop-services';
+import {downloadableModel,modelAsset} from '../ai/model-catalog';
 
 export interface Asset {path:string;bytes:number;sha256:string;url:string;license:string}
 export const alphaModels=JSON.parse(readFileSync(resourcePath('config/desktop-alpha-models.json'),'utf8')) as {protocol:number;alias:string;context:number;assets:Asset[]};
@@ -16,7 +17,37 @@ type Phase='not-installed'|'downloading'|'verifying'|'installed'|'preparing'|'re
 export class DesktopSetup {
  state:{phase:Phase;asset?:string;completed:number;total:number;error?:string}={phase:'not-installed',completed:0,total:alphaModels.assets.reduce((n,a)=>n+a.bytes,0)};
  verified=false;private controller:AbortController|null=null;
- constructor(readonly directory=process.env.BAMBI_MODELS_ROOT!,private assets:Asset[]=alphaModels.assets){this.state.total=assets.reduce((n,a)=>n+a.bytes,0);}
+ model=alphaModels.alias;
+ get context(){return downloadableModel(this.model).context;}
+ get busy(){return this.controller!==null;}
+ get downloadBytes(){return this.assets.reduce((n,a)=>n+a.bytes,0);}
+ get snapshot(){
+  const runtime=this.includeSpeech?desktopServices.capabilities:undefined;
+  const stopped=this.state.phase==='ready'&&runtime?.phase==='failed';
+  return {...this.state,...(stopped?{phase:'failed',error:'Local AI stopped. Prepare local AI to restart.'}:{}),verified:this.verified,model:this.model,downloadBytes:this.downloadBytes,...(runtime?{runtime}:{})};
+ }
+ constructor(readonly directory=process.env.BAMBI_MODELS_ROOT!,private assets:Asset[]=alphaModels.assets,readonly includeSpeech=true){
+  if(assets===alphaModels.assets||!includeSpeech){
+   try{const saved=JSON.parse(readFileSync(resolve(directory,'selected-model.json'),'utf8'));downloadableModel(saved.model);this.model=saved.model;}catch{}
+   this.assets=this.assetsFor(this.model);
+  }
+  this.state.total=this.downloadBytes;
+ }
+ private assetsFor(model:string){return [modelAsset(model),...(this.includeSpeech?alphaModels.assets.slice(1):[])];}
+ async select(model:string){
+  downloadableModel(model);if(this.busy)throw Error('Finish or cancel setup before changing models.');
+  if(model===this.model)return;
+  this.controller=new AbortController();
+  try{
+   await mkdir(this.directory,{recursive:true,mode:0o700});
+   if(this.includeSpeech)await desktopServices.stop();
+   const selection=resolve(await realpath(this.directory),'selected-model.json'),temporary=selection+'.'+randomUUID()+'.partial';
+   try{await writeFile(temporary,JSON.stringify({model})+'\n',{flag:'wx',mode:0o600});await rename(temporary,selection);}finally{await rm(temporary,{force:true});}
+   this.model=model;this.assets=this.assetsFor(model);this.verified=false;
+   this.state={phase:'not-installed',completed:0,total:this.downloadBytes};
+  }finally{this.controller=null;}
+  await this.check();
+ }
  private async verify(asset:Asset,path:string,signal:AbortSignal,installed=true){
   signal.throwIfAborted();const actualParent=await realpath(dirname(path));const actualRoot=installed?await realpath(this.directory):actualParent;if(actualParent!==actualRoot&&!actualParent.startsWith(actualRoot+sep))throw Error('Model data path escapes its private root.');const stat=await lstat(path);if(!stat.isFile()||stat.size!==asset.bytes)throw Error('Asset size/type mismatch: '+asset.path);
   const hash=createHash('sha256');for await(const chunk of createReadStream(path)){signal.throwIfAborted();hash.update(chunk);}
@@ -30,9 +61,9 @@ export class DesktopSetup {
   finally{this.controller=null;}
  }
  cancel(){this.controller?.abort(Error('Setup cancelled. Verified assets are retained.'));}
- async install(source?:string){
+ async install(source?:string,permissionSignal?:AbortSignal){
   if(this.controller)throw Error('Setup is already running.');
-  this.controller=new AbortController();const signal=this.controller.signal;this.verified=false;
+  this.controller=new AbortController();const signal=AbortSignal.any([this.controller.signal,...(permissionSignal?[permissionSignal]:[])]);this.verified=false;
   this.state={...this.state,phase:source?'verifying':'downloading',completed:0,error:undefined};
   let temporary:string|undefined;
   try{
@@ -75,7 +106,7 @@ export class DesktopSetup {
   if(this.controller)throw Error('Setup is already running.');
   this.controller=new AbortController();const prepareSignal=AbortSignal.any([this.controller.signal,...(signal?[signal]:[])]);
   this.state={...this.state,phase:'preparing',error:undefined};
-  try{await desktopServices.prepare(alphaModels.alias,alphaModels.context,prepareSignal);this.state.phase='ready';}
+  try{await desktopServices.prepare(this.model,this.context,prepareSignal);this.state.phase='ready';}
   catch(error){this.state={...this.state,phase:prepareSignal.aborted?'cancelled':'failed',error:String(error)};throw error;}
   finally{this.controller=null;}
  }

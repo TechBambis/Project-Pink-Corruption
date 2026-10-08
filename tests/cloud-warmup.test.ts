@@ -55,6 +55,7 @@ test('real remote preparation can finish beyond the former fixed deadline and st
    await new Promise(done=>setTimeout(done,50));
   }
   assert.ok(ready);
+  const accessResponse=await fetch(base+'/api/access',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({microphone:false,devices:false,modelDownloads:false,onlineMedia:false,cloudAI:true,localClock:false,approximateLocation:false,contextToCloud:false})});assert.equal(accessResponse.status,200);
   const settings={model:CLOUD_MODEL_ALIAS,promptId:'bambisleep-classic',username:'Test',speak:false,context:32768};
   const tooLarge=await fetch(base+'/api/warm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...settings,selectedTriggers:Array.from({length:100},(_,i)=>('CUSTOM_TRIGGER_'+i+'_').padEnd(100,'A'))})});
   assert.equal(tooLarge.status,503);assert.match((await tooLarge.json()).error,/too little context/);assert.equal(generated,0,'Overflow must fail before provider generation');

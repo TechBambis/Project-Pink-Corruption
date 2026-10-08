@@ -27,13 +27,23 @@ export function splitBundle(bundle,output,partBytes){
 
 async function prepare(output,transport,allowance){
  if(!Number.isSafeInteger(allowance)||allowance<32||allowance>450)throw Error('Use a checked shared storage allowance between 32 and 450 MiB.');
- const retained=['RUNTIME-MANIFEST.json','TESTER-GUIDE.md','NOTICES.tar.gz','WINDOWS-PACKAGING-CHECK.json','INSTALLER-CHECK.json','WINDOWS-NATIVE-SPEECH-CHECK.json'];
+ const retained=['RUNTIME-MANIFEST.json','TESTER-GUIDE.md','NOTICES.tar.gz','WINDOWS-PACKAGING-CHECK.json','INSTALLER-CHECK.json','WINDOWS-NATIVE-SPEECH-CHECK.json','SOURCE-CHECKS.json','DESKTOP-QUALIFICATION.json','RELEASE-STATUS.json'];
  const runtime=JSON.parse(readFileSync(join(output,'RUNTIME-MANIFEST.json'),'utf8'));
- if(runtime.phase!=='alpha')throw Error('Bounded transfer is reserved for the new alpha package.');
+ if(runtime.phase!=='alpha'||!/^0\.1\.0-alpha\.[1-9][0-9]*$/.test(runtime.version))throw Error('Bounded transfer is reserved for a valid new alpha version.');
  const load=name=>existsSync(join(output,name))?JSON.parse(readFileSync(join(output,name),'utf8')):null;
  const application=load('WINDOWS-PACKAGING-CHECK.json'),installer=load('INSTALLER-CHECK.json'),speech=load('WINDOWS-NATIVE-SPEECH-CHECK.json');
- const capability={version:runtime.version,sourceDigest:runtime.sourceDigest,buildGitSha:process.env.GITHUB_SHA,buildRunId:process.env.GITHUB_RUN_ID,
+ const qualification=load('DESKTOP-QUALIFICATION.json'),sourceChecks=load('SOURCE-CHECKS.json');
+ if(runtime.release?.snapshot==='prepared'){
+  for(const [name,record] of [['SOURCE-CHECKS.json',sourceChecks],['DESKTOP-QUALIFICATION.json',qualification],['RELEASE-STATUS.json',load('RELEASE-STATUS.json')]]){
+   if(!record)throw Error('Missing frozen release evidence: '+name);
+   if(record.version!==runtime.version||record.applicationDigest!==runtime.release.applicationDigest)throw Error('Frozen release evidence identity mismatch: '+name);
+  }
+  if(sourceChecks.sourceDigest!==runtime.sourceDigest||qualification.sourceDigest!==runtime.sourceDigest||sourceChecks.platform!=='win32'||sourceChecks.architecture!=='x64'||qualification.target!=='windows-x64')throw Error('Frozen release evidence source/target mismatch.');
+  if(sourceChecks.result!=='passed'||['sourceChecks','packaging','installer','speech'].some(gate=>qualification.gates[gate]!=='passed'))throw Error('Frozen release native gates did not pass.');
+ }
+ const capability={version:runtime.version,sourceDigest:runtime.sourceDigest,applicationDigest:runtime.release?.applicationDigest,buildGitSha:process.env.GITHUB_SHA,buildRunId:process.env.GITHUB_RUN_ID,
   qualification:{application:application?.result||'not-run',installer:installer?.result||'not-run',installedSpeech:speech?.result||'not-run'},
+  releaseGates:qualification?.gates,
   nativeApplicationChecks:application?.checks.map(c=>c.name)||[],nativeInstallerChecks:installer?.checks.map(c=>c.name)||[],nativeSpeechChecks:speech?.checks.map(c=>c.name)||[],
   conditions:application?.environment||speech?.conditions||null,
   referenceHardware:{os:'Windows 11 x64',cpu:'AMD Ryzen 5 5600X',systemMemoryGiB:16,gpu:'AMD Radeon RX 6600 XT',dedicatedMemoryGiB:8,status:'pending'},

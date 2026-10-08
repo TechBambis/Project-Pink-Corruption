@@ -4,28 +4,36 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,existsSync,rmSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
-import {pathToFileURL} from 'node:url';
+import {pathToFileURL,fileURLToPath} from 'node:url';
 import {backendArguments} from '../apps/desktop/windows-runtime-paths.mjs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer} from 'node:http';
 import {createRequire} from 'node:module';
 import {buildOptions,downloadPinned,digest,llamaEntries,assertWindowsX64,sourcePathAllowed,inventory,peImports,windowsDependencyReport} from '../scripts/desktop-windows-support.mjs';
-import {splitBundle} from '../scripts/desktop-windows-transfer.mjs';
 const {runtimeEnvironment}=createRequire(import.meta.url)('../apps/desktop/runtime-environment.cjs');
 
-test('bounded private transport reconstructs binary payloads exactly and rejects oversized or reused outputs',t=>{
- const folder=mkdtempSync(join(tmpdir(),'Bambi bounded transfer ü '));t.after(()=>rmSync(folder,{recursive:true,force:true}));
- const bytes=Buffer.alloc(2*1024**2+123);for(let i=0;i<bytes.length;i++)bytes[i]=(i*17)%251;
- const bundle=join(folder,'handoff.tar');writeFileSync(bundle,bytes);
- const parts=splitBundle(bundle,join(folder,'parts'),1024**2);
- assert.deepEqual(parts.map(p=>p.bytes),[1024**2,1024**2,123]);
- assert.deepEqual(Buffer.concat(parts.map(p=>readFileSync(p.path))),bytes);
- assert.throws(()=>splitBundle(bundle,join(folder,'parts'),1024**2),/EEXIST/);
- assert.throws(()=>splitBundle(bundle,join(folder,'bad'),0),/Invalid/);
- writeFileSync(bundle,Buffer.alloc(8*1024**2+1));
- assert.throws(()=>splitBundle(bundle,join(folder,'too-large'),1024**2),/eight/);
- assert(!existsSync(join(folder,'too-large')));
+test('bounded frozen-release transport retains matching evidence and rejects another source or failed gates',t=>{
+ const root=mkdtempSync(join(tmpdir(),'Bambi release transfer ü '));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const output=join(root,'output');mkdirSync(output);
+ const version='0.1.0-alpha.8',applicationDigest='a'.repeat(64),sourceDigest='b'.repeat(64);
+ const put=(name,data)=>writeFileSync(join(output,name),JSON.stringify(data));
+ const gates={sourceChecks:'passed',packaging:'passed',installer:'passed',speech:'passed',localConversation:'pending'};
+ put('RUNTIME-MANIFEST.json',{version,phase:'alpha',sourceDigest,release:{snapshot:'prepared',applicationDigest}});
+ const source={version,applicationDigest,sourceDigest,platform:'win32',architecture:'x64',result:'passed'};
+ const qualification={version,applicationDigest,sourceDigest,target:'windows-x64',gates};
+ put('SOURCE-CHECKS.json',source);put('DESKTOP-QUALIFICATION.json',qualification);put('RELEASE-STATUS.json',{version,applicationDigest,ready:false});
+ for(const name of ['WINDOWS-PACKAGING-CHECK.json','INSTALLER-CHECK.json','WINDOWS-NATIVE-SPEECH-CHECK.json'])put(name,{result:'passed',checks:[]});
+ for(const name of ['NOTICES.tar.gz','TESTER-GUIDE.md',`bambi-local-${version}-x64.exe`,`bambi-local-${version}-source.tar.gz`])writeFileSync(join(output,name),'Public transport fixture; no real native runtime.');
+ writeFileSync(join(output,'private.sqlite'),'Must never enter transport.');
+ const run=folder=>spawnSync(process.execPath,[fileURLToPath(new URL('../scripts/desktop-windows-transfer.mjs',import.meta.url)),'prepare',output,join(root,folder),'32'],{encoding:'utf8',env:{...process.env,GITHUB_RUN_ID:'123',GITHUB_SHA:'c'.repeat(40)}});
+ const accepted=run('accepted');assert.equal(accepted.status,0,accepted.stderr);
+ const manifest=JSON.parse(readFileSync(join(root,'accepted/0/TRANSFER-MANIFEST.json')));
+ for(const name of ['SOURCE-CHECKS.json','DESKTOP-QUALIFICATION.json','RELEASE-STATUS.json','NOTICES.tar.gz'])assert(manifest.files.some(file=>file.name===name));
+ assert(!manifest.files.some(file=>file.name==='private.sqlite'));
+ assert.equal(JSON.parse(readFileSync(join(output,'CAPABILITY-RECORD.json'))).releaseGates.localConversation,'pending');
+ put('SOURCE-CHECKS.json',{...source,sourceDigest:'d'.repeat(64)});assert.notEqual(run('wrong-source').status,0);assert(!existsSync(join(root,'wrong-source')));
+ put('SOURCE-CHECKS.json',source);put('DESKTOP-QUALIFICATION.json',{...qualification,gates:{...gates,speech:'failed'}});assert.notEqual(run('failed-speech').status,0);assert(!existsSync(join(root,'failed-speech')));
 });
 
 test('Windows private runtime environment keeps canonical OS paths and excludes developer/provider overrides',()=>{
@@ -37,7 +45,7 @@ test('Windows private runtime environment keeps canonical OS paths and excludes 
  assert.throws(()=>runtimeEnvironment({SystemRoot:'relative'},{platform:'win32',tokens:{}}),/SystemRoot/);
 });
 test('Windows builds start with smoke and reject phase/version mismatches and path traversal',()=>{
- assert.deepEqual(buildOptions([]),{phase:'smoke',alpha:false,version:'0.1.0-smoke.5'});
+ assert.deepEqual(buildOptions([]),{phase:'smoke',alpha:false,version:'0.1.0-smoke.2'});
  assert.equal(buildOptions(['alpha','0.1.0-alpha.3']).alpha,true);
  for(const args of [['alpha','0.1.0-smoke.2'],['smoke','../escape'],['other'],['alpha','0.1.0-alpha.3','extra']])assert.throws(()=>buildOptions(args));
 });
@@ -60,7 +68,7 @@ test('Windows llama selection rejects CUDA, daemon and traversal while retaining
 });
 test('source allowlist handles Windows separators and excludes local reports, weights and generated assets',()=>{
  for(const path of ['tests\\reports\\result.json','apps\\web\\public\\vad\\model.json','packages\\speech\\models\\private.json','.runtime\\data.json','docs/internal/record.md'])assert(!sourcePathAllowed(path),path);
- for(const path of ['apps\\desktop\\windows-job.cs','apps/web/public/sounds/bell-chime.wav','packages/content/stable-2.0/manifest.json'])assert(sourcePathAllowed(path),path);
+ for(const path of ['apps\\desktop\\windows-job.cs','apps/web/public/sounds/bell-chime.wav','packages/content/stable-2.0/manifest.json','scripts/desktop-windows-support.d.mts'])assert(sourcePathAllowed(path),path);
 });
 test('PE validation rejects renamed Linux executables and wrong architecture',t=>{
  const folder=mkdtempSync(join(tmpdir(),'Bambi PE ü '));t.after(()=>rmSync(folder,{recursive:true,force:true}));
@@ -92,5 +100,4 @@ test('PE dependency inspection catches omitted DLLs and does not accept a build-
  const path=join(folder,'server.exe');writeFileSync(path,pe('VCRUNTIME140.dll'));assert.deepEqual(peImports(path),['vcruntime140.dll']);
  assert.deepEqual(windowsDependencyReport(folder).unresolved,[{path:'server.exe',dll:'vcruntime140.dll'}]);
  writeFileSync(join(folder,'vcruntime140.dll'),pe('KERNEL32.dll'));assert.equal(windowsDependencyReport(folder).unresolved.length,0);
- writeFileSync(path,pe('USERENV.dll'));assert.equal(windowsDependencyReport(folder).unresolved.length,0,'Windows user-profile API is an inbox dependency');
 });

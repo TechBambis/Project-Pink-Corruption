@@ -131,7 +131,7 @@ export class EventRuntime {
     for (const motif of motifs) if (!known.has(motif.id)) known.set(motif.id, motif);
     const checked = ProgramSchema.parse({ ...this.program, motifs: [...known.values()], events: [...retained.map(c => c.event), event] });
     const compiled = compileEvent(event);
-    compiled.entryState = structuredClone(previous?.frames.at(-1)?.state ?? this.program.baseline);
+    compiled.entryState = structuredClone(previous && previous.event.atMs + eventDurationMs(previous.event) === event.atMs ? previous.frames.at(-1)?.state ?? this.program.baseline : this.program.baseline);
     const reservations = new Map<string, { atMs: number; cooldownMs: number }>();
     for (const slot of [...this.slots, ...compiled.speech]) if (slot.speech.requiredTrigger) {
       const phrase = slot.speech.requiredTrigger, atMs = slot.atMs + slot.speech.triggerAtMs!, prior = reservations.get(phrase);
@@ -160,7 +160,7 @@ export class EventRuntime {
   seek(atMs: number) { this.generation++; this.lastMs = atMs; this.delivered = new Set(this.slots.filter(s => s.atMs <= atMs).map(s => s.id)); this.triggers.clear(); for (const slot of this.slots) if (slot.speech.requiredTrigger) this.triggers.plan(slot.speech.requiredTrigger, slot.speech.triggerCooldownMs!); }
   snapshot(atMs: number): EngineSnapshot {
     if (this.paused) atMs = Math.max(0, this.lastMs);
-    const complete = this.stopped || atMs >= this.program.durationMs;
+    const complete = this.stopped || !this.program.continuous && atMs >= this.program.durationMs;
     const current = !complete ? this.compiled.find(c => atMs >= c.event.atMs && atMs < c.event.atMs + eventDurationMs(c.event)) : undefined;
     const frame = current?.frames.filter(f => f.atMs <= atMs).at(-1), type = current?.event.type;
     const state = structuredClone(frame?.state ?? this.program.baseline);

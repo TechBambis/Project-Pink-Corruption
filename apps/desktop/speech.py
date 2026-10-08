@@ -4,7 +4,6 @@
 import sys
 import faulthandler
 
-# Native Windows DLL failures need a Python stack in the private service log.
 faulthandler.enable()
 
 if len(sys.argv) != 2 or sys.argv[1] not in ('kokoro', 'streaming'):

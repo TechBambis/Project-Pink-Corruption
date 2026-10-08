@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { modelContext, nativeSamplingModels, communityQwen } from './models';
 import { SessionStateSchema } from './session-state';
 import { NATIVE_CONTEXT } from '../../config/sampling';
+import {LocalContextRequestSchema} from './local-context';
 
 export const PROTOCOL_VERSION = 1;
 export const audioPresetSchema = z.enum(['bambi_local_clean', 'bambi_classic', 'bambi_classic_deep', 'bambi_voice_test']);
@@ -34,6 +35,7 @@ export const ChatRequestSchema = z.object({
   context: z.number().int().min(2048).max(131072).default(NATIVE_CONTEXT),
   maxTokens: z.number().int().min(64).max(8192).default(2048), session: SessionStateSchema.optional(),
   inputTiming:z.object({speechEndToRequestMs:z.number().finite().min(0).max(120000),sttMs:z.number().finite().min(0).max(120000)}).strict().optional(),
+  localContext:LocalContextRequestSchema.optional(),
 });
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;
 export function modelConnection(model: string, promptId: string, connections: Record<string, ModelConnection> = {}): ModelConnection {

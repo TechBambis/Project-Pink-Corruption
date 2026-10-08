@@ -8,11 +8,13 @@ import { withHapticMappings, withProgramTriggers } from '../../../packages/sessi
 import { EventRuntime, type EngineSnapshot, type SpeechSlot } from '../../../packages/session-director/events/runtime';
 import { presentationAt } from '../../../packages/session-director/events/presentation';
 import type { EventSpeechRequest, RenderedEventSpeech } from '../../../packages/session-director/events/speech';
+import {localContextRequest} from './privacy-state';
 import type { AudioEngine } from '../../../packages/audio';
 import type { VisualEngine } from '../../../packages/visuals';
 import { spokenWordAt } from './captions';
 import {speechTextAt} from '../../../packages/speech/reveal';
 import { AdaptiveDirector } from '../../../packages/session-director/adaptive';
+import { directionPreset, type SessionDirection } from '../../../packages/session-director/direction';
 import { sessionPhaseAt } from '../../../packages/session-director/phases';
 import { eventDurationMs } from '../../../packages/session-director/events/contract';
 import { rhythmBeats } from '../../../packages/session-director/events/rhythm';
@@ -97,9 +99,10 @@ export class SessionEvents {
   get revealedNarration() { const c=this.caption;return c?speechTextAt(c.text,this.displayAtMs-c.startMs,c.endMs-c.startMs,c.words):null; }
   get reservedBlank() { return this.active && this.nowMs >= this.overrideUntilMs && this.lastSnapshot?.state.narrationState === 'paused'; }
 
-  async prepare(durationMs: number, intensity: number, signal: AbortSignal, imported?: BambiProgram) {
+  configureDirection(direction: SessionDirection, intensity: number) { this.adaptive?.configure(direction, intensity); }
+  async prepare(durationMs: number, intensity: number, signal: AbortSignal, imported?: BambiProgram, continuous=false, direction = directionPreset('balanced')) {
     this.stop();
-    if (!imported) this.adaptive = new AdaptiveDirector(durationMs, intensity, crypto.getRandomValues(new Uint32Array(1))[0]);
+    if (!imported) this.adaptive = new AdaptiveDirector(durationMs, intensity, crypto.getRandomValues(new Uint32Array(1))[0],continuous,direction);
     let program = ProgramSchema.parse(imported ?? this.adaptive!.initial(this.directorOptions(0)));
     if (!imported && this.hooks.haptics()) program = withHapticMappings(program);
     if (Math.abs(program.durationMs - durationMs) > 1) throw Error('Event program duration must match the chosen session duration');
@@ -122,21 +125,21 @@ export class SessionEvents {
     } finally { signal.removeEventListener('abort', abort); }
   }
   start() { if (!this.runtime) return; this.started = true; this.nowMs = 0; this.deliveredAtMs = -1; this.displayAtMs = 0; this.pausedDisplayMs = null; this.hooks.audio().setEventMode(true); this.tick(0); this.present(0, true); }
-  pause() { this.pausedDisplayMs = this.displayAtMs; this.runtime?.pause(); this.request?.abort(); this.request = null; this.hooks.audio().stopEventCues(); this.scheduledRhythm.clear(); this.hooks.clearDevices(); }
+  pause() { this.pausedDisplayMs = this.displayAtMs; this.runtime?.pause(); this.request?.abort(); this.request = null; this.hooks.audio().stopEventCues(false, true); this.scheduledRhythm.clear(); this.hooks.clearDevices(); }
   resume() { this.pausedDisplayMs = null; this.runtime?.resume(); }
   seek(atMs: number) {
     if (!Number.isFinite(atMs) || atMs < 0) throw Error('Invalid engine time');
     this.cancelSpeech(); this.hooks.audio().stopEventCues(); this.hooks.visuals()?.clearTrigger();
     this.request?.abort(); this.request = null; this.epoch++; this.overrideUntilMs = 0;
     this.scheduledRhythm.clear(); this.lastDeliveredText = ''; this.nowMs = atMs;
-    if (this.adaptive && this.runtime && atMs < this.adaptive.durationMs) {
+    if (this.adaptive && this.runtime && !this.adaptive.complete(atMs)) {
       // Generative playback has no prerecorded future to scrub. Re-enter the destination
       // parent with a silent scene, then prepare new speech; never replay an expired cue.
       const previous = this.adaptive;
-      this.adaptive = new AdaptiveDirector(previous.durationMs, previous.intensity, previous.seed);
+      this.adaptive = new AdaptiveDirector(previous.durationMs, previous.intensity, previous.seed,previous.continuous,previous.settings);
       this.readiness.clear(); this.payloads.clear(); this.failed.clear();
       const next = this.adaptive.plan(atMs, { ...this.directorOptions(atMs), speech: false, voiceAvailable: false });
-      let program = ProgramSchema.parse({ version: 1, durationMs: previous.durationMs, baseline: this.runtime.program.baseline, motifs: next.motifs, events: [next.event] });
+      let program = ProgramSchema.parse({ version: 1, durationMs: previous.durationMs, ...(previous.continuous?{continuous:true}:{}), baseline: this.runtime.program.baseline, motifs: next.motifs, events: [next.event] });
       if (this.hooks.haptics()) program = withHapticMappings(program);
       this.runtime.stop(); this.runtime = new EventRuntime(program);
     }
@@ -155,10 +158,16 @@ export class SessionEvents {
     this.hooks.clearDevices(); this.resetPresentation(); this.hooks.audio().clearEventGains();
   }
   private cancelSpeech() {
+    this.lastDeliveredText = this.heardNarration();
     for (const source of this.speechSources) { try { source.stop(); } catch {} }
     this.speechSources = []; this.caption = null; this.cueTimes = []; this.currentText = '';
     this.effectWindows = []; this.eyeCueRanges = [];
     this.pinkTimes = [];
+  }
+  private heardNarration() {
+    if (!this.caption) return this.lastDeliveredText;
+    const engine = this.hooks.audio(), heardMs = this.nowMs - (engine.context.currentTime - engine.outputTime) * 1000;
+    return speechTextAt(this.caption.text, heardMs - this.caption.startMs, this.caption.endMs - this.caption.startMs, this.caption.words) || this.lastDeliveredText;
   }
   stop() {
     this.epoch++; this.request?.abort(); this.request = null; this.cancelSpeech();
@@ -195,7 +204,7 @@ export class SessionEvents {
     const motif = this.runtime.program.motifs.find(m => m.id === (event.motifId ?? event.baseline.motifId));
     try {
       const response = await fetch('/api/events/render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
-        body: JSON.stringify({ ...settings, event, payloadId: slot.payloadId, precedingNarration: this.lastDeliveredText.slice(-1200), presentationPreferences: { visualsEnabled: this.hooks.allowVisuals(), reducedMotion: !!this.hooks.visuals()?.reduced }, ...(motif ? { motif } : {}) }) });
+        body: JSON.stringify({ ...settings,localContext:localContextRequest(), event, payloadId: slot.payloadId, precedingNarration: this.heardNarration().slice(-1200), presentationPreferences: { visualsEnabled: this.hooks.allowVisuals(), reducedMotion: !!this.hooks.visuals()?.reduced, effectsEnabled: this.hooks.allowTriggerSound() && this.hooks.audio().wiperEnabled }, ...(motif ? { motif } : {}) }) });
       const data: RenderedEventSpeech & { error?: string; speechBudget?: { wordsPerMs: number } } = await response.json();
       if (epoch !== this.epoch || controller.signal.aborted) return;
       if (!response.ok) {
@@ -221,13 +230,13 @@ export class SessionEvents {
     } finally { clearTimeout(timeout); if (this.request === controller) this.request = null; }
   }
   private directorOptions(atMs: number) {
-    const current = sessionPhaseAt(atMs / 1000, (this.adaptive?.durationMs ?? this.runtime?.program.durationMs ?? 1) / 1000), eligible = this.hooks.triggers();
+    const current = this.adaptive?.phaseAt(atMs) ?? sessionPhaseAt(atMs / 1000, (this.runtime?.program.durationMs ?? 1) / 1000), eligible = this.hooks.triggers();
     return { speech: this.hooks.allowSpeech(), visuals: this.hooks.allowVisuals(), reducedMotion: !!this.hooks.visuals()?.reduced,
       voiceAvailable: this.nowMs >= this.readiness.blockedUntilMs,
       triggers: typeof eligible === 'function' ? eligible(current.phase, current.progress * 100) : eligible[current.phase] ?? [] };
   }
   private advancePlan(atMs: number, busy: boolean) {
-    if (!this.started || !this.adaptive || !this.runtime || busy || this.hooks.paused() || atMs >= this.adaptive.durationMs) return;
+    if (!this.started || !this.adaptive || !this.runtime || busy || this.hooks.paused() || this.adaptive.complete(atMs)) return;
     const playing = this.runtime.compiled.find(c => c.event.atMs <= atMs && atMs < c.event.atMs + eventDurationMs(c.event));
     if (playing) this.adaptive.observe(playing.event, this.runtime.snapshot(atMs).state, atMs, this.hooks.allowVisuals(), this.voiceBusy);
     // Check against the last delivered tick as well: a suspended tab may jump over entry.
@@ -240,18 +249,20 @@ export class SessionEvents {
       return;
     }
     const end = this.runtime.compiled.at(-1)!, nextMs = Math.max(atMs + 300, end.event.atMs + eventDurationMs(end.event));
-    if (nextMs > atMs + 45000 || nextMs >= this.adaptive.durationMs) return;
+    if (nextMs > atMs + 45000 || this.adaptive.complete(nextMs)) return;
     const next = this.adaptive.plan(nextMs, this.directorOptions(nextMs));
     let event = next.event;
-    if (this.hooks.haptics()) event = withHapticMappings({ version: 1, durationMs: this.adaptive.durationMs, baseline: this.runtime.program.baseline, motifs: [...new Map([...this.runtime.program.motifs, ...next.motifs].map(m => [m.id, m])).values()], events: [event] }).events[0];
+    if (this.hooks.haptics()) event = withHapticMappings({ version: 1, durationMs: this.adaptive.durationMs, ...(this.adaptive.continuous?{continuous:true}:{}), baseline: this.runtime.program.baseline, motifs: [...new Map([...this.runtime.program.motifs, ...next.motifs].map(m => [m.id, m])).values()], events: [event] }).events[0];
     this.runtime.append(event, next.motifs);
   }
   private speak(slot: SpeechSlot, atMs: number) {
     if (!this.hooks.allowSpeech() || slot.speech.requiredTrigger && (!this.hooks.allowTriggers() || !this.hooks.settings().allowedTriggers.includes(slot.speech.requiredTrigger))) return;
     const cached = this.payloads.get(slot.payloadId); if (!cached) { if (!this.failed.has(slot.payloadId)) this.hooks.notice('Narration was not ready for this window. The session timing continues.'); return; }
-    const startMs = slot.atMs + (slot.speech.fixedCue ? slot.speech.cueAtMs! - cached.response.cueOffsetMs! : slot.speech.requiredTrigger ? slot.speech.triggerAtMs! - cached.response.triggerOffsetMs! : 0);
+    const requestedStartMs = slot.atMs + (slot.speech.fixedCue ? slot.speech.cueAtMs! - cached.response.cueOffsetMs! : slot.speech.requiredTrigger ? slot.speech.triggerAtMs! - cached.response.triggerOffsetMs! : 0);
+    const bound = !!slot.speech.fixedCue || !!slot.speech.requiredTrigger || this.runtime!.compiled.find(c => c.event.id === slot.eventId)!.event.haptics.some(a => a.speechSlotId === slot.id);
+    const startMs = bound ? requestedStartMs : Math.max(atMs, requestedStartMs);
     // A delayed decode or aligned cue never moves a fixed trigger/window.
-    if (startMs < atMs - 30 || startMs + cached.buffer.duration * 1000 > slot.endMs + 1) return;
+    if (requestedStartMs < atMs - (bound ? 30 : 150) || startMs + cached.buffer.duration * 1000 > slot.endMs + 1) return;
     const engine = this.hooks.audio(), audioNow = engine.context.currentTime, start = audioNow + (startMs - atMs) / 1000;
     const deadline = audioNow + (slot.endMs - atMs) / 1000;
     this.hooks.clearSpeech(); this.cancelSpeech();
@@ -275,7 +286,7 @@ export class SessionEvents {
     }
     this.currentText = cached.response.text; this.caption = { text: this.currentText, startMs, endMs: startMs + cached.buffer.duration * 1000, words: cached.response.words };
     // Publish the delivered narration, never a prefetched future episode.
-    if (this.speechSources.length) { this.lastDeliveredText = this.currentText; this.hooks.narration(this.currentText); }
+    if (this.speechSources.length) this.hooks.narration(this.currentText);
     this.pinkTimes=this.speechSources.length?(cached.response.pinkOffsetsMs??[]).filter(ms=>Number.isFinite(ms)&&ms>=0&&ms<cached.buffer.duration*1000).map(ms=>startMs+ms):[];
     if (slot.speech.fixedCue) {
       const cueMs=slot.atMs+slot.speech.cueAtMs!, blink=this.runtime!.compiled.find(c=>c.event.id===slot.eventId)!.event.blink!;
@@ -329,6 +340,14 @@ export class SessionEvents {
     if (tick.frames.some(f => f.transition.subtitle === 'clear')) this.caption = null;
     for (const slot of tick.speech) this.speak(slot, atMs);
     const rhythmEvent = this.runtime.compiled.find(c => c.event.id === tick.snapshot.eventId)?.event;
+    if (rhythmEvent?.wipe && this.hooks.allowTriggerSound() && !this.hooks.paused()) {
+      const wipe = rhythmEvent.wipe, cueMs = rhythmEvent.atMs + wipe.offsetMs, key = `${rhythmEvent.id}:wipe:${cueMs}`;
+      // Do not replay a transient wipe after seeking into its middle or after a late tick.
+      if (!this.scheduledRhythm.has(key) && cueMs >= atMs - 150 && cueMs <= atMs + 250) {
+        const audioNow = this.hooks.audio().context.currentTime;
+        if (this.hooks.audio().playWiper(audioNow + (cueMs - atMs) / 1000, audioNow + (cueMs + wipe.durationMs - atMs) / 1000, wipe.text)) this.scheduledRhythm.add(key);
+      }
+    }
     if (rhythmEvent?.rhythm && this.hooks.allowTriggerSound() && !this.hooks.paused()) {
       for (const beat of rhythmBeats(rhythmEvent)) {
         const key = `${rhythmEvent.id}:${beat.atMs}`;

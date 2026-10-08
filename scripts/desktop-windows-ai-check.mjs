@@ -32,16 +32,20 @@ async function launch(){
  const started=performance.now();
  application=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,`--bambi-port=${port}`,`--bambi-accelerator=${cpu?'cpu':'auto'}`,'--use-fake-device-for-media-stream',`--use-file-for-fake-audio-capture=${microphonePath}`],cwd:output,env,timeout:30000});
  applicationChild=application.process();owner=await application.evaluate(()=>process.pid);page=await application.firstWindow();page.on('pageerror',e=>evidence.errors.push(String(e)));await page.waitForSelector('#offline-sample',{state:'visible'});
+ const privacyAccess=await page.evaluate(async()=>{const response=await fetch('/api/access');return response.ok?response.json():{configured:true};});
+ if(!privacyAccess.configured){await page.locator('#privacy-access[open]').waitFor();await page.locator('#privacy-access [name=microphone]').check();await page.locator('#privacy-access button[type=submit]').click();await page.locator('#privacy-access').waitFor({state:'hidden'});}
+
  return performance.now()-started;
 }
 try{
  await startObserver();
  const before=await inventory(resources);evidence.measurements.startupMs=await launch();record('isolated-alpha-start',{startupMs:evidence.measurements.startupMs});
- await page.goto(`http://127.0.0.1:${port}/setup`);await page.waitForFunction(()=>document.querySelector('#setup-progress')?.textContent.includes('not-installed'));
+ await page.goto(`http://127.0.0.1:${port}/setup`);await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='not-installed');
  await application.evaluate(({dialog},directory)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[directory]});},source);
+ await page.getByRole('button',{name:'3. Install and start',exact:true}).click();
  const installStart=performance.now();await page.locator('#setup-copy').click();
- await page.waitForFunction(()=>document.querySelector('#setup-progress')?.textContent.startsWith('installed ·'),{},{timeout:300000});evidence.measurements.verifiedCopyMs=performance.now()-installStart;record('explicit-model-copy-and-verification',{ms:evidence.measurements.verifiedCopyMs,downloadTest:false});
- const prepareStart=performance.now();await page.locator('#setup-prepare').click();await page.waitForFunction(()=>document.querySelector('#setup-progress')?.textContent.startsWith('ready'),{},{timeout:300000});evidence.measurements.firstPreparationMs=performance.now()-prepareStart;record('native-model-and-Kokoro-preparation',{ms:evidence.measurements.firstPreparationMs});
+ await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='installed',{},{timeout:300000});evidence.measurements.verifiedCopyMs=performance.now()-installStart;record('explicit-model-copy-and-verification',{ms:evidence.measurements.verifiedCopyMs,downloadTest:false});
+ const prepareStart=performance.now();await page.getByRole('button',{name:'3. Install and start',exact:true}).click();await page.locator('#setup-prepare').click();await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='ready',{},{timeout:300000});evidence.measurements.firstPreparationMs=performance.now()-prepareStart;record('native-model-and-Kokoro-preparation',{ms:evidence.measurements.firstPreparationMs});
  const fixture=await page.evaluate(async()=>{
   const response=await fetch('/api/voice-lab/render',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:'Keep the small silver key beside the blue glass.',preset:'bambi_local_clean',voice:'bambi_classic',speed:1})});
   if(!response.ok)throw Error('Frozen Kokoro fixture failed');return Array.from(new Uint8Array(await response.arrayBuffer()));
@@ -82,8 +86,8 @@ try{
  if(cpu)assert(!offloaded,'CPU fallback unexpectedly offloaded layers');
  else assert(offloaded,'Auto/Vulkan qualification requires actual GPU-offloaded layers; CPU fallback is a separate run.');
  record('acceleration-observations',{requested:evidence.accelerator,logLines:evidence.accelerationEvidence,gpuQualified:!cpu&&evidence.accelerationEvidence.some(line=>/offloaded [1-9][0-9]*\//i.test(line))});
- await launch();await page.goto(`http://127.0.0.1:${port}/setup`);await page.waitForFunction(()=>document.querySelector('#setup-progress')?.textContent.startsWith('installed ·'),{},{timeout:180000});
- await page.locator('#setup-prepare').click();await page.waitForFunction(()=>document.querySelector('#setup-progress')?.textContent.startsWith('ready'),{},{timeout:300000});record('reopen-with-verified-installed-models',{networkIsolationVerified:false});
+ await launch();await page.goto(`http://127.0.0.1:${port}/setup`);await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='installed',{},{timeout:180000});
+ await page.getByRole('button',{name:'3. Install and start',exact:true}).click();await page.locator('#setup-prepare').click();await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='ready',{},{timeout:300000});record('reopen-with-verified-installed-models',{networkIsolationVerified:false});
  assert.deepEqual(await inventory(resources),before);record('resources-unchanged');evidence.result='passed';
  evidence.limitations=['This is native application acceptance with a synthetic microphone, not physical hearing/microphone qualification.','Received browser download, Windows security policy, actual NSIS install/uninstall and offline network isolation are separate gates.','Setup copy is verified here; actual model download, cancellation/retry and damaged-install recovery need the setup acceptance run.','CPU and auto/Vulkan must be run separately; GPU presence alone is not support evidence.'];
 }catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);process.exitCode=1;}
