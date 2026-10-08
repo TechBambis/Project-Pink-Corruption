@@ -17,4 +17,4 @@ fi
 npm ci --ignore-scripts
 ./scripts/start.sh
 .runtime/bin/ollama pull qwen3.5:4b
-python3 -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:11434/api/tags')); assert next(m['digest'] for m in d['models'] if m['name']=='qwen3.5:4b')=='2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd', 'Upstream model tag changed; review VERSIONS.md before replacing the verified model.'"
+python3 -c "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:11434/api/tags')); assert next(m['digest'] for m in d['models'] if m['name']=='qwen3.5:4b')=='2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd', 'Upstream model tag changed; review scripts/setup.sh before replacing the verified model.'"

@@ -40,14 +40,14 @@ For UI behavior, use `npm run test:integration`, `npm run test:navigation`, `npm
 
 | Task | Guide |
 | --- | --- |
-| Understand modules and timing | [Architecture](ARCHITECTURE.md), [runtime versions](VERSIONS.md) |
+| Understand modules and timing | [Architecture](ARCHITECTURE.md) |
 | Models and permissions | [Model setup](docs/MODEL_SETUP.md), [Privacy & access](docs/PRIVACY_ACCESS.md) |
-| Voice, delivery and recognition | [Local audio](docs/LOCAL_AUDIO.md), [streaming speech](docs/STREAMING_SPEECH.md) |
+| Voice, delivery and recognition | [Local audio](docs/LOCAL_AUDIO.md) |
 | Settings files | [Settings & presets](docs/SETTINGS_BACKUP.md) |
 | Devices | [Device setup](docs/DEVICES.md) |
 | Cloud endpoints | [Cloud setup](docs/CLOUD_COMPUTE.md) |
 | BambiCloud playback | [BambiCloud](docs/BAMBICLOUD.md) |
-| Conversation behavior | [Situational conversation](docs/SITUATIONAL_CONVERSATION.md) |
+| Conversation behavior | [Architecture](ARCHITECTURE.md#models-and-conversation) |
 | Packages and publication | [Desktop builds](docs/DESKTOP_RELEASE.md), [release process](docs/RELEASE-SECURITY.md) |
 | Security and credits | [Local security](docs/LOCAL_SECURITY.md), [upstream content](docs/STABLE_CONTENT.md), [licenses](LICENSING.md) |
 

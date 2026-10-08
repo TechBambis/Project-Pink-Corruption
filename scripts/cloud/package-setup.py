@@ -22,16 +22,14 @@ selected = [
     'scripts/cloud/token-counter.py',
     'docs/cydonia-server-profiles.json',
     'docs/cydonia-cloud-model.json',
-    'docs/HYPERAI_PREP.md',
-    'docs/HYPERAI_OPERATIONS.md',
+    'docs/CLOUD_COMPUTE.md',
 ]
 output.parent.mkdir(parents=True, exist_ok=True)
 with ZipFile(output, 'w', compression=ZIP_DEFLATED) as bundle:
     for name in selected:
         bundle.write(root / name, 'bambi-cloud-setup/' + name)
-    bundle.writestr('bambi-cloud-setup/README.md', (root / 'docs/HYPERAI_PREP.md').read_text())
-    bundle.writestr('bambi-cloud-setup/docs/CLOUD_COMPUTE.md',
-                     '# Standalone cloud setup\n\nFollow [HYPERAI_PREP.md](HYPERAI_PREP.md) for preparation and serving.\n')
+    bundle.writestr('bambi-cloud-setup/README.md',
+                     '# Cloud setup\n\nFollow [Cloud setup](docs/CLOUD_COMPUTE.md).\n')
 with ZipFile(output) as bundle:
     if bundle.testzip() is not None:
         raise RuntimeError('Setup ZIP verification failed.')

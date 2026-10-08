@@ -14,7 +14,7 @@ import {once} from 'node:events';
 
 const root=fileURLToPath(new URL('../',import.meta.url)),realStreaming=process.env.BAMBI_BROWSER_STREAMING==='1';
 const streamingFixture=join(root,'.runtime/streaming-speech/test.wav');
-if(realStreaming&&!existsSync(streamingFixture))throw Error('Streaming integration needs the public test WAV at .runtime/streaming-speech/test.wav. See docs/STREAMING_SPEECH.md.');
+if(realStreaming&&!existsSync(streamingFixture))throw Error('Streaming integration needs the public test WAV at .runtime/streaming-speech/test.wav. See docs/LOCAL_AUDIO.md#microphone-recognition.');
 const wav=Buffer.alloc(44+32000);wav.write('RIFF',0);wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(16000,24);wav.writeUInt32LE(32000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(32000,40);
 // Allow a realistic display window for each word on the two-core CI runner.
 const captionSeconds=2,captionWav=Buffer.alloc(44+32000*captionSeconds);wav.copy(captionWav,0,0,44);captionWav.writeUInt32LE(captionWav.length-8,4);captionWav.writeUInt32LE(captionWav.length-44,40);

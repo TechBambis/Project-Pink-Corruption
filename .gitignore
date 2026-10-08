@@ -40,7 +40,6 @@ id_ed25519*
 /*.md
 !/README.md
 !/ARCHITECTURE.md
-!/VERSIONS.md
 !/LICENSING.md
 !/CLA.md
 !/CONTRIBUTING.md
@@ -52,15 +51,10 @@ id_ed25519*
 !/docs/LOCAL_SECURITY.md
 !/docs/LOCAL_AUDIO.md
 !/docs/LOCAL_AUDIO_LICENSES.md
-!/docs/STREAMING_SPEECH.md
 !/docs/DEVICES.md
 !/docs/BAMBICLOUD.md
 !/docs/CLOUD_COMPUTE.md
-!/docs/HYPERAI_PREP.md
-!/docs/HYPERAI_OPERATIONS.md
-!/docs/SALAD_CLOUD.md
 !/docs/STABLE_CONTENT.md
-!/docs/SITUATIONAL_CONVERSATION.md
 !/docs/anubis-model.json
 !/docs/LICENSE.*
 !/docs/licenses/
@@ -191,7 +185,6 @@ test-results/
 !/scripts/desktop-windows-processes.mjs
 !/scripts/desktop-windows-ai-check.mjs
 !/scripts/desktop-windows-source.mjs
-!/docs/AI_RUNTIME_STRATEGY.md
 !/docs/DESKTOP_RELEASE.md
 !/scripts/desktop-source.mjs
 !/scripts/desktop-release.mjs

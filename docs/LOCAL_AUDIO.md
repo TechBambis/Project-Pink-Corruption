@@ -64,3 +64,22 @@ Speed stays within 0.5–1.5. Output-timed visuals respect manual scenes/reduced
 Imported audio/video plays in the browser. Optional **≈** analysis needs ffmpeg/ffprobe; transcription also needs Whisper. Digital pause markers stay out of synthesis. Interruption discards queued speech; an executing ONNX phrase may finish first.
 
 Run `npm run test:audio` after TTS setup, or `node scripts/dual-voice-check.mjs` after a web build. Fixture checks do not replace listening. [Audio notices](LOCAL_AUDIO_LICENSES.md).
+
+## Microphone recognition
+
+Install optional English streaming recognition with `npm run setup:streaming-speech`, restart the server and reload the page. Setup downloads about 73 MB, verifies the pinned [model](../config/streaming-speech-model.json) and installs a separate `.runtime/streaming-stt-venv`; normal startup does not download it.
+
+Under **Microphone & conversation → Recognition**, Automatic uses streaming when available and falls back to installed Whisper. Whisper processes complete segments; Streaming requires the English model. Selection changes on the next microphone activation. Failure during an utterance can submit its completed WAV to Whisper; cancelled utterances are never retried.
+
+AudioWorklet/worker VAD supplies 16 kHz PCM over the admitted same-origin `/ws/speech` socket to one CPU recognizer through private pipes. Partial words are status only; exactly one final transcript becomes chat input. Muting releases the connection, Stop shuts down the worker, and idle residency lasts at most 60 seconds. Utterance IDs reject late results; audio queues/timeouts are bounded and recognition accepts at most 27 seconds. PCM is not saved by the recognizer; final input follows normal conversation/cloud settings.
+
+For a real-model browser fixture after streaming setup:
+
+```sh
+curl --fail --location \
+  https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26/resolve/672fbf1b30579d6585301139bb363f42a0ad4a24/test_wavs/0.wav \
+  --output .runtime/streaming-speech/test.wav
+BAMBI_BROWSER_STREAMING=1 npm run test:integration
+```
+
+Install Playwright Chromium or set `BAMBI_BROWSER_BINARY`. This injected recording checks partial/final ordering, one committed input and Mute; it does not test a physical microphone. Compare English recognition with Whisper on your own names/noise. VAD pause settings still determine when speech ends.

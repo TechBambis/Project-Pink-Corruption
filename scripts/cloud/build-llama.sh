@@ -17,7 +17,7 @@ revision='11fe02151f79c41d0d4af7da708755d73b9c0da6'
 source_dir="$root/.runtime/cloud-llama"
 for binary in git cmake c++ nvcc python3; do
   if ! command -v "$binary" >/dev/null; then
-    echo "Missing $binary. Model preparation can still run with download-model.py; see docs/HYPERAI_PREP.md for build dependencies." >&2
+    echo "Missing $binary. Install it before building. Model preparation can still run with download-model.py." >&2
     exit 1
   fi
 done

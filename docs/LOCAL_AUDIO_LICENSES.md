@@ -32,7 +32,7 @@ The phonemizer and eSpeak components are needed for local grapheme-to-phoneme co
 
 Public sound/voice assets are identified above and in their manifests. User imports and recordings are not part of the distribution and need their own redistribution permissions. Downloaded weights and installed environments stay outside Git.
 
-Optional streaming recognition has a separate environment installed by `scripts/setup-streaming-speech.py`; it does not alter the TTS lockfile. Sherpa-onnx and its core package are pinned to 1.13.8, with NumPy 2.5.3. Preserve their installed package notices and the Zipformer model's upstream attribution when redistributing. [Streaming setup and recognition limits](STREAMING_SPEECH.md).
+Optional streaming recognition has a separate environment installed by `scripts/setup-streaming-speech.py`; it does not alter the TTS lockfile. Sherpa-onnx and its core package are pinned to 1.13.8, with NumPy 2.5.3. Preserve their installed package notices and the Zipformer model's upstream attribution when redistributing. [Streaming setup and recognition limits](LOCAL_AUDIO.md#microphone-recognition).
 
 The optional local device bridge has its own isolated environment: Bleak 3.0.2 and dbus-fast 5.0.4, both MIT, pinned in `packages/devices/requirements.lock`. They do not change the TTS environment. Retain their installed license notices when redistributing; [device setup, upstream packet provenance and licensing](DEVICES.md).
 

@@ -8,7 +8,7 @@ import {copy,copyTree,sourcePathAllowed,inventory,digest,hashFile} from './deskt
 
 const roots=['apps','packages','config','presets','tests','scripts','voices'];
 const top=['package.json','package-lock.json','tsconfig.json','.gitignore','desktop-builder.cjs','desktop-alpha-builder.cjs','desktop-windows-builder.cjs','LICENSE','LICENSING.md','README.md'];
-const docs=['MODEL_SETUP.md','PRIVACY_ACCESS.md','DESKTOP_RELEASE.md','AI_ALPHA_TESTING.md','SETTINGS_BACKUP.md','AI_RUNTIME_STRATEGY.md','anubis-model.json','community-models.json','LICENSE.stable2','STABLE_CONTENT.md','LOCAL_AUDIO_LICENSES.md','SITUATIONAL_CONVERSATION.md','LOCAL_AUDIO.md','RELEASE-SECURITY.md'];
+const docs=['MODEL_SETUP.md','PRIVACY_ACCESS.md','DESKTOP_RELEASE.md','AI_ALPHA_TESTING.md','SETTINGS_BACKUP.md','anubis-model.json','community-models.json','LICENSE.stable2','STABLE_CONTENT.md','LOCAL_AUDIO_LICENSES.md','LOCAL_AUDIO.md','RELEASE-SECURITY.md','LOCAL_SECURITY.md','DEVICES.md','BAMBICLOUD.md','CLOUD_COMPUTE.md'];
 
 /** One source allowlist for every native builder; runtime/user data never enter it. */
 export async function stageDesktopSource(root,destination,version){
@@ -18,7 +18,7 @@ export async function stageDesktopSource(root,destination,version){
  const reviewedScripts=new Set([...readFileSync(join(root,'.gitignore'),'utf8').matchAll(/^!\/scripts\/([^\r\n]+)$/gm)].map(match=>match[1]));
  for(const folder of roots){mkdirSync(join(destination,folder),{recursive:true});copyTree(join(root,folder),join(destination,folder),path=>sourcePathAllowed(folder+'/'+path)&&(folder!=='scripts'||reviewedScripts.has(path)));}
  for(const path of top)copy(join(root,path),join(destination,path));
- for(const path of ['.gitattributes','CLA.md','CONTRIBUTING.md','ARCHITECTURE.md','VERSIONS.md'])if(existsSync(join(root,path)))copy(join(root,path),join(destination,path));
+ for(const path of ['.gitattributes','CLA.md','CONTRIBUTING.md','ARCHITECTURE.md'])if(existsSync(join(root,path)))copy(join(root,path),join(destination,path));
  for(const path of ['AppRun','AppRun.alpha'])copy(join(root,'apps/desktop',path),join(destination,'apps/desktop',path));
  if(existsSync(join(root,'voices/bambi_classic.npy')))copy(join(root,'voices/bambi_classic.npy'),join(destination,'voices/bambi_classic.npy'));
  for(const path of docs)if(existsSync(join(root,'docs',path)))copy(join(root,'docs',path),join(destination,'docs',path));
