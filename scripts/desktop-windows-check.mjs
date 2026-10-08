@@ -151,11 +151,14 @@ try{
   const wait=async(predicate,label)=>{const deadline=performance.now()+8000;while(performance.now()<deadline){if(predicate())return;await sleep(100);}throw Error(label+' '+JSON.stringify(state()));};
   await document.querySelector('#offline-sample').onclick();document.querySelector('#pause').click();
   await wait(()=>!media.paused&&!media.ended&&media.currentTime>.4&&peak()>.0001,'Fresh sample has no output');
-  const before={...state(),peak:peak()};mute.click();
-  await sleep(500);const muted={...state(),peak:peak()};
-  if(muted.paused||muted.ended||muted.muted!=='true'||muted.peak!==0)throw Error('Mute assertion '+JSON.stringify(muted));
+  const before={...state(),peak:peak()},muteStarted=performance.now();mute.click();
+  // MASTER uses the existing 40 ms exponential setTargetAtTime fade. Float
+  // PCM need not become bit-exact zero; wait for a measured -140 dBFS floor.
+  await wait(()=>peak()<=1e-7,'Mute did not settle below the output floor');
+  const muted={...state(),peak:peak(),settleMs:performance.now()-muteStarted};
+  if(muted.paused||muted.ended||muted.muted!=='true'||muted.peak>1e-7)throw Error('Mute assertion '+JSON.stringify(muted));
   mute.click();await wait(()=>!media.paused&&!media.ended&&mute.dataset.muted==='false'&&peak()>.0001,'Unmute has no output');
-  return {before,muted,unmuted:{...state(),peak:peak()},method:'Fresh included sample; real button handlers invoked in the renderer to avoid hosted-runner IPC delays. No direct media, gain or audio-context manipulation.'};
+  return {before,muted,unmuted:{...state(),peak:peak()},mutePeakLimit:1e-7,method:'Fresh included sample; real button handlers invoked in the renderer to avoid hosted-runner IPC delays. Existing exponential mute fade must settle to peak <= 1e-7 (-140 dBFS) while playback continues; zero float PCM is not assumed. No direct media, gain or audio-context manipulation.'};
  });
  record('audio-mute-and-unmute',muteCheck);
  await current.page.keyboard.press('Escape');await current.page.keyboard.press('Escape');await current.page.waitForFunction(()=>document.querySelector('#media').paused&&window.__testAnalyser.context.state==='suspended');record('end-session-stops-output');

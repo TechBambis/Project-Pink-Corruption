@@ -23,7 +23,7 @@ Run the packaging acceptance before adding speech and inference:
 Then build the full alpha:
 
 ```bat
-scripts\desktop-windows-build.cmd alpha 0.1.0-alpha.5
+scripts\desktop-windows-build.cmd alpha 0.1.0-alpha.6
 ```
 
 The alpha creates a fresh environment from the checksum-pinned native CPython 3.12.13 distribution (build 20260610) on Windows and freezes the locked Kokoro/ONNX/streaming services there. It retains the reviewed llama server, CPU variants, optional Vulkan libraries and notices from the checksum-pinned acquisition archive. It does not package an Ollama daemon, CUDA tree, model weights, developer venv, credentials, conversations or recordings. Allow at least 6 GiB free for the build tree and downloads; model setup needs additional space for the reviewed assets and staging reserve. The builder checks native x64 PE headers and normal/delay DLL imports. Vulkan additionally needs the actual driver's `vulkan-1.dll`; that optional driver dependency is recorded separately. Static import closure does not replace native loader/service tests.
@@ -41,9 +41,9 @@ The check copies an unpacked app outside the repository when needed, launches fr
 Run packaging acceptance on the alpha too, then test the reviewed public model data through Setup's folder chooser:
 
 ```bat
-.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-check.mjs "dist\desktop-windows\0.1.0-alpha.5\win-unpacked\Bambi Local.exe"
-.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-ai-check.mjs "dist\desktop-windows\0.1.0-alpha.5\win-unpacked\Bambi Local.exe" "D:\Reviewed model data"
-.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-ai-check.mjs "dist\desktop-windows\0.1.0-alpha.5\win-unpacked\Bambi Local.exe" "D:\Reviewed model data" --cpu
+.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-check.mjs "dist\desktop-windows\0.1.0-alpha.6\win-unpacked\Bambi Local.exe"
+.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-ai-check.mjs "dist\desktop-windows\0.1.0-alpha.6\win-unpacked\Bambi Local.exe" "D:\Reviewed model data"
+.runtime\desktop-windows-tools\node-v24.18.1-win-x64\node.exe scripts\desktop-windows-ai-check.mjs "dist\desktop-windows\0.1.0-alpha.6\win-unpacked\Bambi Local.exe" "D:\Reviewed model data" --cpu
 ```
 
 These native AI checks cover verified copying, real text and spoken replies, the unchanged `bambi_classic` voice and preset, synthetic microphone recognition, separate audio/mic controls, End session, eight spoken turns, runtime cleanup, model reopen, timings and sampled owned process resources. Both accelerator runs are required to assess Vulkan and CPU separately. A GPU name is not proof of offloading. Record the actual llama offload log lines and conversation result. Working set, private commit and CPU counters have different meanings; the evidence describes the sampling method and limitations. Save complete preparation and first-playback times, hardware, Windows build and driver versions. Do not substitute Linux measurements.
