@@ -90,7 +90,7 @@ export async function hardwareProfile(refresh=false):Promise<HardwareProfile>{
  const cpus=os.cpus(),platform=os.platform();
  const profile=baseHardwareProfile(platform,os.arch(),cpus[0]?.model??'Unknown CPU',cpus.length,os.totalmem(),availableRAM());
  if(!profile.unifiedMemory){
-  if(!gpuProbing&&(!gpuCache||refresh||Date.now()-gpuCacheTime>60000)){gpuProbing=true;gpuCacheTime=Date.now();gpuCache=probeGPUs(platform).finally(()=>{gpuProbing=false;});}
+  if(!gpuCache||!gpuProbing&&(refresh||Date.now()-gpuCacheTime>60000)){gpuProbing=true;gpuCacheTime=Date.now();gpuCache=probeGPUs(platform).finally(()=>{gpuProbing=false;});}
   profile.gpus=await gpuCache;
   if(!profile.gpus.some(gpu=>gpu.memoryTotal!==null))profile.warnings.push('Dedicated GPU memory could not be measured. GPU acceleration needs a real runtime test.');
  }
