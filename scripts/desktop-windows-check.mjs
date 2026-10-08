@@ -103,10 +103,10 @@ try{
  const secondStarted=performance.now();
  await new Promise((accept,reject)=>{
   const timer=setTimeout(async()=>{
+   reject(Error('Second instance did not exit within 30 seconds'));
    try{if(process.env.BAMBI_WINDOWS_OBSERVER){
     evidence.secondStart.observations.push({at:new Date().toISOString(),processes:(await observeRows(secondRoots)).map(({command,...row})=>row),windows:await observeRows(secondRoots,true)});
    }}catch(error){evidence.secondStart.observationFailure=String(error);}
-   reject(Error('Second instance did not exit within 30 seconds'));
   },30000);
   secondNative.once('error',error=>{clearTimeout(timer);reject(error);});
   secondNative.once('exit',(code,signal)=>{clearTimeout(timer);if(code===0&&!signal)accept();else reject(Error('Second instance exit '+JSON.stringify({code,signal})));});
