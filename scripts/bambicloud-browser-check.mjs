@@ -30,7 +30,7 @@ try{
   if(path==='/api/local-sounds/catalog')return route.fulfill({json:{assets:[{id:'giggle',status:'available',url:'/api/local-sounds/giggle.wav',gainDb:-12}]}});
   if(path==='/api/local-sounds/giggle.wav')return route.fulfill({contentType:'audio/wav',body:giggleWav});
   if(path==='/api/content')return route.continue();
-  if(path==='/api/access')return route.fulfill({json:{version:1,configured:true,choices:{microphone:false,devices:false,modelDownloads:false,onlineMedia:true,cloudAI:false,localClock:false,approximateLocation:false,contextToCloud:false},place:null}});
+  if(path==='/api/access')return route.fulfill({json:{version:1,configured:true,choices:{microphone:false,devices:true,modelDownloads:false,onlineMedia:true,cloudAI:false,localClock:false,approximateLocation:false,contextToCloud:false},place:null}});
   if(path==='/api/health')return route.fulfill({json:{models:[],voices:[],hardware:{},audioPresets:{}}});
   if(path==='/api/memory')return route.fulfill({json:{facts:[],turns:[],semantic:'ready'}});
   return route.fulfill({json:{ok:true}});
