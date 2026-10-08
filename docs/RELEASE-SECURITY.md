@@ -1,165 +1,59 @@
-# Verified desktop releases
+# Release process
 
-The tag release pipeline produces **Linux x64 AppImage and Windows x64 per-user NSIS smoke installers together**. Smoke packages contain the offline sample and desktop shell; they do not contain local AI or speech services. Existing AI alpha builds and manual workflows remain separate until their additional release gates and native prerequisites are qualified.
+## Automatic Smoke releases
 
-## What happens on a release tag
+`vX.Y.Z`, `vX.Y.Z-beta.N`, `vX.Y.Z-rc.N` and `vX.Y.Z-smoke.N` run `.github/workflows/release.yml`. Branch pushes do not release packages. Alpha tags use the separate process below.
 
-`vX.Y.Z`, `vX.Y.Z-smoke.N`, `vX.Y.Z-beta.N` and `vX.Y.Z-rc.N` trigger `.github/workflows/release.yml`. Normal branch pushes and pull requests run application checks, without creating releases. Unsupported/malformed tags fail the release preflight; AI `alpha` tags are intentionally not accepted by this smoke publication workflow.
+The pipeline checks the tagged commit, installs locked dependencies, runs application/security checks, builds Linux/Windows packages, tests the finished files, then hashes and publishes those exact bytes. It never replaces existing assets.
 
-1. Verify the tag resolves to the exact checked-out commit, the configured maintainer initiated the push, package/lockfile base versions agree, and temporary artifact storage has room. An annotated or lightweight tag is supported.
-2. Run the existing application check workflow: locked dependency installation, dependency audit, repository hygiene, TypeScript, tests, extension build, conversation evaluation, browser integration and the pinned history secret scan. There is no invented lint command.
-3. Freeze that commit's reviewed source independently on standard `ubuntu-24.04` and `windows-2022` x64 runners. Install with `npm ci --ignore-scripts`, check the frozen source and build once using the existing native builders. Downloads outside npm already use the builders' pinned runtime checksums; no dependency/lockfile updates are performed.
-4. Exercise the finished AppImage's extracted payload through its `AppRun`, and exercise the finished Windows installer through installation, application checks, uninstallation and reinstallation. Inspect bound runtime/source inventories and reject obvious sensitive/local paths in transferred source/notice archives. Original third-party notices are preserved.
-5. Stage only one primary executable per platform, matching source, notices, native evidence, runtime manifests and a scoped npm CycloneDX SBOM. Transfer these exact bytes using official artifact actions with digest mismatch configured to fail.
-6. Verify both targets have successful bound checks, matching canonical application source, unchanged downloads and the expected tag/commit/run. Copy the two executables unchanged, collect supplementary files and `BUILD-INFO.json` in one deterministic technical ZIP, then generate `SHA256SUMS` for the three downloadable artifacts. No executable is rebuilt.
-7. In public repositories, the pinned official `actions/attest` creates build provenance for **every final attached file**: both executables, the technical ZIP and `SHA256SUMS`. The attested ZIP binds the source/notice archives, metadata and SBOMs inside it. Private repositories skip this unsupported Free-plan operation.
-8. The publication job independently assembles the same bytes, verifies public build attestations against repository/workflow/tag/commit, confirms the remote tag, creates a draft with GitHub CLI, uploads all assets, checks GitHub's uploaded SHA-256 digests and sizes, rechecks the tag and publishes last. A failed platform or required verification prevents publication. Existing releases are never overwritten.
-9. Remove only the current successful run's two temporary transfer artifacts. Failed-run artifacts expire after one day; their retention is not permanent distribution storage.
-
-## Downloadable files
-
-For normal use, download **one file for your operating system**. Windows users run the `.exe` installer; Linux users make the AppImage executable and open it. Installing Node/npm separately is not required for these packaged smoke builds. Release notes start with explicit Windows and Linux download links.
-
-The pipeline attaches only four files:
-
-- `bambi-local-VERSION-x64.exe` — Windows x64 installer.
-- `bambi-local-VERSION-x86_64.AppImage` — Linux x64 application.
-- `bambi-local-VERSION-technical-details-and-source.zip` — optional technical records and matching source.
-- `SHA256SUMS` — hashes of the two executables and the complete ZIP.
-
-Inside the optional ZIP, `README.txt` explains the layout and `BUILD-INFO.json` records the tag, exact commit/run and original file hashes. All per-platform `BUILD-INFO.json`, `RUNTIME-MANIFEST.json`, `SOURCE-CHECKS.json`, `DESKTOP-QUALIFICATION.json`, `PACKAGING-CHECK.json`, scoped `SBOM.cdx.json` and `NOTICES.tar.gz` remain available; Windows also includes `INSTALLER-CHECK.json`. The two `bambi-local-VERSION-TARGET-source.tar.gz` files preserve each native build's matching source bytes and original licenses. They are copied unchanged into the ZIP. Canonical application identity must agree even when checkouts differ in line endings.
-
-The ZIP excludes the installers themselves to avoid duplicate large downloads. It uses sorted flat entries, fixed timestamps/permissions and stored entries for deterministic bytes in both public aggregation jobs; already compressed source/notice archives are not recompressed. Before publication, ZIP paths, regular-file attributes, CRCs, size bounds, identity and every original file hash are checked. No archive paths are extracted by the publisher.
-
-GitHub also displays its automatic **Source code (zip/tar.gz)** links and, when enabled, the release attestation. Those platform-provided entries remain visible; the pipeline controls its four attachments. Normal users do not need them. GitHub's source snapshots do not replace the matching source and bundled third-party records in the optional ZIP.
-
-Beta.12 and earlier releases retain their original separate files. Immutable releases are not retroactively repackaged. The compact layout applies to releases made by this updated pipeline.
-
-To inspect the optional archive after verifying its checksum, use your operating system's ZIP extractor. For example:
-
-```sh
-unzip bambi-local-VERSION-technical-details-and-source.zip -d technical-details
-```
-
-```powershell
-Expand-Archive .\bambi-local-VERSION-technical-details-and-source.zip -DestinationPath .\technical-details
-```
-
-The extracted `BUILD-INFO.json` identifies the exact executable hashes; extracting the ZIP alone does not validate them. Verify the complete ZIP with `SHA256SUMS` or the appropriate release/build attestation first. The source/notice archives retain their original tar.gz format inside the ZIP.
-
-## One-time maintainer setup
-
-No GitHub settings or billing changes are made by the repository scripts.
-
-1. Review and commit the intended repository changes, including the workflows and release helpers. Uncommitted work is not part of a Git tag. Confirm the active GitHub account is the intended maintainer, numeric ID **337824705**, before pushing. That ID is also the initial release allowlist in `config/release-pipeline.json`; future maintainers must be explicitly reviewed and added there.
-2. Ensure repository Actions can use standard Linux/Windows GitHub-hosted runners and the official pinned actions. Existing organization policy may restrict them. The automatic `GITHUB_TOKEN` receives job-specific permissions; no personal access token, registry, signing key or new service is required.
-3. For private releases, review the repository owner's remaining **account-wide** Actions/Packages allowance and zero paid-usage controls. Without a payment method, GitHub blocks over-quota use; otherwise use an applicable zero-dollar Actions budget with **Stop usage when budget limit is reached**. An alert-only budget does not stop usage. After actually checking this, set repository Actions variable `RELEASE_FREE_ALLOWANCE_CONFIRMED` to `true`. Until then, private preflight fails before installation/build work. Clear it if the allowance/billing assumptions stop being true.
-4. Recommended: repository **Settings → Releases → Enable release immutability**. This one-time setting protects future releases. It cannot be enabled by committing YAML. The workflow already uploads a complete draft before publication and works with immutability enabled. If left disabled, ordinary Releases still work, but do not have immutable-release protection or release attestations.
-5. Ensure the default branch contains this reviewed setup before the first tag. No local compilation is necessary.
-
-To inspect the currently authenticated account without changing it:
-
-```sh
-gh api user --jq '{login: .login, id: .id}'
-```
-
-The release automation runs as GitHub's repository-scoped Actions token, not as a second connected personal account. It checks the initiating maintainer's numeric actor ID.
-
-## Create a beta release
-
-After reviewing and committing the release setup and completing the one-time private allowance check:
+Before a private run, verify remaining account-wide Actions/storage allowance and enforced zero-spend controls; set `RELEASE_FREE_ALLOWANCE_CONFIRMED=true` only after checking. Use standard runners. Budget roughly 20–35 summed runner minutes for Smoke, with additional Windows allowance accounting. Enable repository release immutability.
 
 ```sh
 git checkout main
 git pull --ff-only
 git status --short
-gh api user --jq '{login: .login, id: .id}'
-# Confirm there are no intended uncommitted release changes and the ID is 337824705.
-# This example assumes package.json and package-lock.json both declare 0.1.0.
-git tag -a v0.1.0-beta.13 -m "v0.1.0-beta.13"
-git push origin v0.1.0-beta.13
+# Choose a fresh tag matching package.json's base version.
+git tag -a vX.Y.Z-beta.N -m "vX.Y.Z-beta.N"
+git push origin vX.Y.Z-beta.N
 ```
 
-Use a fresh tag. The first end-to-end pipeline attempts already use beta.1 through beta.12; do not reuse or move those tags. To release a different base version, update and commit `package.json` and both lockfile root version fields first, following the existing versioning policy; never update a lockfile in the release job. `beta`, `rc` and `smoke` tags automatically create prereleases and do not become the latest stable release. A stable tag is handled as a regular release, but the current workflow still explicitly labels its packages **smoke**. Do not present them as a feature-complete application. General AI-alpha publication requires a separate reviewed scope change.
+Verify the authenticated account is **337824705** before writes. Optional SSH/GPG-signed tags use `git tag -s`.
 
-If any job fails, inspect its logs. If upload verification fails after draft creation, the draft remains unpublished. Review and remove that failed draft explicitly before retrying; this pipeline refuses to replace existing release assets. Never silently move a published version tag. With immutability enabled, publish a new version to correct a release.
+## AI alpha releases
 
-Optional defense in depth: configure free SSH/GPG Git tag signing and use `git tag -s` instead of `git tag -a`. Key provisioning is not part of this pipeline; signed tags do not replace build or release attestations.
+1. Commit/check the source; [build and qualify](DESKTOP_RELEASE.md) both native targets using a fresh version.
+2. Compare application identities and verify unchanged package hashes. Retain matching source/notices and record pending hardware checks accurately.
+3. Create the source tag and a draft prerelease. Attach one EXE, one AppImage, an optional technical/source ZIP and `SHA256SUMS`.
+4. Verify uploaded digests and download the files back for checksum comparison. Publish last; confirm `immutable: true`.
 
-## Verify a download
+Alpha source/packaging acceptance and Windows installer/speech acceptance permit accompanied tests. Full-model, offline and physical-device qualification remain separate gates. Identify local Linux builds as local; Windows CI results do not establish Linux build provenance.
 
-Replace `OWNER/REPO` with the actual repository from the release page / `BUILD-INFO.json` inside the optional technical ZIP; currently the origin is `TechBambis/Project-Pink-Corruption`. Do not blindly trust a different repository identifier supplied with an unsolicited binary. Private beta downloads require authenticated access to the private repository. GitHub Release links do not make private binaries publicly downloadable.
+## Downloads and verification
 
-Linux example, using a recent GitHub CLI:
+Users need only their platform's executable. The optional ZIP contains build metadata, source/notices, native records and a scoped npm SBOM.
 
 ```sh
-gh release download v0.1.0-beta.12 --repo TechBambis/Project-Pink-Corruption --dir bambi-release
+gh release download TAG --repo TechBambis/Project-Pink-Corruption --dir bambi-release
 cd bambi-release
 sha256sum -c SHA256SUMS
 ```
 
-macOS provides `shasum -a 256 -c SHA256SUMS`. Windows PowerShell can verify an individual file with:
+For a single Windows download, compare `Get-FileHash FILE.exe -Algorithm SHA256` with its checksum entry. Private downloads require repository access.
 
-```powershell
-Get-FileHash .\bambi-local-0.1.0-beta.12-x64.exe -Algorithm SHA256
-# Compare with its exact entry in SHA256SUMS.
-```
-
-When release immutability is enabled:
+Public automatic releases also enable GitHub build attestations:
 
 ```sh
-gh release verify v0.1.0-beta.12 --repo TechBambis/Project-Pink-Corruption
-gh release verify-asset v0.1.0-beta.12 ./bambi-local-0.1.0-beta.12-x86_64.AppImage --repo TechBambis/Project-Pink-Corruption
+gh attestation verify FILE --repo TechBambis/Project-Pink-Corruption
 ```
 
-For a **public** release with an Actions build attestation:
+Private Free-plan builds skip those attestations. Immutable release attestations are separate. Checksums check integrity; signed provenance identifies the release/build source. Neither proves code safety or supplies OS publisher signing.
 
-```sh
-gh attestation verify ./bambi-local-0.1.0-beta.12-x86_64.AppImage \
-  --repo TechBambis/Project-Pink-Corruption \
-  --signer-workflow TechBambis/Project-Pink-Corruption/.github/workflows/release.yml \
-  --source-ref refs/tags/v0.1.0-beta.12 \
-  --source-digest FULL_EXPECTED_COMMIT_SHA
-```
+## Pipeline controls
 
-Obtain the expected commit independently from the trusted tag/source view. Substitute the Windows installer filename to verify that download. Checksums cover both executables and the technical ZIP; the public build attestation covers these files and `SHA256SUMS` itself. Internal metadata keeps hashes of the original supplementary files and executables. For existing beta.12, checksums still cover its original individual attachments. Verification does not require disabling any operating-system security controls.
+Official actions are SHA-pinned. Build/test jobs have `contents: read`; attestation uses `id-token: write` and `attestations: write`; publication uses `contents: write`; temporary artifact cleanup uses `actions: write`. Write permissions stay outside build jobs.
 
-## Private beta and public protection
+Archive allowlists exclude credentials/user data. Transfers enforce storage limits, one-day retention and digest checks; successful current-run transfers are removed. npm installs use the committed lockfile; SBOMs cover npm build dependencies, while runtime manifests/notices cover external runtimes. Cached dependencies do not replace release binaries.
 
-GitHub Free, Pro and Team support Actions artifact attestations for **public** repositories; private/internal repositories require Enterprise Cloud. A private Free beta therefore uses locked dependencies, native runner checks, exact commit/run metadata, matched source, digest-verified transfers, checksums and automated draft publication. SHA-256 alone does **not** prove provenance.
+Packages are not claimed byte-for-byte reproducible across independent builds. Published payloads retain the exact tested bytes. Windows download reputation, Linux FUSE compatibility and physical hardware are tester checks.
 
-On changing visibility to public, the attestation job activates from the actual event visibility automatically. Public publication additionally checks current API visibility and requires successful attestation verification, so a visibility change during a run cannot bypass it. Release immutability and its automatically created **release attestation** are a separate feature controlled by the maintainer setting; they are not the public-only Actions build-attestation operation.
-
-## Permissions and dependencies
-
-| Job | Token permissions |
-| --- | --- |
-| Preflight | `contents: read`, `actions: read` for storage inventory |
-| Existing application checks and native builds | `contents: read` |
-| Public build attestation only | `contents: read`, `id-token: write`, `attestations: write` |
-| Release publication only | `contents: write` |
-| Successful temporary transfer cleanup only | `actions: write` |
-
-Write permissions are not available to the build/test jobs. No `write-all`, long-lived publishing secrets, third-party release action or paid runner is used. Official actions are pinned to immutable commits with version comments. Existing weekly npm and GitHub Actions Dependabot configuration maintains dependencies; it does not update them inside a release build. Source/event fields are passed through environment variables or structured command arguments, rather than interpolated into executable shell text. Dependency caching uses official setup-node npm support, never cached release binaries.
-
-## Cost and remaining limits
-
-Recent smoke executables total roughly 320 MiB. The transfer policy caps each platform at 200 MiB and the combined transfers at 400 MiB, uses one-day retention and deletes successful current-run transfers. Preflight checks existing repository Actions artifacts against 500 MB before expensive work; it cannot inspect every other repository's usage or all account-wide Packages storage. The owner's checked free allowance and spending controls remain essential.
-
-GitHub Free currently includes 2,000 Actions minutes/month and 500 MB artifact storage, shared as documented with Packages. Standard public runner time is free; private Linux/Windows jobs consume allowance. No larger runners are used. Plan approximately **20–35 summed runner minutes per smoke release**, based on the hosted source/build/native checks; Windows and Linux have different billing rates/allowance accounting. Job timeouts bound failures (preflight 5, existing checks 20 per Node version plus secret scan 10, native 45 per platform, attestation 10, publication 10, cleanup 5). Queued time is separate from runner execution. The private confirmation check may prevent a run; a workflow file alone cannot guarantee a zero bill if account paid overage is permitted.
-
-These controls distinguish three claims:
-
-- **Integrity:** the downloaded file matches a specific digest.
-- **Provenance:** signed evidence links that digest to the identified release or workflow/source commit. The aggregation job attests the verified native outputs from the same workflow; this is not an independent execution audit of every command or a claim of SLSA level certification.
-- **Code security:** source review, dependency inspection and meaningful tests address application behavior. Attestations do not prove the absence of malicious logic or vulnerabilities.
-
-No Windows Authenticode signing or macOS notarization is provided by GitHub attestations. Windows download reputation/SmartScreen/Smart App Control, Linux FUSE/direct mounting, recipient hardware, physical audio/microphone and macOS distribution remain separate qualification work. The Linux CI path exercises the exact AppImage payload and launcher using extraction, so it does not pretend to certify every recipient's FUSE setup.
-
-These builds are source-traceable, **not claimed byte-for-byte reproducible across independent builds**. The supplementary ZIP itself is deterministic for identical inputs; runtime manifests contain original build times, and npm SBOMs and package tools can contain timestamps/identifiers. The exact already-built files are retained and published without rebuilding.
-
-The npm SBOM describes the committed npm dependency tree, including build dependencies. It is not an exhaustive inventory of external Electron/Node/native binaries. Runtime manifests and original notices supplement that scope; shipping an npm-only SBOM does not claim complete native coverage.
-
-## Sources
-
-[Immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases), [enable immutability](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/establish-provenance-and-integrity/prevent-release-changes), [release verification](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/verify-release-integrity), [Actions attestations and availability](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations), [official attest action](https://github.com/actions/attest), [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions), [budgets](https://docs.github.com/en/billing/how-tos/set-up-budgets), [npm SBOM](https://docs.npmjs.com/cli/v11/commands/npm-sbom/), [Microsoft signing options](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options).
+[GitHub immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases) · [Build attestations](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations)

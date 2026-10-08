@@ -16,7 +16,7 @@ const manifest=await stageWindowsSource(root,source,'windows-native-preparation'
 writeFileSync(join(source,'SOURCE-MANIFEST.json'),JSON.stringify(manifest,null,2)+'\n');
 const archive=join(output,'bambi-windows-build-source.tar.gz');
 execFileSync(archiveTool,['-czf',archive,'-C',source,'.'],{stdio:'inherit'});
-copy(join(root,'docs/DESKTOP_WINDOWS.md'),join(output,'BUILD-AND-TEST.md'));
+copy(join(root,'docs/DESKTOP_RELEASE.md'),join(output,'BUILD-AND-TEST.md'));
 writeFileSync(join(output,'PREPARATION.json'),JSON.stringify({preparedAt:new Date().toISOString(),sourceDigest:manifest.sourceDigest,files:manifest.files.length,windowsBuilt:false,windowsQualified:false,nextBuild:'scripts\\desktop-windows-build.cmd smoke 0.1.0-smoke.2'},null,2)+'\n');
 const sums=[];for(const name of ['bambi-windows-build-source.tar.gz','BUILD-AND-TEST.md','PREPARATION.json'])sums.push(`${await hashFile(join(output,name))}  ${name}`);
 writeFileSync(join(output,'SHA256SUMS'),sums.join('\n')+'\n');console.log(JSON.stringify({output,archive,sourceDigest:manifest.sourceDigest,files:manifest.files.length,windowsBuilt:false},null,2));

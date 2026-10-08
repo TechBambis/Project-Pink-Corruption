@@ -1,41 +1,66 @@
-# Contributing
+# Development & contributing
 
-Bug reports and suggestions are welcome without signing a CLA. Please keep personal data, credentials, recordings and private conversation history out of issues and PRs.
+Use English. Keep credentials, models, recordings, conversations and runtime data out of Git. Preserve upstream credits and pinned source bytes.
 
-Use English for repository documentation, UI text, code comments, examples and test fixtures. Preserve third-party attribution, license notices and pinned upstream content.
+## Local setup
 
-## Licensing before submitting code
+Node.js 22.13+ and npm:
 
-Read [LICENSING.md](LICENSING.md) and the [Contributor License Agreement](CLA.md). Contributions need explicit acceptance of the CLA, or separately verified permissions sufficient for the same licensing model, before merging. A PR alone is not acceptance. The CLA permits proprietary/commercial relicensing without royalties; you retain copyright. If that does not work for you, do not submit work for inclusion.
+```sh
+npm ci --ignore-scripts
+npm run setup
+npm start
+```
 
-The maintainer provides an immutable `CLA.md` link and its SHA-256. Follow the acceptance text in that document for the work you authored. Identify any employer rights, coauthors, copied code, assets and their licenses. Never change third-party attribution to claim it as your own. Preserve existing notices and pinned upstream files.
+The app runs at `http://127.0.0.1:6969`; `/setup`, `/studio` and `/voice-lab` open the other pages. Media playback works without AI.
+
+For native Linux AI and speech, install uv, Python 3, curl, Git, ripgrep and tar/zstd, then:
+
+```sh
+./scripts/setup.sh
+./scripts/start.sh
+./scripts/stop.sh
+# Emergency stop: ./scripts/panic-stop.sh
+```
+
+The initial Ollama setup installs Qwen3.5 4B. Native 9B provisioning is separate: `python3 scripts/setup-community-models.py qwen35` after loading `scripts/env.sh`. Optional memory: `npm run setup:memory`. Optional recognition: `npm run setup:streaming-speech` or `./scripts/setup-speech.sh` for Whisper. These setup commands download dependencies/model data.
 
 ## Checks
 
 ```sh
-npm ci --ignore-scripts
 npm run repo:check
 npm run check
 npm test
 npm run build
 ```
 
-Keep runtime data, model downloads and private assets out of Git. Describe the behavior changed and relevant validation in the PR. Native setup currently targets Linux; do not infer Windows or macOS support from browser-only checks.
+For UI behavior, use `npm run test:integration`, `npm run test:navigation`, `npm run test:model-setup` or `npm run test:settings` as appropriate. Install Chromium with `npx playwright install chromium`, or set `BAMBI_BROWSER_BINARY`. Browser fixtures use simulated AI/audio; native packaging and real hardware checks are separate.
 
-For the optional browser integration check, install Playwright's Chromium with `npx playwright install chromium`, then run `npm run test:integration` after building. You can instead set `BAMBI_BROWSER_BINARY` to an existing Chromium-compatible browser. The check uses temporary storage, simulated inference/speech and simulated device transport.
+## Guides
 
-## Maintainer CLA verification
+| Task | Guide |
+| --- | --- |
+| Understand modules and timing | [Architecture](ARCHITECTURE.md), [runtime versions](VERSIONS.md) |
+| Models and permissions | [Model setup](docs/MODEL_SETUP.md), [Privacy & access](docs/PRIVACY_ACCESS.md) |
+| Voice, delivery and recognition | [Local audio](docs/LOCAL_AUDIO.md), [streaming speech](docs/STREAMING_SPEECH.md) |
+| Settings files | [Settings & presets](docs/SETTINGS_BACKUP.md) |
+| Devices | [Device setup](docs/DEVICES.md) |
+| Cloud endpoints | [Cloud setup](docs/CLOUD_COMPUTE.md) |
+| BambiCloud playback | [BambiCloud](docs/BAMBICLOUD.md) |
+| Conversation behavior | [Situational conversation](docs/SITUATIONAL_CONVERSATION.md) |
+| Packages and publication | [Desktop builds](docs/DESKTOP_RELEASE.md), [release process](docs/RELEASE-SECURITY.md) |
+| Security and credits | [Local security](docs/LOCAL_SECURITY.md), [upstream content](docs/STABLE_CONTENT.md), [licenses](LICENSING.md) |
 
-The `cla/verified` commit status starts failing until the designated maintainer verifies all necessary rights holders for the current PR head and current CLA. The check runs trusted default-branch code and never executes code from a PR. It does not automatically infer assent from submitting a PR or from a label.
+The Firefox extension needs pairing before its blocked connections can be enabled. Studio drafts need exporting before closing. Report security issues through [SECURITY.md](SECURITY.md).
 
-1. Provide contributors with the immutable CLA link and its SHA-256; verify account IDs, authority, contribution scope and assent for all relevant authors. The hash can be calculated with `sha256sum CLA.md`.
-2. Preserve the accepted document and the assent evidence, contributor IDs, timestamp and covered commit SHA in a private durable record. Do not put private contractual identity details in the public repository.
-3. Post a standalone comment as the designated maintainer (GitHub account ID `337824705`):
+## Code submissions
 
-   ```text
-   CLA-VERIFIED v1 sha256=<64 lowercase hex characters> head=<40 lowercase hex characters>
-   ```
+Bug reports need no CLA. Code contributions need explicit [CLA](CLA.md) acceptance or separately verified equivalent permissions before merging. A PR alone is not acceptance. The CLA allows commercial relicensing without royalties; contributors retain copyright. Identify employers, coauthors and copied material where applicable.
 
-4. A new head commit, CLA change, deleted verification or edited verification requires a fresh check. Use the workflow's manual recheck after updating the default-branch CLA. Reviewers must not waive consent solely because another test passed.
+Maintainer verification uses the current CLA hash and exact PR head. Preserve assent/rights evidence privately, then post as account **337824705**:
 
-The workflow publishes a status; **it blocks merging only after a repository ruleset or branch protection requires `cla/verified` from GitHub Actions**. The current private repository's GitHub Free plan does not support those controls or automatic code-owner review requests. Until enforcement is available, the maintainer must manually check application checks, secret scanning and `cla/verified` before merging contributed work. `CODEOWNERS` records the intended reviewer for future use. The repository belongs to the TechBambis organization, where testers can be granted Read access. Write access also allows direct pushes; reserve it for trusted contributors.
+```text
+CLA-VERIFIED v1 sha256=<CLA SHA-256> head=<full PR head SHA>
+```
+
+A changed head or CLA needs re-verification. Require application checks, secret scanning and `cla/verified` before merging. On private GitHub Free, the maintainer checks these manually because branch-protection enforcement is unavailable.

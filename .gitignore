@@ -62,9 +62,6 @@ id_ed25519*
 !/docs/STABLE_CONTENT.md
 !/docs/SITUATIONAL_CONVERSATION.md
 !/docs/anubis-model.json
-!/docs/ANUBIS_RUNTIME.md
-!/docs/DUAL_VOICE.md
-!/docs/ADAPTIVE_DELIVERY.md
 !/docs/LICENSE.*
 !/docs/licenses/
 !/docs/community-models.json
@@ -174,11 +171,9 @@ test-results/
 # Reviewed desktop packaging source and handoff instructions
 !/scripts/desktop-build.mjs
 !/scripts/desktop-smoke.mjs
-!/docs/DESKTOP_SMOKE.md
 !/scripts/freeze-desktop-speech.py
 !/scripts/desktop-alpha-build.mjs
 !/scripts/desktop-alpha-check.mjs
-!/docs/DESKTOP_ALPHA.md
 
 !/scripts/desktop-alpha-ai-check.mjs
 
@@ -196,10 +191,8 @@ test-results/
 !/scripts/desktop-windows-processes.mjs
 !/scripts/desktop-windows-ai-check.mjs
 !/scripts/desktop-windows-source.mjs
-!/docs/DESKTOP_WINDOWS.md
 !/docs/AI_RUNTIME_STRATEGY.md
 !/docs/DESKTOP_RELEASE.md
-!/docs/DESKTOP_WINDOWS_ALPHA.md
 !/scripts/desktop-source.mjs
 !/scripts/desktop-release.mjs
 !/scripts/desktop-release-support.mjs

@@ -88,7 +88,7 @@ async function build(){
  const release=await releaseIdentity(root,sourceManifest);
  writeFileSync(join(source,'SOURCE-MANIFEST.json'),JSON.stringify(sourceManifest,null,2)+'\n');
  run(archiveTool,['-czf',join(backend,'dist/web/corresponding-source.tar.gz'),'-C',source,'.']);
- const guide=readFileSync('docs/DESKTOP_WINDOWS.md','utf8').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+ const guide=readFileSync('docs/AI_ALPHA_TESTING.md','utf8').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
  writeFileSync(join(backend,'dist/web/desktop-guide.html'),`<!doctype html><html lang="en"><meta charset="utf-8"><title>Bambi Local ${version} guide</title><body><a href="/">Open companion</a> · <a href="/setup">Setup</a> · <a href="/corresponding-source.tar.gz">Matching application source</a>${alpha?' · <a href="/samples/studio-chimes.bambi.json" download>Prepared Studio sample</a>':''}<pre style="white-space:pre-wrap;max-width:80ch">${guide}</pre></body></html>`);
  assertNativeTree(backend);
  const dependencyReport=windowsDependencyReport(backend);
@@ -113,7 +113,7 @@ async function build(){
  }
  for(const file of await inventory(notices))if(await hashFile(join(output,'win-unpacked/resources/notices',file.path))!==file.sha256)throw Error('Finished notices differ from staging: '+file.path);
  copy(join(backend,'dist/web/corresponding-source.tar.gz'),join(output,`bambi-local-${version}-source.tar.gz`));
- copy(join(notices,'RUNTIME-MANIFEST.json'),join(output,'RUNTIME-MANIFEST.json'));copy(resolve('docs/DESKTOP_WINDOWS.md'),join(output,'TESTER-GUIDE.md'));
+ copy(join(notices,'RUNTIME-MANIFEST.json'),join(output,'RUNTIME-MANIFEST.json'));copy(resolve('docs/AI_ALPHA_TESTING.md'),join(output,'TESTER-GUIDE.md'));
  const sums=[];for(const path of files(output).filter(path=>dirname(path)===output&&/\.(?:exe|gz|json|md)$/.test(path)))sums.push(`${await hashFile(path)}  ${relative(output,path)}`);
  writeFileSync(join(output,'SHA256SUMS'),sums.join('\n')+'\n');
  console.log('Windows per-user NSIS artifacts:',output,'\nSource digest:',sourceDigest,'\nNative acceptance and actual installer/download tests remain separate.');
