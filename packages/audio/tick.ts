@@ -64,8 +64,8 @@ export class TickEngine {
   private async load(){
     if(!isAppAudioOrigin())return;
     // The user prefers the earlier clock/metronome attack for the BPM loop.
-    // Keep the CC0 click as an available fallback, rather than the main timbre.
-    for(const file of ['tick.wav','tick_main.wav'])try{const response=await fetch('/assets/sounds/'+file,{signal:AbortSignal.timeout(5000)});if(!response.ok)continue;
+    // Prefer the shipped attack on every OS; local authoring extras are fallbacks.
+    for(const file of ['tick_main.wav','tick.wav'])try{const response=await fetch('/assets/sounds/'+file,{signal:AbortSignal.timeout(5000)});if(!response.ok)continue;
       const buffer=await this.context.decodeAudioData(await response.arrayBuffer());
       if(buffer.numberOfChannels===1&&buffer.duration>=.05&&buffer.duration<=.12){this.sample=buffer;this.source='asset';break;}
     }catch{/* Deterministic dry tick remains available offline. */}

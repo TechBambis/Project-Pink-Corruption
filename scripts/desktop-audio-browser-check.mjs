@@ -8,10 +8,11 @@ import {chromium} from 'playwright';
 import {build} from 'esbuild';
 import assert from 'node:assert/strict';
 const bundle=await build({stdin:{contents:"export {TickEngine} from './packages/audio/tick.ts';",resolveDir:new URL('../',import.meta.url).pathname},bundle:true,write:false,format:'esm',platform:'browser'});
+const requested=[];
 const tick=readFileSync(new URL('../assets/sounds/tick_main.wav',import.meta.url));
 const server=createServer((req,res)=>{
  if(req.url==='/fixture.js'){res.setHeader('Content-Type','text/javascript');res.end(bundle.outputFiles[0].text);}
- else if(req.url==='/assets/sounds/tick_main.wav'){res.setHeader('Content-Type','audio/wav');res.end(tick);}
+ else if(['/assets/sounds/tick_main.wav','/assets/sounds/tick.wav'].includes(req.url)){requested.push(req.url);res.setHeader('Content-Type','audio/wav');res.end(tick);}
  else if(req.url==='/'){res.setHeader('Content-Type','text/html');res.end('<!doctype html><meta name="bambi-app" content="bambi-local"><title>Isolated desktop audio fixture</title>');}
  else{res.writeHead(404);res.end();}
 });
@@ -31,5 +32,5 @@ try{
   return records;
  });
  for(const record of records.filter(value=>!value.unmarked)){assert.equal(record.source,'asset');assert.equal(record.bpm,60);assert.equal(record.interval,1);assert.equal(record.onsets.length,4);for(let i=1;i<record.onsets.length;i++)assert(Math.abs(record.onsets[i]-record.onsets[i-1]-1)<=2/record.rate);}
- assert.equal(records.at(-1).source,'generated');console.log('Passed: packaged tick asset loads on a non-default desktop port; rendered PCM keeps 60 BPM at 44.1 and 48 kHz; unmarked extension pages retain the generated fallback. '+JSON.stringify(records));
+ assert.equal(records.at(-1).source,'generated');assert.deepEqual(requested,['/assets/sounds/tick_main.wav','/assets/sounds/tick_main.wav']);console.log('Passed: packaged tick asset takes priority over local authoring extras on a non-default desktop port; rendered PCM keeps 60 BPM at 44.1 and 48 kHz; unmarked extension pages retain the generated fallback. '+JSON.stringify(records));
 }finally{await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
