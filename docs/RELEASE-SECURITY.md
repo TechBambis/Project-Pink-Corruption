@@ -45,7 +45,7 @@ gh api user --jq '{login: .login, id: .id}'
 
 The release automation runs as GitHub's repository-scoped Actions token, not as a second connected personal account. It checks the initiating maintainer's numeric actor ID.
 
-## First beta release
+## Create a beta release
 
 After reviewing and committing the release setup and completing the one-time private allowance check:
 
@@ -56,11 +56,11 @@ git status --short
 gh api user --jq '{login: .login, id: .id}'
 # Confirm there are no intended uncommitted release changes and the ID is 337824705.
 # This example assumes package.json and package-lock.json both declare 0.1.0.
-git tag -a v0.1.0-beta.1 -m "v0.1.0-beta.1"
-git push origin v0.1.0-beta.1
+git tag -a v0.1.0-beta.11 -m "v0.1.0-beta.11"
+git push origin v0.1.0-beta.11
 ```
 
-Use a fresh tag. To release a different base version, update and commit `package.json` and both lockfile root version fields first, following the existing versioning policy; never update a lockfile in the release job. `beta`, `rc` and `smoke` tags automatically create prereleases and do not become the latest stable release. A stable tag is handled as a regular release, but the current workflow still explicitly labels its packages **smoke**. Do not present them as a feature-complete application. General AI-alpha publication requires a separate reviewed scope change.
+Use a fresh tag. The first end-to-end pipeline attempts already use beta.1 through beta.10; do not reuse or move those tags. To release a different base version, update and commit `package.json` and both lockfile root version fields first, following the existing versioning policy; never update a lockfile in the release job. `beta`, `rc` and `smoke` tags automatically create prereleases and do not become the latest stable release. A stable tag is handled as a regular release, but the current workflow still explicitly labels its packages **smoke**. Do not present them as a feature-complete application. General AI-alpha publication requires a separate reviewed scope change.
 
 If any job fails, inspect its logs. If upload verification fails after draft creation, the draft remains unpublished. Review and remove that failed draft explicitly before retrying; this pipeline refuses to replace existing release assets. Never silently move a published version tag. With immutability enabled, publish a new version to correct a release.
 
@@ -73,7 +73,7 @@ Replace `OWNER/REPO` with the actual repository from the release page / `BUILD-I
 Linux example, using a recent GitHub CLI:
 
 ```sh
-gh release download v0.1.0-beta.1 --repo TechBambis/Project-Pink-Corruption --dir bambi-release
+gh release download v0.1.0-beta.10 --repo TechBambis/Project-Pink-Corruption --dir bambi-release
 cd bambi-release
 sha256sum -c SHA256SUMS
 ```
@@ -81,24 +81,24 @@ sha256sum -c SHA256SUMS
 macOS provides `shasum -a 256 -c SHA256SUMS`. Windows PowerShell can verify an individual file with:
 
 ```powershell
-Get-FileHash .\bambi-local-0.1.0-beta.1-x64.exe -Algorithm SHA256
+Get-FileHash .\bambi-local-0.1.0-beta.10-x64.exe -Algorithm SHA256
 # Compare with its exact entry in SHA256SUMS.
 ```
 
 When release immutability is enabled:
 
 ```sh
-gh release verify v0.1.0-beta.1 --repo TechBambis/Project-Pink-Corruption
-gh release verify-asset v0.1.0-beta.1 ./bambi-local-0.1.0-beta.1-x86_64.AppImage --repo TechBambis/Project-Pink-Corruption
+gh release verify v0.1.0-beta.10 --repo TechBambis/Project-Pink-Corruption
+gh release verify-asset v0.1.0-beta.10 ./bambi-local-0.1.0-beta.10-x86_64.AppImage --repo TechBambis/Project-Pink-Corruption
 ```
 
 For a **public** release with an Actions build attestation:
 
 ```sh
-gh attestation verify ./bambi-local-0.1.0-beta.1-x86_64.AppImage \
+gh attestation verify ./bambi-local-0.1.0-beta.10-x86_64.AppImage \
   --repo TechBambis/Project-Pink-Corruption \
   --signer-workflow TechBambis/Project-Pink-Corruption/.github/workflows/release.yml \
-  --source-ref refs/tags/v0.1.0-beta.1 \
+  --source-ref refs/tags/v0.1.0-beta.10 \
   --source-digest FULL_EXPECTED_COMMIT_SHA
 ```
 
@@ -126,7 +126,7 @@ Write permissions are not available to the build/test jobs. No `write-all`, long
 
 Recent smoke executables total roughly 320 MiB. The transfer policy caps each platform at 200 MiB and the combined transfers at 400 MiB, uses one-day retention and deletes successful current-run transfers. Preflight checks existing repository Actions artifacts against 500 MB before expensive work; it cannot inspect every other repository's usage or all account-wide Packages storage. The owner's checked free allowance and spending controls remain essential.
 
-GitHub Free currently includes 2,000 Actions minutes/month and 500 MB artifact storage, shared as documented with Packages. Standard public runner time is free; private Linux/Windows jobs consume allowance. No larger runners are used. Plan approximately **30–75 summed runner minutes per smoke release**, pending measurement of this exact new workflow; Windows and Linux have different billing rates/allowance accounting. Job timeouts bound failures (preflight 5, existing checks 20 per Node version plus secret scan 10, native 45 per platform, attestation 10, publication 10, cleanup 5). Queued time is separate from runner execution. The private confirmation check may prevent a run; a workflow file alone cannot guarantee a zero bill if account paid overage is permitted.
+GitHub Free currently includes 2,000 Actions minutes/month and 500 MB artifact storage, shared as documented with Packages. Standard public runner time is free; private Linux/Windows jobs consume allowance. No larger runners are used. Plan approximately **20–35 summed runner minutes per smoke release**, based on the hosted source/build/native checks; Windows and Linux have different billing rates/allowance accounting. Job timeouts bound failures (preflight 5, existing checks 20 per Node version plus secret scan 10, native 45 per platform, attestation 10, publication 10, cleanup 5). Queued time is separate from runner execution. The private confirmation check may prevent a run; a workflow file alone cannot guarantee a zero bill if account paid overage is permitted.
 
 These controls distinguish three claims:
 
