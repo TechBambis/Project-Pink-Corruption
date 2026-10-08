@@ -118,8 +118,10 @@ try{
  assert.equal(warmRequests.filter(settings=>JSON.stringify(settings)===JSON.stringify(failedWarmSettings)).length,1,'Identical failed settings stay idle until an explicit retry');
  failWarm=false;await page.evaluate(()=>window.bambi.startSession());
  await page.waitForFunction(()=>window.bambi.director.active&&window.bambi.clock.running);assert.ok(warmCalls>failedWarmCalls,'Start retries failed preparation');
+ await page.locator('#stage').hover();await page.waitForFunction(()=>document.getElementById('stage').classList.contains('controls-visible'));
  await page.locator('#chat-input').focus();
- await page.evaluate(async()=>{await fetch('/api/memory/facts',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'color',value:'green'})});document.getElementById('chat-input').value='What color did I choose?';document.getElementById('chat-input').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('chat-form').requestSubmit();});
+ const factResponse=await fetch(base+'/api/memory/facts',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'color',value:'green'})});assert.equal(factResponse.status,200);
+ await page.locator('#chat-input').fill('What color did I choose?');await page.locator('#chat-form button[type=submit]').click();
  try{await page.waitForFunction(()=>document.querySelector('#messages')?.textContent.includes('The color is green.'));}catch(error){console.error(await page.evaluate(()=>({status:document.getElementById('ai-status').textContent,model:document.getElementById('model').value,notices:[...document.querySelectorAll('[role="status"]')].map(node=>node.textContent),messages:document.getElementById('messages').textContent})));throw error;}
  await page.waitForFunction(()=>document.getElementById('composer-reply').textContent.includes('The color is green.'));
  assert.equal(await page.locator('#chat-input').inputValue(),'','Sending clears only the user draft');
