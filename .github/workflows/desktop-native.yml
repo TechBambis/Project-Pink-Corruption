@@ -63,6 +63,7 @@ jobs:
           cd "$BAMBI_SNAPSHOT"
           npx playwright install-deps chromium
       - name: Build the native package
+        id: build
         run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" build "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET"
       - name: Locate immutable output
         run: |
@@ -107,9 +108,11 @@ jobs:
             ${{ env.BAMBI_RELEASE_OUTPUT }}/DESKTOP-QUALIFICATION.json
             ${{ env.BAMBI_RELEASE_OUTPUT }}/SOURCE-CHECKS.json
       - name: Write the target readiness report
+        if: success() || (always() && inputs.target == 'macos-arm64' && steps.build.outcome == 'success')
         run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" status "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_OUTPUT" > "$BAMBI_RELEASE_OUTPUT/RELEASE-STATUS.json"
       - name: Enforce confirmed artifact storage before upload
-        if: inputs.upload_packages && !inputs.transfer_packages
+        id: storage
+        if: inputs.upload_packages && !inputs.transfer_packages && (success() || (always() && inputs.target == 'macos-arm64' && steps.build.outcome == 'success'))
         run: |
           node --input-type=module -e '
           import {readdirSync,statSync} from "node:fs";
@@ -118,7 +121,7 @@ jobs:
           const size=readdirSync(dir).filter(name=>/\.(exe|AppImage|gz|zip|json|md)$/.test(name)||name==="SHA256SUMS").reduce((n,name)=>n+statSync(join(dir,name)).size,0);
           if(size>Number(process.env.BAMBI_REMAINING_ARTIFACT_MIB)*2**20*.95) throw Error("Upload exceeds confirmed remaining shared storage.");'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: inputs.upload_packages && !inputs.transfer_packages
+        if: inputs.upload_packages && !inputs.transfer_packages && (success() || (always() && inputs.target == 'macos-arm64' && steps.storage.outcome == 'success'))
         with:
           name: bambi-${{ inputs.target }}-${{ inputs.version }}
           path: |
