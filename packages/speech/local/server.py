@@ -4,6 +4,7 @@
 
 """Loopback-only service compatible with the existing captioned Kokoro client."""
 import base64
+import ctypes
 import json
 import os
 import select
@@ -67,7 +68,8 @@ def main():
                                  'voices': provider.registry.names(), 'cacheHits': provider.cache_hits, 'cacheMisses': provider.cache_misses})
             elif path == '/desktop/identity' and secrets.compare_digest(self.headers.get('X-Bambi-TTS-Token', ''), credential):
                 self.reply(200, {'app': 'bambi-local', 'service': 'kokoro', 'protocol': 1, 'pid': os.getpid(),
-                                 'instance': os.environ.get('BAMBI_INSTANCE_TOKEN'), 'modelSha256': provider.model_id})
+                                 'instance': os.environ.get('BAMBI_INSTANCE_TOKEN'), 'modelSha256': provider.model_id,
+                                 'processCodePage': ctypes.windll.kernel32.GetACP() if os.name == 'nt' else None})
             elif path == '/v1/audio/voices':
                 self.reply(200, {'voices': provider.registry.names()})
             elif path == '/lab/catalog':

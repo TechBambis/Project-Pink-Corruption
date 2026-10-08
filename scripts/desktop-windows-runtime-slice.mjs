@@ -88,7 +88,8 @@ try{
  const base='http://127.0.0.1:'+servicePort,kokoro=launch(speech,['kokoro']);
  const ready=await waitReady(kokoro,base+'/desktop/identity');
  assert.equal(ready.value.pid,kokoro.pid);assert.equal(ready.value.instance,env.BAMBI_INSTANCE_TOKEN);assert.equal(ready.value.modelSha256,manifest.assets[1].sha256);
- record('frozen-Kokoro-starts-outside-checkout-with-empty-PATH',{startupMs:ready.ms,pid:kokoro.pid,voiceFingerprintCheckedByRegistry:'906e9b9050f2bd38b175298e26b6d255e7db0270570fcc66979f6fbccd1cdf61'});
+ assert.equal(ready.value.processCodePage,65001,'The native speech process must use UTF-8 for C paths.');
+ record('frozen-Kokoro-starts-outside-checkout-with-empty-PATH',{startupMs:ready.ms,pid:kokoro.pid,processCodePage:ready.value.processCodePage,voiceFingerprintCheckedByRegistry:'906e9b9050f2bd38b175298e26b6d255e7db0270570fcc66979f6fbccd1cdf61'});
  const headers={'content-type':'application/json','X-Bambi-TTS-Token':env.BAMBI_TTS_TOKEN};
  const started=performance.now();const response=await fetch(base+'/lab/render',{method:'POST',headers,body:JSON.stringify({text:'Keep the small silver key beside the blue glass.',voice:'bambi_classic',preset:'bambi_local_clean',speed:1}),signal:AbortSignal.timeout(120000)});
  if(!response.ok)throw Error('Frozen synthesis failed: '+response.status+' '+await response.text());

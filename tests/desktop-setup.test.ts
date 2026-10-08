@@ -24,3 +24,41 @@ test('cancelled bounded download removes its partial and retry retains prior ver
  const {createServer}=await import('node:http');const root=await mkdtemp(join(tmpdir(),'bambi-setup-cancel-'));const payload=Buffer.alloc(1024*1024,42),pin=asset('download',payload);const server=createServer((_req,res)=>{res.writeHead(200,{'Content-Length':payload.length});let sent=0;const timer=setInterval(()=>{if(sent>=payload.length){clearInterval(timer);res.end();return;}res.write(payload.subarray(sent,sent+4096));sent+=4096;},5);res.on('close',()=>clearInterval(timer));});await new Promise<void>(accept=>server.listen(0,'127.0.0.1',accept));const address=server.address() as {port:number};pin.url=`http://127.0.0.1:${address.port}/fixed-fixture`;const setup=new DesktopSetup(root,[pin]);
  try{const job=setup.install();while(setup.state.completed<4096)await new Promise(r=>setTimeout(r,5));setup.cancel();await job;assert.equal(setup.state.phase,'cancelled');assert.equal(setup.verified,false);assert(!(await readdir(root)).some(n=>n.endsWith('.partial')));await setup.install();assert.equal(setup.verified,true);assert.deepEqual(await readFile(join(root,'download')),payload);}finally{await new Promise<void>(accept=>server.close(()=>accept()));await rm(root,{recursive:true,force:true});}
 });
+
+test('download cancellation retains the first verified asset and retry requests only the unfinished asset',async()=>{
+ const {createServer}=await import('node:http');
+ const root=await mkdtemp(join(tmpdir(),'bambi-setup-retain-'));
+ const first=Buffer.from('verified public fixture'),second=Buffer.alloc(128*1024,17);
+ const assets=[asset('first',first),asset('second',second)],requests=new Map<string,number>();
+ const server=createServer((req,res)=>{
+  const name=req.url!.slice(1);requests.set(name,(requests.get(name)||0)+1);
+  const payload=name==='first'?first:second;res.writeHead(200,{'Content-Length':payload.length});
+  if(name==='first'){res.end(payload);return;}
+  let offset=0;const timer=setInterval(()=>{res.write(payload.subarray(offset,offset+4096));offset+=4096;if(offset>=payload.length){clearInterval(timer);res.end();}},5);
+  res.on('close',()=>clearInterval(timer));
+ });
+ await new Promise<void>(accept=>server.listen(0,'127.0.0.1',accept));
+ const port=(server.address() as {port:number}).port;
+ for(const entry of assets)entry.url=`http://127.0.0.1:${port}/${entry.path}`;
+ const setup=new DesktopSetup(root,assets);
+ try{
+  const pending=setup.install();while(setup.state.completed<first.length+4096)await new Promise(r=>setTimeout(r,5));
+  await assert.rejects(()=>setup.install(),/already running/);setup.cancel();await pending;
+  assert.equal(setup.state.phase,'cancelled');assert.equal(setup.verified,false);
+  assert.deepEqual(await readFile(join(root,'first')),first);assert(!(await readdir(root)).some(name=>name.endsWith('.partial')));
+  await setup.install();assert.equal(setup.state.phase,'installed');assert.equal(setup.state.completed,first.length+second.length);
+  assert.equal(requests.get('first'),1);assert.equal(requests.get('second'),2);assert.deepEqual(await readFile(join(root,'second')),second);
+ }finally{await new Promise<void>(accept=>server.close(()=>accept()));await rm(root,{recursive:true,force:true});}
+});
+
+test('same-size corrupt downloads are rejected before activation and a verified retry repairs them',async()=>{
+ const {createServer}=await import('node:http');
+ const root=await mkdtemp(join(tmpdir(),'bambi-setup-hash-')),payload=Buffer.from('fixed public fixture'),pin=asset('model',payload);let damaged=true;
+ const server=createServer((_req,res)=>{res.writeHead(200,{'Content-Length':payload.length});res.end(damaged?Buffer.alloc(payload.length,0):payload);});
+ await new Promise<void>(accept=>server.listen(0,'127.0.0.1',accept));pin.url=`http://127.0.0.1:${(server.address() as {port:number}).port}/fixture`;
+ const setup=new DesktopSetup(root,[pin]);
+ try{
+  await setup.install();assert.equal(setup.state.phase,'failed');assert.match(setup.state.error!,/checksum mismatch/);assert.equal(setup.verified,false);assert.deepEqual(await readdir(root),[]);
+  damaged=false;await setup.install();assert.equal(setup.state.phase,'installed');assert.equal(setup.verified,true);assert.deepEqual(await readFile(join(root,'model')),payload);
+ }finally{await new Promise<void>(accept=>server.close(()=>accept()));await rm(root,{recursive:true,force:true});}
+});
