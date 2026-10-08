@@ -183,6 +183,9 @@ try{
  assert.equal(await page.locator('#stage').evaluate(node=>node.classList.contains('controls-hidden')),true,'Speech never forces the menu open');
  const playerBounds=await page.locator('#stage').boundingBox();await page.mouse.move(playerBounds.x+playerBounds.width/2,playerBounds.y+playerBounds.height-35);
  await page.waitForFunction(()=>document.getElementById('stage').classList.contains('controls-visible'));
+ // The reveal class precedes the dock's CSS visibility transition. Check the
+ // rendered controls while the long speech fixture is still playing.
+ await page.locator('#chat-form').waitFor({state:'visible',timeout:5000});
  assert.equal(await page.locator('#chat-form').isVisible(),true,'Moving toward the controls reveals them while AI is speaking');
  assert.equal(await page.locator('#mic .voice-toggle-state').textContent(),'Speaking');
  assert.notEqual(await page.locator('#stage').evaluate(node=>getComputedStyle(node).cursor),'none');
