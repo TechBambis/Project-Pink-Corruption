@@ -8,7 +8,7 @@ import {copy,copyTree,sourcePathAllowed,inventory,digest,hashFile} from './deskt
 
 const roots=['apps','packages','config','presets','tests','scripts','voices'];
 const top=['package.json','package-lock.json','tsconfig.json','.gitignore','desktop-builder.cjs','desktop-alpha-builder.cjs','desktop-windows-builder.cjs','LICENSE','LICENSING.md','README.md'];
-const docs=['MODEL_SETUP.md','PRIVACY_ACCESS.md','DESKTOP_SMOKE.md','DESKTOP_ALPHA.md','DESKTOP_WINDOWS.md','DESKTOP_WINDOWS_ALPHA.md','DESKTOP_RELEASE.md','AI_RUNTIME_STRATEGY.md','anubis-model.json','community-models.json','LICENSE.stable2','STABLE_CONTENT.md','LOCAL_AUDIO_LICENSES.md','SITUATIONAL_CONVERSATION.md','ADAPTIVE_DELIVERY.md','RELEASE-SECURITY.md'];
+const docs=['MODEL_SETUP.md','PRIVACY_ACCESS.md','DESKTOP_SMOKE.md','DESKTOP_ALPHA.md','DESKTOP_WINDOWS.md','DESKTOP_WINDOWS_ALPHA.md','DESKTOP_RELEASE.md','AI_ALPHA_TESTING.md','SETTINGS_BACKUP.md','AI_RUNTIME_STRATEGY.md','anubis-model.json','community-models.json','LICENSE.stable2','STABLE_CONTENT.md','LOCAL_AUDIO_LICENSES.md','SITUATIONAL_CONVERSATION.md','ADAPTIVE_DELIVERY.md','RELEASE-SECURITY.md'];
 
 /** One source allowlist for every native builder; runtime/user data never enter it. */
 export async function stageDesktopSource(root,destination,version){

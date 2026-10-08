@@ -22,6 +22,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0 # Settings compatibility fixtures use an immutable historical baseline.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ matrix.node }}
@@ -45,6 +46,9 @@ jobs:
         run: |
           node scripts/model-setup-browser-check.mjs
           node scripts/desktop-audio-browser-check.mjs
+      - name: Check settings saves, transfer and presets
+        if: matrix.node == 24
+        run: npm run test:settings
       - name: Save browser diagnostics on failure
         if: failure() && matrix.node == 24
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

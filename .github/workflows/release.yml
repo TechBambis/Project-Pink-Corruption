@@ -1,7 +1,9 @@
 name: Verified desktop tag release
 on:
   push:
-    tags: ['v*']
+    # Accompanied AI alphas publish already qualified native candidate bytes.
+    # Keep their tags out of this packaging-smoke workflow.
+    tags: ['v*', '!v*-alpha.*']
 permissions:
   contents: read
 # Serialize versions too: two 320 MiB transfers must not share the free quota.

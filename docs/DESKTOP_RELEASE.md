@@ -69,3 +69,11 @@ The request wiring and continuation boundary have automated tests. The experimen
 ## Verified tag releases
 
 The automatic tag workflow builds and qualifies Linux x64 and Windows x64 smoke packages together, verifies the exact final bytes, and publishes them only after all required checks pass. See [release security and maintainer setup](RELEASE-SECURITY.md) for private free-tier setup, immutable releases, provenance verification and the first beta tag. AI alphas remain a separate qualification scope.
+
+## Accompanied AI alpha publication
+
+Tags ending in `-alpha.N` are excluded from the automatic Smoke workflow. They identify the exact source of separately prepared native AI candidates; a tag by itself does not build or qualify AI. See [the alpha download guide](AI_ALPHA_TESTING.md).
+
+Build Linux locally using the pinned native speech-freeze environment and Windows using the manual native workflow. Run source and native acceptance, and keep each qualification bound to the exact final package hashes. Before publishing an accompanied alpha, validate the shared application identity and unchanged tested payloads, inspect corresponding-source/notices archives, and package supplementary evidence separately. Upload the exact existing AppImage and EXE to a draft prerelease, download them back and verify every SHA-256/size and the tag's full source commit before publishing. Never rebuild after these checks or replace an old version's assets.
+
+The alpha's minimum accompanied-test evidence is source and packaging acceptance on both targets plus installed Windows speech/installer acceptance. Full-model, offline and physical-device results remain individually reported. Do not mark the strict readiness report qualified while any required gate is pending. Linux locally produced artifacts are described as local native builds; neither CI checks nor Windows build evidence imply GitHub-hosted Linux provenance. This private Free repository has no GitHub Artifact Attestations for these candidates. Checksums and matching source provide traceability, not publisher signing or a code-security audit.

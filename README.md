@@ -12,9 +12,9 @@ The app has its own TypeScript server, browser UI and local storage. It uses pin
 
 ## Try the desktop test build
 
-[**Download the current beta for Windows or Linux**](https://github.com/TechBambis/Project-Pink-Corruption/releases)
+[**Download the desktop alpha for Windows or Linux**](https://github.com/TechBambis/Project-Pink-Corruption/releases)
 
-On the release page, Windows users only need the `.exe` installer; Linux users only need the `.AppImage`. Upcoming releases put **Download for Windows** and **Download for Linux** links at the top. Technical details and source are optional. These smoke builds include the offline sample and desktop shell; **local AI and speech are not included yet**. Beta releases are listed on the releases page even when GitHub has no stable “Latest” release.
+On the release page, Windows users only need the `.exe` installer; Linux users only need the `.AppImage`. AI alpha packages include the local AI runtime and speech; model weights are selected separately through explicit setup. Older **Smoke** packages only include the offline sample and desktop shell. Technical details and source are optional. Follow the [alpha testing guide](docs/AI_ALPHA_TESTING.md), including the pending recipient hardware checks. Settings can be backed up and shared through **Extras → Settings & presets**; see [settings transfer](docs/SETTINGS_BACKUP.md). Prereleases remain on the releases page even when GitHub has no stable “Latest” release. A private repository requires access before downloads work.
 
 ## Bring something of your own ♡
 

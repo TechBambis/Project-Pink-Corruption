@@ -48,6 +48,7 @@ id_ed25519*
 !/LICENSE*.md
 !/NOTICE*.md
 /docs/*
+!/docs/AI_ALPHA_TESTING.md
 !/docs/LOCAL_SECURITY.md
 !/docs/LOCAL_AUDIO.md
 !/docs/LOCAL_AUDIO_LICENSES.md

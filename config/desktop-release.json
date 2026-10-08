@@ -6,6 +6,7 @@
     "macos-arm64": {"platform": "darwin", "architecture": "arm64", "implemented": false}
   },
   "features": {
+    "settingsTransfer": ["packages/settings/index.ts", "packages/settings/transfer.ts", "apps/web/src/settings-persistence.ts", "apps/web/src/settings-transfer.ts", "docs/SETTINGS_BACKUP.md"],
     "privacyAccess": ["apps/web/src/privacy.ts", "packages/safety/access.ts", "apps/desktop/permission-policy.cjs"],
     "nativeSourceCompleteness": ["apps/desktop/AppRun", "apps/desktop/AppRun.alpha", "CLA.md", "docs/anubis-model.json", "docs/community-models.json"],
     "modelSelection": ["apps/web/src/model-setup.ts", "config/local-model-catalog.json", "packages/ai/model-catalog.ts"],
