@@ -67,6 +67,11 @@ export function parseWindowsGPUs(json:string):GPUInfo[]{
  });}catch{return [];}
 }
 const run=promisify(execFile);
+export async function boundedGPUProbe<T>(probe:(signal:AbortSignal)=>Promise<T>,timeoutMs:number):Promise<T>{
+ const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
+ try{return await Promise.race([probe(controller.signal),new Promise<never>((_resolve,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('GPU discovery exceeded its deadline.'));},timeoutMs);})]);}
+ finally{clearTimeout(timer);}
+}
 export function gpuProbeCommands(platform:string,environment:NodeJS.ProcessEnv=process.env){
  const system=win32.join(environment.SystemRoot||environment.WINDIR||'C:\\Windows','System32');
  return {
@@ -78,8 +83,8 @@ export function gpuProbeCommands(platform:string,environment:NodeJS.ProcessEnv=p
 async function probeGPUs(platform:string):Promise<GPUInfo[]>{
  if(platform==='darwin')return [];
  const commands=gpuProbeCommands(platform);
- const probes=[run(commands.nvidia,['--query-gpu=name,memory.total,memory.free','--format=csv,noheader,nounits'],{timeout:2500,maxBuffer:65536,windowsHide:true}).then(result=>parseNvidiaGPUs(result.stdout))];
- if(platform==='win32')probes.push(run(commands.powershell,['-NoProfile','-NonInteractive','-Command',commands.script],{timeout:12000,maxBuffer:65536,windowsHide:true}).then(result=>parseWindowsGPUs(result.stdout.replace(/^\uFEFF/,''))));
+ const probes=[boundedGPUProbe(signal=>run(commands.nvidia,['--query-gpu=name,memory.total,memory.free','--format=csv,noheader,nounits'],{signal,timeout:2500,maxBuffer:65536,windowsHide:true}),2500).then(result=>parseNvidiaGPUs(result.stdout))];
+ if(platform==='win32')probes.push(boundedGPUProbe(signal=>run(commands.powershell,['-NoProfile','-NonInteractive','-Command',commands.script],{signal,timeout:12000,maxBuffer:65536,windowsHide:true}),12000).then(result=>parseWindowsGPUs(result.stdout.replace(/^\uFEFF/,''))));
  const results=await Promise.allSettled(probes);
  const detected=results.flatMap(result=>result.status==='fulfilled'?result.value:[]);
  const names=new Set(detected.filter(gpu=>gpu.source==='nvidia-smi').map(gpu=>gpu.name));

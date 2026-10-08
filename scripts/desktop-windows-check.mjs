@@ -61,7 +61,7 @@ async function launch(port=16969){
   return {onboarding:await state.json(),capabilities:await capabilities.json()};
  });
  await page.locator('#model-onboarding').waitFor({state:'attached'});
- if(setup.capabilities.alpha&&!setup.onboarding.done){await page.locator('#model-onboarding[open]').waitFor();await page.locator('#model-onboarding [data-finish]').click();await page.locator('#model-onboarding').waitFor({state:'hidden'});}
+ if(setup.capabilities.alpha&&!setup.onboarding.done){await page.locator('#model-onboarding[open]').waitFor();await page.locator('#model-onboarding .model-choice').first().waitFor({state:'attached'});await page.locator('#model-onboarding [data-finish]').click();await page.locator('#model-onboarding').waitFor({state:'hidden'});}
  else assert.equal(await page.locator('#model-onboarding').evaluate(dialog=>dialog.open),false,'Smoke and completed profiles must not automatically open local-AI onboarding');
 
  const bounds=await application.evaluate(({BrowserWindow})=>{const window=BrowserWindow.getAllWindows()[0];window.setSize(880,640);return window.getBounds();});
@@ -314,7 +314,7 @@ try{
  assert.deepEqual(await inventory(resources),before);record('immutable-resources-unchanged');
  evidence.result='passed';
  evidence.limitations=['This tests the unpacked/installed binary on the recorded native Windows host. Actual browser download, NSIS install/uninstall and security policy are separate tests.','PCM is application output, not physical listening. No physical microphone test.','AI, setup, GPU offloading, CPU fallback, offline network isolation and suspended-process injection need separate qualification.'];
-}catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);process.exitCode=1;}
+}catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);try{const failureApplication=current?.application||[...applications.keys()].at(-1),failurePage=current?.page||await failureApplication?.firstWindow();if(failurePage){evidence.failurePage=await failurePage.evaluate(()=>({url:location.href,onboarding:document.querySelector('#model-onboarding')?.textContent,setup:document.querySelector('#local-model-setup')?.textContent}));console.error('Failure page:',JSON.stringify(evidence.failurePage));await failurePage.screenshot({path:join(output,'failure.png')});}}catch{}console.error(error);process.exitCode=1;}
 finally{
  for(const [application,child] of applications){
   if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');

@@ -35,6 +35,8 @@ class KokoroProvider:
         options.enable_cpu_mem_arena = True
         session = ort.InferenceSession(str(self.model), options, providers=['CPUExecutionProvider'])
         self.engine = Kokoro.from_session(session, str(self.bundle))
+        # Fail preparation before reporting READY if bundled phonemization fails.
+        self.engine.tokenizer.phonemize('A public speech readiness test.', 'en-us')
         self.registry = VoiceRegistry(self.engine.voices)
         self.cache = Path(cache or (DATA / 'cache/tts' if os.environ.get('BAMBI_DATA_ROOT') else ROOT / 'runtime/tts-cache'))
         self.cache.mkdir(parents=True, exist_ok=True)

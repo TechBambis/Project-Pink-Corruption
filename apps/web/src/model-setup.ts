@@ -138,7 +138,8 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
  el('[data-back]').onclick=()=>pane(Math.max(0,step-1));el('[data-next]').onclick=()=>pane(Math.min(2,step+1));
  for(const button of root.querySelectorAll<HTMLElement>('[data-step]'))button.onclick=()=>pane(Number(button.dataset.step));
  el('[data-finish]').onclick=()=>void action('Saving your setup choice',async()=>{await json('/api/models/onboarding',{});options.finish?.();});
- await reload();await loadSources();initializing=false;const initial=data.setup;pane(setupBusy(initial)||initial?.verified||initial?.phase==='partial'?2:0);
+ try{await reload();await loadSources();}catch(failure){stopped=true;window.removeEventListener('bambi-access-changed',accessChanged);throw failure;}
+ initializing=false;const initial=data.setup;pane(setupBusy(initial)||initial?.verified||initial?.phase==='partial'?2:0);
  const poll=async()=>{if(stopped||polling)return;polling=true;try{await readState();}catch{if(!stopped){statusLost=true;speed=0;showState();}}finally{polling=false;}};
  const timer=setInterval(poll,1000),visible=()=>{if(!document.hidden)void poll();};document.addEventListener('visibilitychange',visible);
  return ()=>{stopped=true;clearInterval(timer);window.removeEventListener('bambi-access-changed',accessChanged);document.removeEventListener('visibilitychange',visible);};
@@ -150,7 +151,8 @@ export async function initModelOnboarding(options:{selected:(id:string)=>void;pr
  const host=document.createElement('div');dialog.append(heading,host);document.body.append(dialog);
  let cleanup:(()=>void)|undefined,opening=false;
  const dismiss=async()=>{try{await json('/api/models/onboarding',{});dialog.close();cleanup?.();cleanup=undefined;}catch(error){const message=document.createElement('p');message.textContent=String(error);host.append(message);}};
- const open=async()=>{if(dialog.open||opening)return;opening=true;dialog.showModal();host.textContent='Checking your computer…';try{cleanup=await initModelSetup(host,{...options,finish:()=>void dismiss()});}catch(error){host.textContent=String(error);const close=document.createElement('button');close.textContent='Set up later';close.onclick=()=>void dismiss();host.append(close);}finally{opening=false;}};
+ const load=async()=>{if(opening)return;opening=true;cleanup?.();cleanup=undefined;host.textContent='Checking your computer…';try{cleanup=await initModelSetup(host,{...options,finish:()=>void dismiss()});}catch(error){host.replaceChildren();const message=document.createElement('p');message.setAttribute('role','alert');message.textContent='Model setup could not load. '+String(error);const retry=document.createElement('button');retry.textContent='Try setup again';retry.onclick=()=>void load();const close=document.createElement('button');close.dataset.finish='';close.textContent='Set up later';close.onclick=()=>void dismiss();host.append(message,retry,close);}finally{opening=false;}};
+ const open=async()=>{if(dialog.open||opening)return;dialog.showModal();await load();};
  dialog.addEventListener('cancel',event=>{event.preventDefault();if(!opening)void dismiss();});
  document.getElementById('local-models-open')?.addEventListener('click',()=>void open());
  const state=await json('/api/models/onboarding');

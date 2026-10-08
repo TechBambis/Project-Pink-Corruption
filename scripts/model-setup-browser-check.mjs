@@ -107,6 +107,17 @@ try{
  await page.reload();await page.locator('#privacy-access-open').waitFor({state:'attached'});assert(!(await privacy.isVisible()));
  await page.goto(base+'/setup');await page.getByRole('button',{name:'Choose a model',exact:true}).click();await page.locator('.model-choice').last().waitFor();assert.equal(await page.locator('.model-choice').count(),6);
  await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));await page.screenshot({path:join(root,'.runtime/model-setup-preview.png'),fullPage:true});
+ // A failed first-run catalog remains recoverable and never starts a download.
+ liveState=null;statusFailure=false;await page.unroute('**/api/models/catalog*');
+ let catalogFailure=true;
+ await page.route('**/api/models/onboarding',route=>route.request().method()==='GET'?route.fulfill({json:{done:false}}):route.continue());
+ await page.route('**/api/models/catalog*',route=>catalogFailure?route.fulfill({status:503,json:{error:'Fixture hardware discovery unavailable'}}):route.continue());
+ await page.goto(base);await page.locator('#model-onboarding [role=alert]').filter({hasText:'Fixture hardware discovery unavailable'}).waitFor();
+ assert(await page.locator('#model-onboarding [data-finish]').isEnabled());
+ catalogFailure=false;await page.getByRole('button',{name:'Try setup again',exact:true}).click();
+ await page.locator('#model-onboarding .model-choice').first().waitFor({state:'attached'});assert.equal(await page.locator('#model-onboarding .model-choice').count(),6);
+ await page.locator('#model-onboarding [data-finish]').click();await page.locator('#model-onboarding').waitFor({state:'hidden'});
+ await page.unroute('**/api/models/onboarding');await page.unroute('**/api/models/catalog*');
  const smokeReservation=createServer();smokeReservation.listen(0,'127.0.0.1');await once(smokeReservation,'listening');const smokePort=smokeReservation.address().port;await new Promise(resolve=>smokeReservation.close(resolve));const smokeBase=`http://127.0.0.1:${smokePort}`;
  smokeServer=spawn(process.execPath,['--import',join(root,'node_modules/tsx/dist/loader.mjs'),bootstrap],{cwd:fixture,env:{...process.env,NODE_OPTIONS:'',BAMBI_PORT:String(smokePort),BAMBI_DATABASE:join(fixture,'smoke.sqlite'),BAMBI_DESKTOP_SMOKE:'1',BAMBI_DESKTOP_ALPHA:'0'},stdio:['ignore','pipe','pipe','ipc']});smokeServer.stdout.on('data',chunk=>logs+=chunk);smokeServer.stderr.on('data',chunk=>logs+=chunk);
  for(let attempt=0;attempt<100;attempt++){if(smokeServer.exitCode!==null)throw Error('Smoke fixture startup failed: '+logs);try{if((await fetch(smokeBase+'/api/health')).ok)break;}catch{}await new Promise(resolve=>setTimeout(resolve,100));}

@@ -5,9 +5,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {recommendModels} from '../packages/ai/recommendation';
-import {baseHardwareProfile,parseNvidiaGPUs,parseWindowsGPUs} from '../packages/hardware';
+import {baseHardwareProfile,parseNvidiaGPUs,parseWindowsGPUs,boundedGPUProbe} from '../packages/hardware';
 
 const gib=1024**3;
+test('a stalled GPU subprocess cannot hold hardware recommendations indefinitely',async()=>{
+ let signal:AbortSignal|undefined;
+ await assert.rejects(boundedGPUProbe(s=>{signal=s;return new Promise(()=>{});},20),/deadline/);
+ assert.equal(signal?.aborted,true);
+ assert.equal(await boundedGPUProbe(async()=> 'GPU found',20),'GPU found');
+});
 test('recommendation uses shared Apple memory without inventing discrete VRAM',()=>{
  const hardware=baseHardwareProfile('darwin','arm64','Apple M5',12,16*gib,12*gib);
  const result=recommendModels(hardware,[{id:'small',label:'Small',weightsBytes:4*gib,contextTokens:4096,backend:'ollama',installed:true,priority:1},{id:'large',label:'Large',weightsBytes:14*gib,contextTokens:16384,backend:'ollama',installed:true,priority:100}],{ollama:true,native:false});
