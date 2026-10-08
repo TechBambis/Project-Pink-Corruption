@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
 import {readFileSync,mkdirSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
-import {join,resolve} from 'node:path';
+import {join,resolve,dirname} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {downloadPinned,hashFile,copy,copyTree,llamaEntries,assertNativeTree,assertWindowsX64} from './desktop-windows-support.mjs';
 
@@ -21,6 +21,19 @@ export async function buildWindowsNative({root,backend,notices,cache,pins}){
  run(uv,['pip','check','--python',python],{env:environment});
  const actualPython=execFileSync(python,['-c','import platform; print(platform.python_version())'],{encoding:'utf8',env:environment}).trim();
  if(actualPython!==pins.python)throw Error('Native Python differs from the pinned version.');
+ const pythonBase=execFileSync(python,['-c','import sys; print(sys.base_prefix)'],{encoding:'utf8',env:environment}).trim();
+ const pythonLicenses=[];
+ for(const [index,base] of [pythonBase,dirname(pythonBase)].entries()){
+  for(const entry of readdirSync(base,{withFileTypes:true})){
+   if(!/^(?:licenses?|copying|notice)(?:[._-].*)?$/i.test(entry.name))continue;
+   const destination=join(notices,'python-runtime',String(index),entry.name);
+   if(entry.isDirectory())copyTree(join(base,entry.name),destination);
+   else if(entry.isFile())copy(join(base,entry.name),destination);
+   else throw Error('Unexpected link in native Python license material.');
+   pythonLicenses.push(String(index)+'/'+entry.name);
+  }
+ }
+ if(!pythonLicenses.length)throw Error('The managed native Python distribution has no retained license material.');
  const speechDist=resolve(root,'.runtime/alpha-speech-windows'),speechWork=resolve(root,'.runtime/alpha-speech-windows-build');
  rmSync(speechDist,{recursive:true,force:true});rmSync(speechWork,{recursive:true,force:true});
  run(python,[resolve(root,'scripts/freeze-desktop-speech.py')],{cwd:root,env:{...environment,BAMBI_SPEECH_DISTPATH:speechDist,BAMBI_SPEECH_WORKPATH:speechWork}});
@@ -36,5 +49,5 @@ export async function buildWindowsNative({root,backend,notices,cache,pins}){
  run('tar',['-xf',llamaZip,'-C',llamaExtract,...approved]);
  copyTree(join(llamaExtract,'lib/ollama'),join(backend,'native/llama'));assertNativeTree(join(backend,'native/llama'));
  writeFileSync(join(notices,'LLAMA-SELECTION.json'),JSON.stringify({archive:pins.llama,entries:approved},null,2)+'\n');
- return {python:actualPython,pyinstaller:'6.22.3',buildLockSha256:await hashFile(join(root,'packages/speech/desktop-windows.lock')),environment:'Fresh uv-managed native Windows x64 CPython; hash-verified wheels; frozen in this build'};
+ return {python:actualPython,pythonLicenses,pyinstaller:'6.22.3',buildLockSha256:await hashFile(join(root,'packages/speech/desktop-windows.lock')),environment:'Fresh uv-managed native Windows x64 CPython; hash-verified wheels; frozen in this build'};
 }

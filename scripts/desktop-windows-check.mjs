@@ -8,7 +8,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {execFileSync,spawn} from 'node:child_process';
 import {createServer} from 'node:http';
-import {hashFile,digest,inventory,assertNativeTree,logicalPath} from './desktop-windows-support.mjs';
+import {hashFile,digest,inventory,assertNativeTree,logicalPath,files} from './desktop-windows-support.mjs';
 import {observeOwnedRows,observeRows,observeAcl,startObserver,stopObserver,machineConditions} from './desktop-windows-processes.mjs';
 
 if(process.argv.includes('--help')){console.log('Native Windows: node scripts/desktop-windows-check.mjs "path to Bambi Local.exe". Evidence stays in LOCALAPPDATA/Bambi qualification.');process.exit(0);}
@@ -153,6 +153,59 @@ try{
  });
  record('audio-mute-and-unmute',muteCheck);
  await current.page.keyboard.press('Escape');await current.page.keyboard.press('Escape');await current.page.waitForFunction(()=>document.querySelector('#media').paused&&window.__testAnalyser.context.state==='suspended');record('end-session-stops-output');
+ if(runtime.phase==='alpha'){
+  const sample=readFileSync(join(backendRoot,'dist/web/samples/studio-chimes.bambi.json'));
+  const originalPack=JSON.parse(sample);
+  await current.page.goto('http://127.0.0.1:16969/studio');
+  await current.page.locator('#import').setInputFiles({name:'studio-chimes.bambi.json',mimeType:'application/json',buffer:sample});
+  await current.page.waitForFunction(()=>document.querySelector('#status')?.textContent==='Package opened. Preview when you are ready.');
+  await current.page.locator('#preview').click();
+  await current.page.waitForFunction(()=>{const a=window.__testAnalyser;if(!a)return false;const v=new Float32Array(a.fftSize);a.getFloatTimeDomainData(v);return Math.max(...v.map(Math.abs))>.0001&&document.querySelector('#preview-scene').textContent==='Soft Pink';});
+  const studioPeak=await pcm();await current.page.locator('#stop').click();
+  await current.page.waitForFunction(()=>document.querySelector('#caption').textContent==='Preview stopped.');
+  record('prepared-Studio-import-and-real-PCM-preview-without-AI',{peak:studioPeak,scene:'Soft Pink'});
+  const downloadPromise=current.page.waitForEvent('download');await current.page.locator('#export').click();
+  const exported=readFileSync(await(await downloadPromise).path()),exportedPack=JSON.parse(exported);
+  assert.deepEqual(exportedPack.assets,originalPack.assets);assert.deepEqual(exportedPack.cues,originalPack.cues);
+  await current.page.locator('#import').setInputFiles({name:'reopened.bambi.json',mimeType:'application/json',buffer:exported});
+  await current.page.waitForFunction(()=>document.querySelector('#status')?.textContent==='Package opened. Preview when you are ready.');
+  record('prepared-Studio-export-and-reimport-preserve-audio-and-cues',{assets:exportedPack.assets.length,cues:exportedPack.cues.length,exportSha256:digest(exported)});
+  await current.page.goto('http://127.0.0.1:16969/setup');
+  await current.page.waitForFunction(()=>document.querySelector('#setup-progress')?.textContent.startsWith('not-installed'));
+  const setupChecks=await current.page.evaluate(async()=>{
+   const sleep=ms=>new Promise(r=>setTimeout(r,ms)),checks=[];
+   for(const attempt of [1,2]){
+    const start=performance.now();document.querySelector('#setup-install').click();let observed;
+    while(performance.now()-start<30000){
+     const state=await(await fetch('/api/desktop/setup')).json();
+     if(state.phase==='failed')throw Error('Actual pinned setup download failed: '+state.error);
+     if(state.completed>0&&!document.querySelector('#setup-cancel').disabled){observed={phase:state.phase,completed:state.completed,asset:state.asset,progressVisible:document.querySelector('#setup-progress').textContent};break;}
+     await sleep(100);
+    }
+    if(!observed)throw Error('Actual setup download did not expose cancellable progress.');
+    document.querySelector('#setup-cancel').click();let cancelled;
+    for(let i=0;i<100;i++){const state=await(await fetch('/api/desktop/setup')).json();if(state.phase==='cancelled'){cancelled=state;break;}await sleep(100);}
+    if(!cancelled||cancelled.verified)throw Error('Cancellation activated incomplete model data.');
+    checks.push({attempt,observed,cancelledPhase:cancelled.phase,elapsedMs:performance.now()-start});
+    const retryDeadline=performance.now()+10000;
+    while(document.querySelector('#setup-install').disabled&&performance.now()<retryDeadline)await sleep(100);
+    if(document.querySelector('#setup-install').disabled)throw Error('Retry did not become available after cancellation.');
+   }
+   return checks;
+  });
+  assert(!files(join(data,'models')).some(path=>path.endsWith('.partial')));
+  record('actual-pinned-Setup-download-progress-cancel-and-retry',{attempts:setupChecks,fullModelActivated:false});
+  await current.page.goto('http://127.0.0.1:16969/');
+  await current.page.waitForSelector('#offline-sample');
+  const afterCancel=await current.page.evaluate(async()=>{
+   await document.querySelector('#offline-sample').onclick();document.querySelector('#pause').click();
+   const end=performance.now()+8000;while(performance.now()<end){const a=window.__testAnalyser;if(a){const v=new Float32Array(a.fftSize);a.getFloatTimeDomainData(v);const peak=Math.max(...v.map(Math.abs));if(peak>.0001)return peak;}await new Promise(r=>setTimeout(r,100));}throw Error('Sample failed after canceled model setup.');
+  });
+  const setup=await current.page.evaluate(async()=>await(await fetch('/api/desktop/setup')).json());assert.equal(setup.verified,false);
+  record('sample-remains-usable-after-cancelled-and-retried-Setup',{peak:afterCancel});
+  await current.page.keyboard.press('Escape');await current.page.keyboard.press('Escape');
+  current.rows=await observeOwnedRows(current.owner.pid);
+ }
  await current.page.evaluate(async()=>{const profile=await(await fetch('/api/preferences')).json();await fetch('/api/preferences',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({...profile,'bambi-name':'Windows persistence ü'})});});
  await current.application.evaluate(({app})=>{setImmediate(()=>app.quit());});await stopped(current.rows);await current.application.close().catch(()=>{});record('ordinary-Quit-cleans-owned-tree');
  current=await launch();assert.equal(await current.page.evaluate(async()=>(await(await fetch('/api/preferences')).json())['bambi-name']),'Windows persistence ü');record('reopen-retains-preferences');

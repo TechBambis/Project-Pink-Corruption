@@ -46,6 +46,13 @@ try{
  const runs=readdirSync(testRoot,{withFileTypes:true}).filter(entry=>entry.isDirectory());assert.equal(runs.length,1);
  const appEvidence=JSON.parse(readFileSync(join(testRoot,runs[0].name,'evidence.json'),'utf8'));assert.equal(appEvidence.result,'passed');
  evidence.applicationEnvironment=appEvidence.environment;
+ if(runtime.phase==='alpha'){
+  const nativeOutput=join(scratch,'Public installed speech evidence');
+  try{execFileSync(process.execPath,[join(root,'scripts/desktop-windows-runtime-slice.mjs'),'--received-runtime',join(installed,'resources/backend')],{cwd:root,env:{...process.env,BAMBI_WINDOWS_SLICE_OUTPUT:nativeOutput},timeout:8*60*1000,stdio:'inherit'});}
+  finally{if(existsSync(join(nativeOutput,'RUNTIME-SLICE-CHECK.json')))writeFileSync(join(output,'WINDOWS-NATIVE-SPEECH-CHECK.json'),readFileSync(join(nativeOutput,'RUNTIME-SLICE-CHECK.json')));}
+  const nativeEvidence=JSON.parse(readFileSync(join(nativeOutput,'RUNTIME-SLICE-CHECK.json'),'utf8'));assert.equal(nativeEvidence.result,'passed');
+  record('actual-installed-native-speech-and-runtime-acceptance',{checks:nativeEvidence.checks.map(check=>check.name)});
+ }
  fixture=join(appEvidence.data,'data/bambi.sqlite');fixtureHash=await hashFile(fixture);
  nsis(uninstaller,['/S','/KEEP_APP_DATA','_?='+installed]);
  assert(!existsSync(executable)&&!existsSync(join(installed,'resources')),'Uninstaller retained executable/resources');

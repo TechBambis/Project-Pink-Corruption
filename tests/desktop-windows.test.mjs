@@ -11,7 +11,22 @@ import {join} from 'node:path';
 import {createServer} from 'node:http';
 import {createRequire} from 'node:module';
 import {buildOptions,downloadPinned,digest,llamaEntries,assertWindowsX64,sourcePathAllowed,inventory,peImports,windowsDependencyReport} from '../scripts/desktop-windows-support.mjs';
+import {splitBundle} from '../scripts/desktop-windows-transfer.mjs';
 const {runtimeEnvironment}=createRequire(import.meta.url)('../apps/desktop/runtime-environment.cjs');
+
+test('bounded private transport reconstructs binary payloads exactly and rejects oversized or reused outputs',t=>{
+ const folder=mkdtempSync(join(tmpdir(),'Bambi bounded transfer ü '));t.after(()=>rmSync(folder,{recursive:true,force:true}));
+ const bytes=Buffer.alloc(2*1024**2+123);for(let i=0;i<bytes.length;i++)bytes[i]=(i*17)%251;
+ const bundle=join(folder,'handoff.tar');writeFileSync(bundle,bytes);
+ const parts=splitBundle(bundle,join(folder,'parts'),1024**2);
+ assert.deepEqual(parts.map(p=>p.bytes),[1024**2,1024**2,123]);
+ assert.deepEqual(Buffer.concat(parts.map(p=>readFileSync(p.path))),bytes);
+ assert.throws(()=>splitBundle(bundle,join(folder,'parts'),1024**2),/EEXIST/);
+ assert.throws(()=>splitBundle(bundle,join(folder,'bad'),0),/Invalid/);
+ writeFileSync(bundle,Buffer.alloc(8*1024**2+1));
+ assert.throws(()=>splitBundle(bundle,join(folder,'too-large'),1024**2),/eight/);
+ assert(!existsSync(join(folder,'too-large')));
+});
 
 test('Windows private runtime environment keeps canonical OS paths and excludes developer/provider overrides',()=>{
  const env=runtimeEnvironment({SYSTEMROOT:'C:\\Windows',PATH:'C:\\developer',Path:'C:\\other',NODE_OPTIONS:'--require attacker',PYTHONPATH:'bad',BAMBI_CLOUD_API_KEY:'secret',BAMBI_WINDOWS_JOB_OWNED:'1',GGML_BACKEND_PATH:'bad',LOCALAPPDATA:'C:\\Users\\Name ä\\AppData\\Local'},{platform:'win32',resources:'C:\\Program Files\\Bambi ü\\resources\\backend',data:'C:\\Users\\Name ä\\Bambi data',port:6969,alpha:true,tokens:{instance:'own',llama:'own-llama',speech:'own-speech'},ownerPid:123});

@@ -193,4 +193,5 @@ test-results/
 
 !/scripts/desktop-windows-native.mjs
 !/scripts/desktop-windows-runtime-slice.mjs
+!/scripts/desktop-windows-transfer.mjs
 !/docs/DESKTOP_WINDOWS_ALPHA.md

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {mkdirSync,mkdtempSync,readFileSync,writeFileSync,realpathSync,cpSync} from 'node:fs';
 import {join,resolve,dirname,relative,isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {processSnapshot,processRows,measureProcesses,machineConditions} from './desktop-windows-processes.mjs';
+import {processSnapshot,observeRows,measureProcesses,machineConditions,startObserver,stopObserver} from './desktop-windows-processes.mjs';
 import {inventory} from './desktop-windows-support.mjs';
 
 if(process.argv.includes('--help')){console.log('Native Windows: node scripts/desktop-windows-ai-check.mjs "Bambi Local.exe" "reviewed model-data folder" [--cpu]. Run the packaging acceptance first.');process.exit(0);}
@@ -27,14 +27,15 @@ const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(predicate,timeout=180000){const deadline=performance.now()+timeout;while(performance.now()<deadline){if(await predicate())return;await delay(200);}throw Error('Acceptance condition timed out.');}
 const env={...process.env,PATH:emptyPath};delete env.ELECTRON_RUN_AS_NODE;
 const microphonePath=join(output,'Virtual microphone.wav');
-let application,page,owner;
+let application,page,owner,applicationChild;
 async function launch(){
  const started=performance.now();
  application=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,`--bambi-port=${port}`,`--bambi-accelerator=${cpu?'cpu':'auto'}`,'--use-fake-device-for-media-stream',`--use-file-for-fake-audio-capture=${microphonePath}`],cwd:output,env,timeout:30000});
- owner=application.process().pid;page=await application.firstWindow();page.on('pageerror',e=>evidence.errors.push(String(e)));await page.waitForSelector('#offline-sample',{state:'visible'});
+ applicationChild=application.process();owner=await application.evaluate(()=>process.pid);page=await application.firstWindow();page.on('pageerror',e=>evidence.errors.push(String(e)));await page.waitForSelector('#offline-sample',{state:'visible'});
  return performance.now()-started;
 }
 try{
+ await startObserver();
  const before=await inventory(resources);evidence.measurements.startupMs=await launch();record('isolated-alpha-start',{startupMs:evidence.measurements.startupMs});
  await page.goto(`http://127.0.0.1:${port}/setup`);await page.waitForFunction(()=>document.querySelector('#setup-progress')?.textContent.includes('not-installed'));
  await application.evaluate(({dialog},directory)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[directory]});},source);
@@ -73,11 +74,13 @@ try{
  const measurement=measureProcesses(owner,120);const turns=[];
  for(const prompt of ['Describe a small silver key in one sentence.','Now describe a blue glass in one sentence.','Compare their colors briefly.','Give the key a simple name.','What name did you choose for the key?','Tell me one short sentence about a quiet room.','Mention the key and glass together briefly.','Give a brief closing sentence about the room.'])turns.push(await reply(prompt,true));
  evidence.measurements.sustainedConversation={turns,processes:await measurement};record('eight-spoken-turns-and-owned-resource-measurement',{turns:turns.length});
- await page.evaluate(()=>window.bambi.hardStop());const rows=processSnapshot(owner).processes,quitStart=performance.now();await application.evaluate(({app})=>{setImmediate(()=>app.quit());});
- await until(()=>{const current=processRows();return rows.every(r=>!current.some(now=>now.pid===r.pid&&now.created===r.created));},12000);record('Quit-after-native-AI-cleans-owned-tree',{ms:performance.now()-quitStart});await application.close().catch(()=>{});application=null;
+ await page.evaluate(()=>window.bambi.hardStop());const rows=(await processSnapshot(owner)).processes,quitStart=performance.now();await application.evaluate(({app})=>{setImmediate(()=>app.quit());});
+ await until(async()=>{const current=await observeRows(rows.map(r=>r.pid));return rows.every(r=>!current.some(now=>now.pid===r.pid&&now.created===r.created));},12000);record('Quit-after-native-AI-cleans-owned-tree',{ms:performance.now()-quitStart});await application.close().catch(()=>{});application=null;
  const llamaLog=readFileSync(join(data,'logs/llama.log'),'utf8');
  evidence.accelerationEvidence=llamaLog.split(/\r?\n/).filter(line=>/offload.*layers.*GPU|Vulkan.*device|device.*Vulkan/i.test(line));
- if(cpu)assert(!evidence.accelerationEvidence.some(line=>/offloaded [1-9][0-9]*\//i.test(line)),'CPU fallback unexpectedly offloaded layers');
+ const offloaded=evidence.accelerationEvidence.some(line=>/offloaded [1-9][0-9]*\//i.test(line));
+ if(cpu)assert(!offloaded,'CPU fallback unexpectedly offloaded layers');
+ else assert(offloaded,'Auto/Vulkan qualification requires actual GPU-offloaded layers; CPU fallback is a separate run.');
  record('acceleration-observations',{requested:evidence.accelerator,logLines:evidence.accelerationEvidence,gpuQualified:!cpu&&evidence.accelerationEvidence.some(line=>/offloaded [1-9][0-9]*\//i.test(line))});
  await launch();await page.goto(`http://127.0.0.1:${port}/setup`);await page.waitForFunction(()=>document.querySelector('#setup-progress')?.textContent.startsWith('installed ·'),{},{timeout:180000});
  await page.locator('#setup-prepare').click();await page.waitForFunction(()=>document.querySelector('#setup-progress')?.textContent.startsWith('ready'),{},{timeout:300000});record('reopen-with-verified-installed-models',{networkIsolationVerified:false});
@@ -85,6 +88,11 @@ try{
  evidence.limitations=['This is native application acceptance with a synthetic microphone, not physical hearing/microphone qualification.','Received browser download, Windows security policy, actual NSIS install/uninstall and offline network isolation are separate gates.','Setup copy is verified here; actual model download, cancellation/retry and damaged-install recovery need the setup acceptance run.','CPU and auto/Vulkan must be run separately; GPU presence alone is not support evidence.'];
 }catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);process.exitCode=1;}
 finally{
- if(application){const rows=processSnapshot(owner).processes;await application.close().catch(()=>{});await until(()=>{const current=processRows();return rows.every(r=>!current.some(now=>now.pid===r.pid&&now.created===r.created));},12000).catch(error=>{evidence.cleanupFailure=String(error);process.exitCode=1;});}
+ if(application){
+  try{const rows=owner?(await processSnapshot(owner)).processes:[];await application.close().catch(()=>{});if(applicationChild?.exitCode===null)applicationChild.kill('SIGKILL');
+   if(rows.length)await until(async()=>{const current=await observeRows(rows.map(r=>r.pid));return rows.every(r=>!current.some(now=>now.pid===r.pid&&now.created===r.created));},12000);
+  }catch(error){evidence.cleanupFailure=String(error);evidence.result='failed';process.exitCode=1;}
+ }
+ await stopObserver();
  writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));
 }

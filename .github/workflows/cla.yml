@@ -26,6 +26,10 @@ on:
       upload_packages:
         type: boolean
         default: false
+      transfer_packages:
+        description: Receive bounded private alpha parts locally before removing each temporary part
+        type: boolean
+        default: false
       remaining_artifact_mib:
         type: string
         default: '0'
@@ -42,6 +46,7 @@ jobs:
       quota_checked: ${{ inputs.quota_checked }}
       quota_record: ${{ inputs.quota_record }}
       upload_packages: ${{ inputs.upload_packages }}
+      transfer_packages: ${{ inputs.transfer_packages }}
       remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}
   qualification:
     if: inputs.mode == 'qualify' && inputs.quota_checked && github.actor_id == '337824705'

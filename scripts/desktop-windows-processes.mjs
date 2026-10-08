@@ -64,14 +64,14 @@ export function ownedRows(owner,rows=processRows([owner])){
  return rows.filter(row=>owned.has(row.pid));
 }
 function assertCreation(row){if(!row.created||!row.executable)throw Error('Cannot verify native process identity for PID '+row.pid);}
-export function processSnapshot(owner){
- const rows=ownedRows(owner);
+export async function processSnapshot(owner){
+ const rows=await observeOwnedRows(owner);
  // Command lines contain private service tokens. Never persist them in evidence.
  return {at:performance.now(),rssBytes:rows.reduce((n,r)=>n+r.rssBytes,0),privateCommitBytes:rows.reduce((n,r)=>n+r.privateCommitBytes,0),pids:rows.map(r=>r.pid),processTicks:Object.fromEntries(rows.map(r=>[r.pid,r.cpu100ns])),processes:rows.map(({command,...row})=>row)};
 }
 export async function measureProcesses(owner,seconds=10){
- const samples=[processSnapshot(owner)];
- for(let i=0;i<seconds;i++){await new Promise(r=>setTimeout(r,1000));samples.push(processSnapshot(owner));}
+ const samples=[await processSnapshot(owner)];
+ for(let i=0;i<seconds;i++){await new Promise(r=>setTimeout(r,1000));samples.push(await processSnapshot(owner));}
  const durationSeconds=(samples.at(-1).at-samples[0].at)/1000;
  const cpu100ns=samples.slice(1).reduce((sum,s,i)=>sum+Object.entries(s.processTicks).reduce((n,[pid,ticks])=>n+Math.max(0,ticks-(samples[i].processTicks[pid]??0)),0),0);
  return {durationSeconds,cpuPercentOfOneCore:cpu100ns/1e7/durationSeconds*100,rssBytesMean:samples.reduce((n,s)=>n+s.rssBytes,0)/samples.length,rssBytesMax:Math.max(...samples.map(s=>s.rssBytes)),privateCommitBytesMean:samples.reduce((n,s)=>n+s.privateCommitBytes,0)/samples.length,samples,method:'Owned Windows descendant tree; native Toolhelp snapshot, process creation-time, CPU 100 ns, working-set and private-commit counters. Working sets count shared pages repeatedly; private commit is not physical RAM. One core is 100%. One-second intervals plus snapshot overhead; creation and termination between samples may be missed.'};

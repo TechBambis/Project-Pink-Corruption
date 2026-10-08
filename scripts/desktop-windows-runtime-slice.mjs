@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync,mkdirSync,mkdtempSync} from 'node:fs';
-import {join,resolve} from 'node:path';
+import {join,resolve,dirname,relative,isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawn,execFileSync} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
@@ -16,10 +16,13 @@ if(process.argv.includes('--help')){
 }
 if(process.platform!=='win32'||process.arch!=='x64')throw Error('A native Windows x64 host is required.');
 const root=resolve(fileURLToPath(new URL('../',import.meta.url)));process.chdir(root);
+const args=process.argv.slice(2),received=args[0]==='--received-runtime';
+if(args.length&&(args.length!==2||!received))throw Error('Use no arguments for a build slice, or --received-runtime <installed backend>.');
 const output=resolve(process.env.BAMBI_WINDOWS_SLICE_OUTPUT||'.runtime/windows-runtime-slice-evidence');mkdirSync(output,{recursive:true});
 const temporary=mkdtempSync(join(process.env.RUNNER_TEMP||process.env.TEMP,'Bambi ü native slice '));
-const backend=join(temporary,'Relocated services ä'),notices=join(temporary,'Notices'),data=join(temporary,'Private fixture data'),models=join(data,'models'),cache=resolve('.runtime/desktop-windows-downloads');
-for(const path of [backend,notices,data,models,cache])mkdirSync(path,{recursive:true});
+const backend=received?resolve(args[1]):join(temporary,'Relocated services ä'),notices=join(temporary,'Notices'),data=join(temporary,'Private fixture data'),models=join(data,'models'),cache=resolve('.runtime/desktop-windows-downloads');
+if(received){const local=relative(root,backend);assert(local.startsWith('..')||isAbsolute(local),'Test the installed runtime outside the checkout.');}
+for(const path of [notices,data,models,cache,...(received?[]:[backend])])mkdirSync(path,{recursive:true});
 const pins=JSON.parse(readFileSync('config/desktop-windows-runtime.json','utf8')),manifest=JSON.parse(readFileSync('config/desktop-alpha-models.json','utf8'));
 const evidence={testedAt:new Date().toISOString(),platform:process.platform,architecture:process.arch,gitSha:process.env.GITHUB_SHA||null,checks:[],measurements:{},conditions:{runner:process.env.RUNNER_NAME||null,os:execFileSync(join(process.env.SystemRoot,'System32/cmd.exe'),['/d','/c','ver'],{encoding:'utf8'}).trim(),cpuCount:(await import('node:os')).cpus().length,memoryBytes:(await import('node:os')).totalmem(),externalRuntimePath:false,physicalMicrophone:false,physicalListening:false,fullChatModel:false,gpuOffloading:false},limitations:['Speech uses a public synthetic sentence, not physical microphone or listening evidence.','The unchanged full 9B model, full prompt conversation, GPU offload and reference Windows 11 hardware are separate required gates.','This runtime slice does not certify the complete application or NSIS installer.']};
 const save=()=>writeFileSync(join(output,'RUNTIME-SLICE-CHECK.json'),JSON.stringify(evidence,null,2)+'\n');
@@ -69,9 +72,17 @@ function messages(child){
  };
 }
 try{
- const buildStart=performance.now();evidence.build=await buildWindowsNative({root,backend,notices,cache,pins});
- record('fresh-native-hash-pinned-speech-and-LLM-build',{ms:performance.now()-buildStart,...evidence.build});
- for(const folder of ['config','presets'])copyTree(join(root,folder),join(backend,folder));
+ if(received){
+  const runtime=JSON.parse(readFileSync(join(dirname(backend),'notices/RUNTIME-MANIFEST.json'),'utf8'));
+  assert.equal(runtime.phase,'alpha');assert.equal(runtime.platform,'win32');assert.equal(runtime.architecture,'x64');
+  evidence.build=runtime.native.speech;
+  evidence.limitations[2]='This check uses the actual installed native services; application and NSIS checks are recorded separately.';
+  record('received-installed-native-speech-and-LLM-runtime',{version:runtime.version,sourceDigest:runtime.sourceDigest,...evidence.build});
+ }else{
+  const buildStart=performance.now();evidence.build=await buildWindowsNative({root,backend,notices,cache,pins});
+  record('fresh-native-hash-pinned-speech-and-LLM-build',{ms:performance.now()-buildStart,...evidence.build});
+  for(const folder of ['config','presets'])copyTree(join(root,folder),join(backend,folder));
+ }
  assertNativeTree(backend);const imports=windowsDependencyReport(backend);writeFileSync(join(output,'WINDOWS-DLL-IMPORTS.json'),JSON.stringify(imports,null,2)+'\n');
  writeFileSync(join(output,'NATIVE-RUNTIME-INVENTORY.json'),JSON.stringify(await inventory(join(backend,'native')),null,2)+'\n');
  const llama=join(backend,'native/llama/llama-server.exe');
