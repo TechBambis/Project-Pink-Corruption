@@ -28,7 +28,9 @@ const resources=join(process.resourcesPath,'backend');
 const accelerator=option('--bambi-accelerator')||'auto';
 const env=runtimeEnvironment(process.env,{resources,data,port,alpha,accelerator,tokens:{instance:randomBytes(32).toString('hex'),llama:randomBytes(32).toString('hex'),speech:randomBytes(32).toString('hex')}});
 for(const path of [env.TMPDIR,join(data,'logs'),join(data,'data')])mkdirSync(path,{recursive:true,mode:0o700});
-if(!app.requestSingleInstanceLock())app.quit();
+// A duplicate owns no backend or window. Exit it before ready on Windows;
+// ordinary Quit still performs the owned-service shutdown below.
+if(!app.requestSingleInstanceLock()){if(windows)app.exit(0);else app.quit();}
 else {
  app.on('second-instance',()=>{if(window){if(window.isMinimized())window.restore();window.show();window.focus();}});
  app.on('before-quit',event=>{

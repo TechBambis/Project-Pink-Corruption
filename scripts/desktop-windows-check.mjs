@@ -97,9 +97,14 @@ try{
  record('ordinary-native-launch-without-debugger',{backendPid:nativeBackend.pid,windows:await observeRows([nativeFirst.pid],true)});
  // The second instance intentionally exits before Electron's ready event.
  // Launch it as an ordinary native process, without a debugger handshake.
- secondNative=spawn(executable,[`--bambi-user-data=${nativeData}`,'--bambi-port=16970'],{cwd:output,env:environment,stdio:'ignore'});
+ secondNative=spawn(executable,[`--bambi-user-data=${nativeData}`,'--bambi-port=16970'],{cwd:output,env:environment,stdio:['ignore','pipe','pipe']});
  const secondRoots=[secondNative.pid,nativeFirst.pid];
  evidence.secondStart={pid:secondNative.pid,observations:[]};
+ let secondDiagnostics='';for(const stream of [secondNative.stdout,secondNative.stderr])stream.on('data',bytes=>{secondDiagnostics=(secondDiagnostics+bytes).slice(-12000);evidence.secondStart.publicFixtureDiagnostics=secondDiagnostics;});
+ const inspectSecond=setTimeout(async()=>{
+  try{evidence.secondStart.observations.push({at:new Date().toISOString(),processes:await observeRows([secondNative.pid]),windows:await observeRows([secondNative.pid],true)});}
+  catch(error){evidence.secondStart.observationFailure=String(error);}
+ },5000);
  const secondStarted=performance.now();
  await new Promise((accept,reject)=>{
   const timer=setTimeout(async()=>{
@@ -108,8 +113,8 @@ try{
     evidence.secondStart.observations.push({at:new Date().toISOString(),processes:(await observeRows(secondRoots)).map(({command,...row})=>row),windows:await observeRows(secondRoots,true)});
    }}catch(error){evidence.secondStart.observationFailure=String(error);}
   },30000);
-  secondNative.once('error',error=>{clearTimeout(timer);reject(error);});
-  secondNative.once('exit',(code,signal)=>{clearTimeout(timer);if(code===0&&!signal)accept();else reject(Error('Second instance exit '+JSON.stringify({code,signal})));});
+  secondNative.once('error',error=>{clearTimeout(timer);clearTimeout(inspectSecond);reject(error);});
+  secondNative.once('exit',(code,signal)=>{clearTimeout(timer);clearTimeout(inspectSecond);if(code===0&&!signal)accept();else reject(Error('Second instance exit '+JSON.stringify({code,signal})));});
  });
  assert((await observeRows([nativeBackend.pid])).some(r=>r.pid===nativeBackend.pid&&r.created===nativeBackend.created));record('second-start-keeps-original-owner',{secondExitCode:secondNative.exitCode,secondExitMs:performance.now()-secondStarted,method:'Ordinary native spawn without Playwright/debug flags; 30-second hosted-runner bound.'});
  nativeFirst.kill('SIGKILL');await stopped(nativeRows);record('ordinary-native-owner-death-cleans-owned-tree');

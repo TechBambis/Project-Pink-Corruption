@@ -16,7 +16,11 @@ export async function buildWindowsNative({root,backend,notices,cache,pins}){
  const uv=join(buildEnv,'uv.exe');assertWindowsX64(uv);
  const pythonVenv=join(buildEnv,'venv'),python=join(pythonVenv,'Scripts/python.exe');
  const environment={...process.env,PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8',UV_PYTHON_INSTALL_DIR:join(buildEnv,'python'),UV_CACHE_DIR:join(buildEnv,'cache')};
- run(uv,['venv',pythonVenv,'--python',pins.python,'--managed-python','--no-project'],{env:environment});
+ if(pins.pythonDistribution.version!==pins.python)throw Error('Native CPython archive/version mismatch.');
+ const pythonTarget=join(buildEnv,'python-target');mkdirSync(pythonTarget);
+ run('tar',['-xf',await acquire(pins.pythonDistribution),'-C',pythonTarget]);
+ const nativePython=join(pythonTarget,'python/python.exe');assertWindowsX64(nativePython);
+ run(uv,['venv',pythonVenv,'--python',nativePython,'--no-python-downloads','--no-project'],{env:environment});
  run(uv,['pip','install','--python',python,'--require-hashes','--only-binary',':all:','-r',resolve(root,'packages/speech/desktop-windows.lock')],{env:environment});
  run(uv,['pip','check','--python',python],{env:environment});
  const actualPython=execFileSync(python,['-c','import platform; print(platform.python_version())'],{encoding:'utf8',env:environment}).trim();
@@ -34,10 +38,22 @@ export async function buildWindowsNative({root,backend,notices,cache,pins}){
   }
  }
  if(!pythonLicenses.length)throw Error('The managed native Python distribution has no retained license material.');
+ const licenseRoot=join(root,'docs/licenses/windows-python-3.12.13');
+ const provenance=JSON.parse(readFileSync(join(licenseRoot,'PROVENANCE.json'),'utf8'));
+ if(provenance.runtimeArchive.sha256!==pins.pythonDistribution.sha256)throw Error('CPython notices do not match the pinned native distribution.');
+ for(const notice of provenance.notices){
+  const path=join(licenseRoot,notice.file);
+  if(readFileSync(path).length!==notice.bytes||await hashFile(path)!==notice.sha256)throw Error('CPython distribution notice differs: '+notice.file);
+  copy(path,join(notices,'python-runtime/standalone',notice.file));
+ }
+ copy(join(licenseRoot,'PROVENANCE.json'),join(notices,'python-runtime/standalone/PROVENANCE.json'));
  const speechDist=resolve(root,'.runtime/alpha-speech-windows'),speechWork=resolve(root,'.runtime/alpha-speech-windows-build');
  rmSync(speechDist,{recursive:true,force:true});rmSync(speechWork,{recursive:true,force:true});
  run(python,[resolve(root,'scripts/freeze-desktop-speech.py')],{cwd:root,env:{...environment,BAMBI_SPEECH_DISTPATH:speechDist,BAMBI_SPEECH_WORKPATH:speechWork}});
  copyTree(join(speechDist,'bambi-speech'),join(backend,'native/speech'));assertNativeTree(join(backend,'native/speech'));
+ for(const [name,expected] of Object.entries(provenance.matchedFrozenCPythonLibraries)){
+  if(await hashFile(join(backend,'native/speech/_internal',name))!==expected)throw Error('Frozen CPython library differs from its reviewed native archive: '+name);
+ }
  for(const folder of readdirSync(join(pythonVenv,'Lib/site-packages')).filter(name=>name.endsWith('.dist-info')))copyTree(join(pythonVenv,'Lib/site-packages',folder),join(notices,'speech-metadata',folder));
  for(const asset of JSON.parse(readFileSync(join(root,'config/desktop-speech-sources.json'),'utf8'))){
   const path=join(cache,'speech-source',asset.file);await downloadPinned(asset,path);copy(path,join(notices,'speech-source',asset.file));
@@ -49,5 +65,5 @@ export async function buildWindowsNative({root,backend,notices,cache,pins}){
  run('tar',['-xf',llamaZip,'-C',llamaExtract,...approved]);
  copyTree(join(llamaExtract,'lib/ollama'),join(backend,'native/llama'));assertNativeTree(join(backend,'native/llama'));
  writeFileSync(join(notices,'LLAMA-SELECTION.json'),JSON.stringify({archive:pins.llama,entries:approved},null,2)+'\n');
- return {python:actualPython,pythonLicenses,pyinstaller:'6.22.3',buildLockSha256:await hashFile(join(root,'packages/speech/desktop-windows.lock')),environment:'Fresh uv-managed native Windows x64 CPython; hash-verified wheels; frozen in this build'};
+ return {python:actualPython,pythonDistribution:pins.pythonDistribution,pythonLicenses,distributionNotices:provenance.notices.length,matchedCPythonLibraries:Object.keys(provenance.matchedFrozenCPythonLibraries).length,pyinstaller:'6.22.3',buildLockSha256:await hashFile(join(root,'packages/speech/desktop-windows.lock')),environment:'Fresh checksum-pinned native Windows x64 CPython; hash-verified wheels; frozen in this build'};
 }

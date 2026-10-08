@@ -28,5 +28,13 @@
     "sha256": "dc50b9ca7f9023c86525012632cd1615b093d0407987444a7f62ecab617e8e93"
   },
   "python": "3.12.13",
-  "builder": "26.15.3"
+  "builder": "26.15.3",
+  "pythonDistribution": {
+    "version": "3.12.13",
+    "build": "20260610",
+    "file": "cpython-3.12.13-20260610-win-x64.tar.gz",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.12.13%2B20260610-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "bytes": 21932694,
+    "sha256": "99dce0b23bf3c3b28d350cdd7bfe3cd3be51cc4f285faae7c0df110d106d1a8d"
+  }
 }
