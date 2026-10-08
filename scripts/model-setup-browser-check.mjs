@@ -20,6 +20,9 @@ const base=`http://127.0.0.1:${port}`;
 const locationCalls=join(fixture,'location-calls.txt'),bootstrap=join(fixture,'bootstrap.mjs');
 writeFileSync(bootstrap,`
  import {writeFileSync} from 'node:fs';
+ import os from 'node:os';
+ // UI transfer states use a representative RAM fixture; real memory guards are covered in recommendation tests.
+ os.totalmem=()=>32*1024**3;os.freemem=()=>24*1024**3;
  const fetchReal=globalThis.fetch;let calls=0;
  globalThis.fetch=(url,options)=>{
   if(String(url)==='https://get.geojs.io/v1/ip/geo.json'){
@@ -34,7 +37,7 @@ const server=spawn(process.execPath,['--import',join(root,'node_modules/tsx/dist
 let logs='',browser,smokeServer;server.stdout.on('data',chunk=>logs+=chunk);server.stderr.on('data',chunk=>logs+=chunk);
 try{
  for(let attempt=0;attempt<100;attempt++){if(server.exitCode!==null)throw Error('Fixture startup failed: '+logs);try{if((await fetch(base+'/api/health')).ok)break;}catch{}await new Promise(resolve=>setTimeout(resolve,100));}
- const catalog=await(await fetch(base+'/api/models/catalog')).json();assert.equal(catalog.alternatives.length,6);
+ const catalog=await(await fetch(base+'/api/models/catalog')).json();assert.equal(catalog.alternatives.length,6);assert.equal(catalog.hardware.ramTotal,32*1024**3);
  const blocked=await fetch(base+'/api/models/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'https://example.invalid/model'})});assert.equal(blocked.status,400);
  const unconfirmed=await fetch(base+'/api/models/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'bambi-qwen35-9b-defiant-fable:iq4_xs'})});assert.equal(unconfirmed.status,400);
  assert.equal((await(await fetch(base+'/api/models/setup')).json()).model,'bambi-qwen35-9b-hauhau:q4_k_m');
