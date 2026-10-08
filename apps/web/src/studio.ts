@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
-import {newSessionPack,verifySessionPack,assetHash,assetBytes,packTimeline,packTranscript,type SessionPack} from '../../../packages/session-director/pack';
+import {newSessionPack,verifySessionPack,assetHash,assetBytes,packTimeline,packTranscript} from '../../../packages/session-director/pack';
 import {sceneNames} from '../../../packages/safety/actions';
 import {parseTimelineJSON} from '../../../packages/timeline/import';
 const $=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;

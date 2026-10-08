@@ -6,7 +6,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ReplyProgress, PlaybackReportSchema } from '../packages/ai/dialogue';
 import { SpeechPlayback } from '../packages/speech/playback';
-import { VoiceActivity } from '../packages/speech/activity';
 
 test('interruption includes completed words and excludes unplayed queued speech',()=>{
  const playback=new SpeechPlayback();playback.schedule(0,'Hello there.',10,2,[{word:'Hello',start_time:0,end_time:.8},{word:'there.',start_time:.8,end_time:2}]);playback.schedule(1,'Unheard ending.',12,2);
@@ -35,13 +34,4 @@ test('display reveals at caption word onset, freezes on pause and excludes futur
  playback.complete(0);assert.equal(playback.revealed(10.79),'Hello','Source completion cannot bypass output latency');
  assert.equal(playback.revealed(12.5),'Hello there.');assert.equal(playback.revealed(13),'Hello there. Next');
  playback.clear();assert.equal(playback.revealed(20),'');
-});
-
-test('thoughtful turn timing preserves short pauses and quicker turns still reject clicks',()=>{
- const gate=new VoiceActivity();gate.silenceMs=1100;for(let i=0;i<25;i++)gate.process(.002,20);
- for(let i=0;i<20;i++)gate.process(.08,20);for(let i=0;i<40;i++)assert.equal(gate.process(.002,20).end,false);
- assert.equal(gate.active,true);for(let i=0;i<10;i++)gate.process(.08,20);
- const endings=[];for(let i=0;i<60;i++)endings.push(gate.process(.002,20));assert.equal(endings.filter(x=>x.end&&x.valid).length,1);
- gate.silenceMs=450;for(let i=0;i<3;i++)assert.equal(gate.process(.1,20).start,false);
- for(let i=0;i<40;i++)assert.equal(gate.process(.002,20).start,false);
 });

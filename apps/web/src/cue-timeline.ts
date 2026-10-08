@@ -8,7 +8,7 @@ export class CueTimeline {
  private cues:readonly BambiCloudCue[]=[];
  private points:CuePoint[]=[];
  private current='';
- constructor(private host:HTMLElement,private range:HTMLInputElement,private canvas:HTMLCanvasElement,
+ constructor(private host:HTMLElement,range:HTMLInputElement,private canvas:HTMLCanvasElement,
   private tip:HTMLElement,private enabled:HTMLInputElement,private duration:()=>number){
   new ResizeObserver(()=>this.refresh()).observe(host);
   enabled.addEventListener('change',()=>this.refresh());
