@@ -8,6 +8,9 @@ import {createHash,randomUUID} from 'node:crypto';
 import {Transform,Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 
+// Git Bash may put GNU tar first, which treats C: paths as remote hosts and
+// cannot extract the ZIP runtimes. Select Windows' native libarchive tool.
+export const archiveTool=process.platform==='win32'?join(process.env.SystemRoot||'C:\\Windows','System32','tar.exe'):'tar';
 export const logicalPath=path=>path.replaceAll('\\','/');
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function hashFile(path){

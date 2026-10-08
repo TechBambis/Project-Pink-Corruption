@@ -3,7 +3,7 @@
 import {readFileSync,mkdirSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
 import {join,resolve,dirname} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {downloadPinned,hashFile,copy,copyTree,llamaEntries,assertNativeTree,assertWindowsX64} from './desktop-windows-support.mjs';
+import {archiveTool,downloadPinned,hashFile,copy,copyTree,llamaEntries,assertNativeTree,assertWindowsX64} from './desktop-windows-support.mjs';
 
 /** Both the small native slice and the final installer use this exact builder. */
 export async function buildWindowsNative({root,backend,notices,cache,pins}){
@@ -12,13 +12,13 @@ export async function buildWindowsNative({root,backend,notices,cache,pins}){
  const acquire=async asset=>{const path=join(cache,asset.file);await downloadPinned(asset,path);return path;};
  const buildEnv=resolve(root,'.runtime/alpha-windows-build');
  rmSync(buildEnv,{recursive:true,force:true});mkdirSync(buildEnv,{recursive:true});
- run('tar',['-xf',await acquire(pins.uv),'-C',buildEnv]);
+ run(archiveTool,['-xf',await acquire(pins.uv),'-C',buildEnv]);
  const uv=join(buildEnv,'uv.exe');assertWindowsX64(uv);
  const pythonVenv=join(buildEnv,'venv'),python=join(pythonVenv,'Scripts/python.exe');
  const environment={...process.env,PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8',UV_PYTHON_INSTALL_DIR:join(buildEnv,'python'),UV_CACHE_DIR:join(buildEnv,'cache')};
  if(pins.pythonDistribution.version!==pins.python)throw Error('Native CPython archive/version mismatch.');
  const pythonTarget=join(buildEnv,'python-target');mkdirSync(pythonTarget);
- run('tar',['-xf',await acquire(pins.pythonDistribution),'-C',pythonTarget]);
+ run(archiveTool,['-xf',await acquire(pins.pythonDistribution),'-C',pythonTarget]);
  const nativePython=join(pythonTarget,'python/python.exe');assertWindowsX64(nativePython);
  run(uv,['venv',pythonVenv,'--python',nativePython,'--no-python-downloads','--no-project'],{env:environment});
  run(uv,['pip','install','--python',python,'--require-hashes','--only-binary',':all:','-r',resolve(root,'packages/speech/desktop-windows.lock')],{env:environment});
@@ -60,9 +60,9 @@ export async function buildWindowsNative({root,backend,notices,cache,pins}){
  }
  copy(join(root,'config/desktop-speech-sources.json'),join(notices,'speech-source/SOURCE-MANIFEST.json'));
  const llamaZip=await acquire(pins.llama);
- const listing=execFileSync('tar',['-tf',llamaZip],{encoding:'utf8',maxBuffer:4*1024**2}).trim().split(/\r?\n/);
+ const listing=execFileSync(archiveTool,['-tf',llamaZip],{encoding:'utf8',maxBuffer:4*1024**2}).trim().split(/\r?\n/);
  const approved=llamaEntries(listing),llamaExtract=join(buildEnv,'llama');mkdirSync(llamaExtract);
- run('tar',['-xf',llamaZip,'-C',llamaExtract,...approved]);
+ run(archiveTool,['-xf',llamaZip,'-C',llamaExtract,...approved]);
  copyTree(join(llamaExtract,'lib/ollama'),join(backend,'native/llama'));assertNativeTree(join(backend,'native/llama'));
  writeFileSync(join(notices,'LLAMA-SELECTION.json'),JSON.stringify({archive:pins.llama,entries:approved},null,2)+'\n');
  return {python:actualPython,pythonDistribution:pins.pythonDistribution,pythonLicenses,distributionNotices:provenance.notices.length,matchedCPythonLibraries:Object.keys(provenance.matchedFrozenCPythonLibraries).length,pyinstaller:'6.22.3',buildLockSha256:await hashFile(join(root,'packages/speech/desktop-windows.lock')),environment:'Fresh checksum-pinned native Windows x64 CPython; hash-verified wheels; frozen in this build'};

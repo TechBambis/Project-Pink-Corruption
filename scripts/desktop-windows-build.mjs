@@ -6,7 +6,7 @@ import {resolve,dirname,join,relative,isAbsolute} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {releaseIdentity} from './desktop-source.mjs';
-import {buildOptions,downloadPinned,hashFile,files,copy,copyTree,inventory,logicalPath,sourcePathAllowed,llamaEntries,assertNativeTree,assertWindowsX64,stageWindowsSource,windowsDependencyReport} from './desktop-windows-support.mjs';
+import {archiveTool,buildOptions,downloadPinned,hashFile,files,copy,copyTree,inventory,logicalPath,sourcePathAllowed,llamaEntries,assertNativeTree,assertWindowsX64,stageWindowsSource,windowsDependencyReport} from './desktop-windows-support.mjs';
 
 const root=resolve(fileURLToPath(new URL('../',import.meta.url)));
 process.chdir(root);
@@ -34,7 +34,7 @@ async function build(){
  // artifacts are never overwritten, including after a failed packaging attempt.
  rmSync(stage,{recursive:true,force:true});mkdirSync(backend,{recursive:true});mkdirSync(notices,{recursive:true});
  const extract=join(stage,'extract');mkdirSync(extract);
- run('tar',['-xf',nodeArchive,'-C',extract]);
+ run(archiveTool,['-xf',nodeArchive,'-C',extract]);
  const nodeRoot=join(extract,`node-v${pins.node.version}-win-x64`);
  const bundledNode=join(backend,'node/bin/node.exe');copy(join(nodeRoot,'node.exe'),bundledNode);assertWindowsX64(bundledNode);
  copy(join(nodeRoot,'LICENSE'),join(notices,'NODE-LICENSE.txt'));
@@ -51,7 +51,7 @@ async function build(){
   speechBuild=await buildWindowsNative({root,backend,notices,cache,pins});
  }
  const electronDist=resolve('.runtime/desktop-windows-electron');rmSync(electronDist,{recursive:true,force:true});mkdirSync(electronDist,{recursive:true});
- run('tar',['-xf',electronZip,'-C',electronDist]);assertWindowsX64(join(electronDist,'electron.exe'));
+ run(archiveTool,['-xf',electronZip,'-C',electronDist]);assertWindowsX64(join(electronDist,'electron.exe'));
  for(const name of ['LICENSE','LICENSES.chromium.html'])copy(join(electronDist,name),join(notices,'electron',name));
  run(process.execPath,['scripts/prepare-vad.mjs']);rmSync(resolve('dist/web'),{recursive:true,force:true});
  run(process.execPath,['node_modules/vite/bin/vite.js','build','apps/web','--outDir','../../dist/web']);
@@ -87,7 +87,7 @@ async function build(){
  const source=join(stage,'source'),sourceManifest=await stageWindowsSource(root,source,version),{sourceDigest}=sourceManifest;
  const release=await releaseIdentity(root,sourceManifest);
  writeFileSync(join(source,'SOURCE-MANIFEST.json'),JSON.stringify(sourceManifest,null,2)+'\n');
- run('tar',['-czf',join(backend,'dist/web/corresponding-source.tar.gz'),'-C',source,'.']);
+ run(archiveTool,['-czf',join(backend,'dist/web/corresponding-source.tar.gz'),'-C',source,'.']);
  const guide=readFileSync('docs/DESKTOP_WINDOWS.md','utf8').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
  writeFileSync(join(backend,'dist/web/desktop-guide.html'),`<!doctype html><html lang="en"><meta charset="utf-8"><title>Bambi Local ${version} guide</title><body><a href="/">Open companion</a> · <a href="/setup">Setup</a> · <a href="/corresponding-source.tar.gz">Matching application source</a>${alpha?' · <a href="/samples/studio-chimes.bambi.json" download>Prepared Studio sample</a>':''}<pre style="white-space:pre-wrap;max-width:80ch">${guide}</pre></body></html>`);
  assertNativeTree(backend);

@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {stageDesktopSource,validateReleaseSource,writeSourceManifest,verifySnapshot} from './desktop-source.mjs';
 import {assertNativeTarget,releaseReport,readReleaseArtifact,withReleaseLock,sourceChecksMatch} from './desktop-release-support.mjs';
-import {hashFile} from './desktop-windows-support.mjs';
+import {archiveTool,hashFile} from './desktop-windows-support.mjs';
 
 const project=resolve(fileURLToPath(new URL('../',import.meta.url)));
 const [command,...args]=process.argv.slice(2);
@@ -41,7 +41,7 @@ if(command==='prepare'){
  Object.assign(spec,{applicationDigest:manifest.applicationDigest,sourceDigest:manifest.sourceDigest});
  writeFileSync(join(source,'RELEASE-SPEC.json'),JSON.stringify(spec,null,2)+'\n');
  const archive=`bambi-local-${version}-release-source.tar.gz`;
- execFileSync('tar',['-czf',archive,'-C',source,'.'],{cwd:destination,stdio:'inherit'});
+ execFileSync(archiveTool,['-czf',archive,'-C',source,'.'],{cwd:destination,stdio:'inherit'});
  writeFileSync(join(destination,'SHA256SUMS'),`${await hashFile(join(destination,archive))}  ${archive}\n`);
  writeFileSync(join(destination,'RELEASE-STATUS.json'),JSON.stringify(releaseReport(spec),null,2)+'\n');
  console.log(JSON.stringify({source,version,applicationDigest:spec.applicationDigest,status:'prepared; no target built'},null,2));
@@ -83,7 +83,7 @@ if(command==='prepare'){
        if(reports.length>1)throw Error('Multiple native application reports in the fresh qualification directory.');
        if(reports.length)writeFileSync(join(directory,'WINDOWS-PACKAGING-CHECK.json'),readFileSync(join(testOutput,reports[0],'evidence.json')));
        const notices=join(directory,'win-unpacked/resources/notices');
-       if(existsSync(notices))execFileSync('tar',['-czf','NOTICES.tar.gz','-C',notices,'.'],{cwd:directory,stdio:'inherit'});
+       if(existsSync(notices))execFileSync(archiveTool,['-czf','NOTICES.tar.gz','-C',notices,'.'],{cwd:directory,stdio:'inherit'});
       }
       const installed=json(join(directory,'INSTALLER-CHECK.json'));if(installed.result!=='passed'||installed.version!==spec.version)throw Error('Installer acceptance failed.');
       gates.installer='passed';gates.packaging='passed';

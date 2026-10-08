@@ -4,7 +4,7 @@ import {readFileSync,writeFileSync,readdirSync,lstatSync,mkdirSync,existsSync,co
 import {join,resolve,basename} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {hashFile} from './desktop-windows-support.mjs';
+import {archiveTool,hashFile} from './desktop-windows-support.mjs';
 import {releaseTag} from './desktop-release-version.mjs';
 import {releaseReport,sourceChecksMatch} from './desktop-release-support.mjs';
 
@@ -45,11 +45,11 @@ export function assertSafePath(path){
 }
 
 export function inspectArchive(path){
- const listing=execFileSync('tar',['-tzf',path],{encoding:'utf8',maxBuffer:32*1024*1024}).split('\n').filter(Boolean);
+ const listing=execFileSync(archiveTool,['-tzf',path],{encoding:'utf8',maxBuffer:32*1024*1024}).split(/\r?\n/).filter(Boolean);
  if(!listing.length)throw Error('Empty source/notice archive.');
  for(const entry of listing)assertSafePath(entry);
  // Matching source and notice archives are copied from reviewed regular files.
- const verbose=execFileSync('tar',['-tvzf',path],{encoding:'utf8',maxBuffer:32*1024*1024}).split('\n').filter(Boolean);
+ const verbose=execFileSync(archiveTool,['-tvzf',path],{encoding:'utf8',maxBuffer:32*1024*1024}).split(/\r?\n/).filter(Boolean);
  if(verbose.some(entry=>!['-','d'].includes(entry[0])))throw Error('Links/special entries in source/notice archive.');
 }
 
@@ -90,7 +90,7 @@ export async function stageTarget(project,output,destination,target,build){
  for(const filename of ['RUNTIME-MANIFEST.json','SOURCE-CHECKS.json','DESKTOP-QUALIFICATION.json',...(target==='windows-x64'?['INSTALLER-CHECK.json']:[])])copy(join(output,filename),target+'-'+filename);
  writeJson(join(destination,target+'-PACKAGING-CHECK.json'),evidence);
  const notices=join(output,target==='windows-x64'?'win-unpacked/resources/notices':'linux-unpacked/resources/notices');
- execFileSync('tar',['-czf',join(destination,target+'-NOTICES.tar.gz'),'-C',notices,'.']);
+ execFileSync(archiveTool,['-czf',join(destination,target+'-NOTICES.tar.gz'),'-C',notices,'.']);
  // npm is already part of the locked build toolchain; no SBOM package is added.
  const sbom=execFileSync(process.platform==='win32'?'npm.cmd':'npm',['sbom','--sbom-format=cyclonedx','--package-lock-only'],{cwd:project,encoding:'utf8',maxBuffer:16*1024*1024,shell:process.platform==='win32'});
  const parsed=JSON.parse(sbom);if(parsed.bomFormat!=='CycloneDX'||!parsed.components?.length)throw Error('Invalid npm SBOM.');

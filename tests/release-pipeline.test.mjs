@@ -8,7 +8,7 @@ import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {releaseTag,desktopVersion} from '../scripts/desktop-release-version.mjs';
 import {context,assertSafePath,inspectArchive,stageTarget,assemble,verifyPublication,publish} from '../scripts/release-pipeline.mjs';
-import {hashFile} from '../scripts/desktop-windows-support.mjs';
+import {archiveTool,hashFile} from '../scripts/desktop-windows-support.mjs';
 
 const build={tag:'v0.1.0-smoke.20',version:'0.1.0-smoke.20',phase:'smoke',prerelease:true,
  commit:'a'.repeat(40),repository:'example/bambi',workflow:'Verified desktop tag release',workflowPath:'.github/workflows/release.yml',runId:'123',runAttempt:'1',runUrl:'https://github.com/example/bambi/actions/runs/123'};
@@ -35,7 +35,7 @@ test('distribution inspection rejects secrets, local data, archive traversal and
  for(const path of ['.git/config','./.env','backend/data/private.sqlite','/etc/passwd','../escape','a/../../escape','C:\\private','docs/internal/strategy.md','id_ed25519','config/user.key'])assert.throws(()=>assertSafePath(path));
  for(const path of ['apps/server/index.ts','./docs/licenses/NOTICE.txt','node_modules/express/index.js','.github/workflows/release.yml'])assert.doesNotThrow(()=>assertSafePath(path));
  const folder=mkdtempSync(join(tmpdir(),'bambi-archive-'));t.after(()=>rmSync(folder,{recursive:true,force:true}));write(join(folder,'.env'),'fixture, not a secret');
- const archive=join(folder,'bad.tar.gz');execFileSync('tar',['-czf',archive,'-C',folder,'.env']);assert.throws(()=>inspectArchive(archive),/Sensitive/);
+ const archive=join(folder,'bad.tar.gz');execFileSync(archiveTool,['-czf',archive,'-C',folder,'.env']);assert.throws(()=>inspectArchive(archive),/Sensitive/);
 });
 
 async function fixture(t){

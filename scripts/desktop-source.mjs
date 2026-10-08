@@ -18,7 +18,7 @@ export async function stageDesktopSource(root,destination,version){
  const reviewedScripts=new Set([...readFileSync(join(root,'.gitignore'),'utf8').matchAll(/^!\/scripts\/([^\r\n]+)$/gm)].map(match=>match[1]));
  for(const folder of roots){mkdirSync(join(destination,folder),{recursive:true});copyTree(join(root,folder),join(destination,folder),path=>sourcePathAllowed(folder+'/'+path)&&(folder!=='scripts'||reviewedScripts.has(path)));}
  for(const path of top)copy(join(root,path),join(destination,path));
- for(const path of ['CLA.md','CONTRIBUTING.md','ARCHITECTURE.md','VERSIONS.md'])if(existsSync(join(root,path)))copy(join(root,path),join(destination,path));
+ for(const path of ['.gitattributes','CLA.md','CONTRIBUTING.md','ARCHITECTURE.md','VERSIONS.md'])if(existsSync(join(root,path)))copy(join(root,path),join(destination,path));
  for(const path of ['AppRun','AppRun.alpha'])copy(join(root,'apps/desktop',path),join(destination,'apps/desktop',path));
  if(existsSync(join(root,'voices/bambi_classic.npy')))copy(join(root,'voices/bambi_classic.npy'),join(destination,'voices/bambi_classic.npy'));
  for(const path of docs)if(existsSync(join(root,'docs',path)))copy(join(root,'docs',path),join(destination,'docs',path));
