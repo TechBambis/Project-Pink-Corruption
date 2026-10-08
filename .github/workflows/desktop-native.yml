@@ -92,6 +92,7 @@ jobs:
         run: xvfb-run --auto-servernum node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" qualify "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET" "$BAMBI_RELEASE_OUTPUT"
       - name: Native Apple Silicon received ZIP acceptance
         if: inputs.target == 'macos-arm64'
+        timeout-minutes: 10
         run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" qualify "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET" "$BAMBI_RELEASE_OUTPUT"
       - name: Save bounded macOS qualification diagnostics
         if: always() && inputs.target == 'macos-arm64'

@@ -82,14 +82,18 @@ if(command==='prepare'){
        const archives=readdirSync(directory).filter(name=>name.endsWith('-macos-arm64.zip'));
        if(archives.length!==1)throw Error('Expected exactly one finished Apple Silicon ZIP.');
        const archive=join(directory,archives[0]);
+       console.log('Checking received macOS ZIP paths:', archives[0]);
        const {default:AdmZip}=await import('adm-zip');
        for(const entry of new AdmZip(archive).getEntries()){
         if(!entry.entryName.startsWith('Bambi Local Smoke.app/')||entry.entryName.split('/').includes('..')||entry.entryName.includes('\\'))throw Error('Invalid app archive path.');
        }
-       execFileSync('/usr/bin/ditto',['-x','-k',archive,received],{stdio:'inherit'});
+       console.log('Extracting received macOS ZIP');
+       execFileSync('/usr/bin/ditto',['-x','-k',archive,received],{stdio:'inherit',timeout:120000,killSignal:'SIGKILL'});
        const installed=join(received,'Applications');mkdirSync(installed);
-       execFileSync('/usr/bin/ditto',[join(received,'Bambi Local Smoke.app'),join(installed,'Bambi Local Smoke.app')],{stdio:'inherit'});
+       console.log('Copying received app into disposable Applications directory');
+       execFileSync('/usr/bin/ditto',[join(received,'Bambi Local Smoke.app'),join(installed,'Bambi Local Smoke.app')],{stdio:'inherit',timeout:120000,killSignal:'SIGKILL'});
        qualification.macOS={filename:archives[0],sha256:await hashFile(archive),method:'Final ZIP extraction, copied .app installation and launch in a disposable Applications directory; downloaded quarantine and physical Mac remain recipient checks.'};
+       console.log('Starting bounded received-app macOS acceptance');
        run(root,'scripts/desktop-macos-check.mjs',[join(installed,'Bambi Local Smoke.app/Contents/MacOS/Bambi Local Smoke')],{BAMBI_SMOKE_OUTPUT:join(directory,'qualification-macos')},{timeout:7*60*1000,killSignal:'SIGKILL'});
        gates.packaging='passed';gates.installer='passed';
       }finally{rmSync(received,{recursive:true,force:true});}
