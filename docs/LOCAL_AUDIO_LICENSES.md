@@ -11,6 +11,8 @@ The audio setup installs dependencies locally from public upstream packages. It 
 | kokoro-onnx | 0.6.1 | [MIT](https://github.com/thewh1teagle/kokoro-onnx/blob/main/LICENSE) |
 | ONNX Runtime | 1.30.0 | [MIT](https://github.com/microsoft/onnxruntime/blob/main/LICENSE) |
 | NumPy | 2.5.3 | BSD-3-Clause with bundled 0BSD/MIT/Zlib/CC0 notices; [upstream](https://github.com/numpy/numpy/blob/main/LICENSE.txt) |
+| Optional streaming recognition: sherpa-onnx / sherpa-onnx-core | 1.13.8 | [Apache-2.0](https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE); installed in a separate environment |
+| English streaming Zipformer model | revision `672fbf1b30579d6585301139bb363f42a0ad4a24` | Apache-2.0; [upstream model card](https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26); hashes in `config/streaming-speech-model.json` |
 | SciPy | 1.17.1 | BSD-3-Clause plus bundled third-party notices; [upstream](https://github.com/scipy/scipy/blob/main/LICENSE.txt) |
 | espeakng-loader Python wrapper | 0.2.4 | [MIT wrapper](https://github.com/thewh1teagle/espeakng-loader/blob/main/LICENSE); its bundled eSpeak NG library has a separate license |
 | eSpeak NG shared library/data | bundled by loader | [GPL-3.0-or-later](https://github.com/espeak-ng/espeak-ng/blob/master/COPYING); [upstream source](https://github.com/espeak-ng/espeak-ng), [loader build/submodule source](https://github.com/thewh1teagle/espeakng-loader) |
@@ -29,6 +31,8 @@ Exact transitive versions are frozen in `packages/speech/local/requirements.lock
 The phonemizer and eSpeak components are needed for local grapheme-to-phoneme conversion, not for DSP. The new filters, EQ, compression, oscillator/noise synthesis and mixer use NumPy/SciPy and local code, with no GPL DSP dependency. The GPL-containing TTS service runs as a separate local process using a plain HTTP/PCM boundary. **This does not remove the GPL obligations for that service and its dependencies.** The whole dependency stack must not be marketed as Apache-only. Distributing an installed binary environment requires retaining applicable notices and satisfying corresponding-source requirements; this source checkout instead installs those dependencies through their upstream packages.
 
 Public sound/voice assets are identified above and in their manifests. User imports and recordings are not part of the distribution and need their own redistribution permissions. Downloaded weights and installed environments stay outside Git.
+
+Optional streaming recognition has a separate environment installed by `scripts/setup-streaming-speech.py`; it does not alter the TTS lockfile. Sherpa-onnx and its core package are pinned to 1.13.8, with NumPy 2.5.3. Preserve their installed package notices and the Zipformer model's upstream attribution when redistributing. [Streaming setup and recognition limits](STREAMING_SPEECH.md).
 
 The optional local device bridge has its own isolated environment: Bleak 3.0.2 and dbus-fast 5.0.4, both MIT, pinned in `packages/devices/requirements.lock`. They do not change the TTS environment. Retain their installed license notices when redistributing; [device setup, upstream packet provenance and licensing](DEVICES.md).
 

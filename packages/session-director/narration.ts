@@ -29,8 +29,8 @@ export class NarrationFlow {
     this.awaitingAnswer = awaitingAnswer;
     this.due = awaitingAnswer ? null : time + this.delay(pause);
   }
-  next(time: number, duration: number, ready: boolean): number | null {
-    if (time >= duration) { this.cancel(); return null; }
+  next(time: number, duration: number, ready: boolean, continuous=false): number | null {
+    if (!continuous && time >= duration) { this.cancel(); return null; }
     if (!ready || this.inFlight || this.due === null || time < this.due) return null;
     this.due = null; this.inFlight = true; this.revision++;
     return this.revision;
@@ -38,11 +38,12 @@ export class NarrationFlow {
   private delay(seconds: number) { return Number.isFinite(seconds) ? Math.min(30, Math.max(0, seconds)) : 4; }
 }
 
-export function narrationDirective(phase: SessionPhase, first: boolean, remainingSeconds: number) {
+export function narrationDirective(phase: SessionPhase, first: boolean, remainingSeconds: number, situational=false, continuous=false) {
   return [
-    first ? 'Begin the selected session with a complete opening passage.' : 'Continue the selected session from the last heard passage. Do not restart or repeat a welcome.',
-    `Current phase: ${phase}. Remaining session time: ${Math.max(0, Math.ceil(remainingSeconds))} seconds.`,
-    'This is continuous narration chosen by the listener. Do not ask questions that require a reply. Silence provides no information about the listener, their presence, agreement or state.',
-    phase === 'awakening' ? 'Give a clear closing passage and reorientation. The session ends at its configured duration; do not promise another passage or a loop.' : 'Keep the passage within the current phase. The app controls playback, pauses and the session end.',
+    first ? situational?'Begin the selected session with a short appropriate contribution.':'Begin the selected session with a complete opening passage.' : 'Continue the selected session from the last heard passage. Do not restart or repeat a welcome.',
+    `Current phase: ${phase}. ${continuous?'Unlimited session; remaining time in this section':'Remaining session time'}: ${Math.max(0, Math.ceil(remainingSeconds))} seconds.`,
+    situational?'This is situational conversation chosen by the listener. Ask only when a real answer could meaningfully shape the next contribution. Otherwise continue a short connected passage. Silence provides no information about the listener, their presence, agreement or state.':
+     'This is continuous narration chosen by the listener. Do not ask questions that require a reply. Silence provides no information about the listener, their presence, agreement or state.',
+    phase === 'awakening' ? continuous ? 'Offer a quiet return and reorientation. This session continues until the listener ends it. Do not announce a session end; the engine controls the next passage.' : 'Give a clear closing passage and reorientation. The session ends at its configured duration; do not promise another passage or a loop.' : 'Keep the passage within the current phase. The app controls playback, pauses and the session end.',
   ].join('\n');
 }

@@ -38,14 +38,44 @@ test('breath markers survive streaming boundaries only in the private speech cha
  assert.equal(parseBreathMarker('[breath:out:99999]'),undefined);
  assert.equal(scriptUnits('[breath:in]').length,0);
  assert.equal(breathInstruction('Breathe in. [pause:0]')?.direction,'in');
- assert.equal(breathInstruction('Und aus.')?.direction,'out');
+ assert.equal(breathInstruction('Breathe out.')?.direction,'out');
  assert.equal(breathInstruction('Breathe in when it feels comfortable, then tell me how you feel.'),undefined);
 });
 test('TTS gets clean instructions and exports breathing metadata on the first spoken chunk',async()=>{
  const original=globalThis.fetch,inputs:string[]=[];
- try{globalThis.fetch=async(_url,options)=>{const input=JSON.parse(String(options?.body)).input;inputs.push(input);return new Response(JSON.stringify({audio:'AAAA',text:input,timestamps:[{word:input,start_time:.04,end_time:.4}],spoken_seconds:.4})+'\n');};
+ try{globalThis.fetch=async(_url,options)=>{const body=JSON.parse(String(options?.body)),input=body.input;inputs.push(input);
+   assert.equal(body.overrides.processing.echoEnabled,false);assert.equal(body.overrides.layers.left_voice.enabled,false);assert.equal(body.overrides.layers.right_voice.enabled,false);
+   assert.equal(body.overrides.timing,undefined,'Paced breath instructions retain the selected pause settings');
+   return new Response(JSON.stringify({audio:'AAAA',text:input,timestamps:[{word:input,start_time:.04,end_time:.4}],spoken_seconds:.4})+'\n');};
   const chunks=[];for await(const chunk of new Kokoro().speak('[breath:in] In. [breath:out] And out.','af_heart',.78,AbortSignal.timeout(2000)))chunks.push(chunk);
   assert.deepEqual(inputs,['In.','And out.']);assert.deepEqual(chunks.map(c=>c.breath?.direction),['in','out']);
+ }finally{globalThis.fetch=original;}
+});
+test('legacy formatted breathing steps disable renderer copies and carry paced metadata',async()=>{
+ const original=globalThis.fetch,inputs:string[]=[];
+ try{globalThis.fetch=async(_url,options)=>{const body=JSON.parse(String(options?.body));inputs.push(body.input);
+   assert.equal(body.overrides.processing.echoEnabled,false);return new Response(JSON.stringify({audio:'AAAA',text:body.input,spoken_seconds:.4})+'\n');};
+  const chunks=[];for await(const chunk of new Kokoro().speak('***Inhale for me.***','af_heart',.78,AbortSignal.timeout(2000),'bambi_classic'))chunks.push(chunk);
+  assert.deepEqual(inputs,['Inhale for me.']);assert.equal(chunks.length,1);assert.deepEqual(chunks[0].breath,{direction:'in',durationMs:4000});
+ }finally{globalThis.fetch=original;}
+});
+test('plain formatted breath steps remain separate and recognizable at every stream boundary',()=>{
+ const raw='*Breathe in.* __Exhale again.__ ***Inhale for me.*** `And out.`';
+ const run=(parts:string[])=>{const chunker=new TriggerSentenceChunker([],true);return [...parts.flatMap(p=>chunker.push(p)),...chunker.flush()].flatMap(p=>scriptUnits(p));};
+ const expected=['Breathe in.','Exhale again.','Inhale for me.','And out.'];
+ for(const parts of [[raw],[...raw],...Array.from({length:raw.length+1},(_,i)=>[raw.slice(0,i),raw.slice(i)])]){
+  const units=run(parts);assert.deepEqual(units.map(u=>u.text),expected);
+  assert.deepEqual(units.map(u=>breathInstruction(u.text)?.direction),['in','out','in','out']);
+ }
+ for(const text of ['Breathe in when ready, then tell me how you feel.','We can discuss how to inhale.','In the room.','Breathe in. Breathe out.'])assert.equal(breathInstruction(text),undefined);
+});
+test('formatted breath requests yield each renderer chunk once, including leading silence',async()=>{
+ const original=globalThis.fetch,inputs:string[]=[];
+ try{globalThis.fetch=async(_url,options)=>{const input=JSON.parse(String(options?.body)).input;inputs.push(input);
+   return new Response([{audio:'silence',text:'',pause_ms:0},{audio:'inhale',text:'Breathe in.',spoken_seconds:.4},{audio:'rest',text:'Rest.',spoken_seconds:.4}].map(c=>JSON.stringify(c)).join('\n')+'\n');};
+  const chunks=[];for await(const chunk of new Kokoro().speak('*Breathe in.* Rest. [both:off]','af_heart',.78,AbortSignal.timeout(2000)))chunks.push(chunk);
+  assert.deepEqual(inputs,['Breathe in. Rest.']);assert.deepEqual(chunks.map(c=>c.audio),['silence','inhale','rest']);
+  assert.ok(chunks.every(c=>!c.breath),'A multi-sentence passage is not a single paced breath');
  }finally{globalThis.fetch=original;}
 });
 test('queued inhale/exhale read the audio clock, preserve phase endpoints and respect reduced motion',()=>{

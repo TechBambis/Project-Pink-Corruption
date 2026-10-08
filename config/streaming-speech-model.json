@@ -1,0 +1,13 @@
+{
+  "model": "csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26",
+  "revision": "672fbf1b30579d6585301139bb363f42a0ad4a24",
+  "license": "Apache-2.0",
+  "language": "en",
+  "sampleRate": 16000,
+  "files": [
+    {"role":"encoder","path":"encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx","bytes":71083163,"sha256":"563fde436d16cf7607cf408cd6b30909819d03162652ef389c2450ced3f45ac1"},
+    {"role":"decoder","path":"decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx","bytes":1307236,"sha256":"98da299f471e38bb4e1a8df579b8cc9122d6039576a77e357b3c60f17dd83b02"},
+    {"role":"joiner","path":"joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx","bytes":259335,"sha256":"d944208d660d67c8d72cd2acaeac971fa5ceb8c80e76c1968148846fedd6e297"},
+    {"role":"tokens","path":"tokens.txt","bytes":5048,"sha256":"49e3c2646595fd907228b3c6787069658f67b17377c60aeb8619c4551b2316fb"}
+  ]
+}

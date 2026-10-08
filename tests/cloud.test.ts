@@ -8,7 +8,10 @@ import { createServer } from 'node:http';
 import { CloudBackend, cloudConfiguration, CLOUD_MODEL_ALIAS,cloudSampling } from '../packages/ai/cloud';
 import { buildChatRequest, PROTOCOL_VERSION } from '../packages/ai/request';
 import { resolveReplyIntent } from '../packages/ai/intent';
-import { communityQwen } from '../packages/ai/models';
+import { communityQwen, modelLabel } from '../packages/ai/models';
+import { buildRuntimePrompt, defaultTriggers } from '../packages/content';
+import { buildReplyPrompt } from '../packages/ai/prompt';
+import { fitContext, estimateChatTokens } from '../packages/ai/context';
 
 test('main and overlay share context, defaults and explicit conversational intent',()=>{
   const a=buildChatRequest({type:'chat',text:'Hi',model:communityQwen});
@@ -89,7 +92,78 @@ test('connection failure gives an actionable preparation error and preserves can
   const server=createServer();await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
   const port=(server.address() as {port:number}).port;await new Promise<void>(resolve=>server.close(()=>resolve()));
   const backend=new CloudBackend({url:`http://127.0.0.1:${port}`,model:'served-model',key:'private-test-key',context:32768,kind:'llama.cpp',timeoutMs:5000});
-  await assert.rejects(backend.countTokens!([{role:'user',content:'Hello'}],new AbortController().signal),/Check the GPU workspace/);
+  await assert.rejects(backend.countTokens!([{role:'user',content:'Hello'}],new AbortController().signal),/Check the inference server/);
   const controller=new AbortController();controller.abort();
   await assert.rejects(backend.countTokens!([{role:'user',content:'Hello'}],controller.signal),{name:'AbortError'});
+});
+
+test('remote Ollama uses its configured identity and context, disables thinking and supports split NDJSON and structured decisions',async()=>{
+  const bodies:Record<string,any>[]=[];let servedModel='remote-qwen:latest';let closed=false;
+  const server=createServer(async(req,res)=>{
+    assert.equal(req.headers.authorization,undefined);assert.equal(req.headers['salad-api-key'],undefined);
+    if(req.url==='/api/tags'){res.end(JSON.stringify({models:[{name:servedModel}]}));return;}
+    assert.equal(req.url,'/api/chat');
+    const parts=[];for await(const part of req)parts.push(part);
+    const body=JSON.parse(Buffer.concat(parts).toString());bodies.push(body);
+    if(!body.stream){res.end(JSON.stringify({message:{content:'{"action":"continue"}'}}));return;}
+    res.setHeader('Content-Type','application/x-ndjson');
+    res.write('{"message":{"content":"Hel');res.write('lo"},"done":false}\n');
+    res.on('close',()=>{closed=true;});
+    const timer=setTimeout(()=>res.end('{"message":{"content":""},"done":true}\n'),5000);
+    res.on('close',()=>clearTimeout(timer));
+  });
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const port=(server.address() as {port:number}).port;
+  const config=cloudConfiguration({BAMBI_CLOUD_URL:`http://127.0.0.1:${port}`,BAMBI_CLOUD_MODEL:'remote-qwen:latest',BAMBI_CLOUD_KIND:'ollama',BAMBI_CLOUD_CONTEXT:'8192',BAMBI_CLOUD_TOP_K:'20'})!;
+  const backend=new CloudBackend(config);
+  try{
+    assert.deepEqual(await backend.models(),[CLOUD_MODEL_ALIAS]);
+    servedModel='another-model:latest';await assert.rejects(backend.models(),/Configured cloud model is not available/);
+    assert.equal(backend.countTokens,undefined);assert.equal(backend.supportsPrefill,false);
+    const schema={type:'object',properties:{action:{type:'string'}},required:['action']};
+    assert.deepEqual(await backend.structured([{role:'user',content:'Neutral test'}],CLOUD_MODEL_ALIAS,new AbortController().signal,131072,schema),{action:'continue'});
+    assert.deepEqual(bodies[0].format,schema);assert.equal(bodies[0].options.num_predict,64);
+    const stream=backend.stream([{role:'user',content:'Neutral test'}],CLOUD_MODEL_ALIAS,new AbortController().signal,131072,24,'creative');
+    assert.equal((await stream.next()).value?.text,'Hello');await stream.return(undefined);
+    assert.ok(bodies.every(body=>body.model==='remote-qwen:latest'&&body.think===false&&body.options.num_ctx===8192));
+    assert.equal(bodies.at(-1)?.options.num_predict,24);assert.equal(bodies.at(-1)?.options.top_k,20);
+    assert.equal(bodies.at(-1)?.options.temperature,1);assert.equal(bodies.at(-1)?.options.dry_multiplier,undefined);
+    await new Promise(resolve=>setTimeout(resolve,20));assert.equal(closed,true);
+  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+test('remote Ollama provider errors do not disclose response bodies or private prompts',async()=>{
+  let response='{"error":"private prompt and provider secret"}\n';
+  const server=createServer((_req,res)=>res.end(response));
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const port=(server.address() as {port:number}).port;
+  const backend=new CloudBackend({url:`http://127.0.0.1:${port}`,model:'remote-qwen:latest',key:'',context:8192,kind:'ollama',timeoutMs:5000});
+  try{
+    await assert.rejects(async()=>{for await(const _chunk of backend.stream([{role:'user',content:'Neutral test'}],CLOUD_MODEL_ALIAS,new AbortController().signal)){}},/^Error: Cloud generation failed$/);
+    await assert.rejects(backend.structured([{role:'user',content:'Neutral test'}],CLOUD_MODEL_ALIAS,new AbortController().signal,8192,{}), /^Error: Cloud generation failed$/);
+    response='not JSON: private prompt and provider secret';
+    await assert.rejects(async()=>{for await(const _chunk of backend.stream([{role:'user',content:'Neutral test'}],CLOUD_MODEL_ALIAS,new AbortController().signal)){}},/^Error: Cloud streaming response is invalid$/);
+    response=JSON.stringify({message:{content:'not JSON: private prompt and provider secret'}});
+    await assert.rejects(backend.structured([{role:'user',content:'Neutral test'}],CLOUD_MODEL_ALIAS,new AbortController().signal,8192,{}),/^Error: Cloud structured response is invalid$/);
+  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+
+test('configured remote labels preserve saved slot IDs without inventing model identity or quantization',()=>{
+  assert.equal(modelLabel(CLOUD_MODEL_ALIAS,{[CLOUD_MODEL_ALIAS]:'remote-qwen:latest · Remote'}),'remote-qwen:latest · Remote');
+  assert.equal(modelLabel(CLOUD_MODEL_ALIAS),'Remote AI');
+  assert.equal(modelLabel(communityQwen,{[CLOUD_MODEL_ALIAS]:'remote-qwen:latest · Remote'}),'Qwen3.5 9B · HauhauCS · Q4_K_M');
+});
+
+
+test('default remote context fits complete compiled persona prompts and reserves the reply',async()=>{
+  const config=cloudConfiguration({BAMBI_CLOUD_URL:'http://127.0.0.1:11434',BAMBI_CLOUD_MODEL:'remote-qwen:latest',BAMBI_CLOUD_KIND:'ollama'})!;
+  for(const id of ['bambisleep-classic','gentle-induction']){
+    const document=buildRuntimePrompt(id,'Test',defaultTriggers,false,'');
+    const system=buildReplyPrompt(document.core,'Hello.',false,'',undefined,'',true,false);
+    const count=async (messages:Parameters<typeof estimateChatTokens>[0])=>estimateChatTokens(messages);
+    const plan=await fitContext(system,[],'Hello.',count,config.context,2048);
+    assert.equal(plan.messages[0].content,system);assert.equal(plan.maxTokens,2048);
+    if(id==='bambisleep-classic')await assert.rejects(fitContext(system,[],'Hello.',count,8192,2048),/exceed the 8,192-token context/);
+  }
 });

@@ -11,7 +11,7 @@
 }
 #mic.voice-toggle:hover{background:#482b4c;border-color:#dc79c980}
 .voice-toggle-icon{display:grid;place-items:center;width:29px;height:29px;flex-shrink:0;border-radius:50%;background:#dc79c918}
-.voice-toggle-icon svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.voice-toggle-icon svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .voice-toggle-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
 .voice-toggle-action{font-size:12px;font-weight:700;line-height:1.1;color:#f7edf7}
 .voice-toggle-state{font-size:10px;line-height:1.15;white-space:nowrap;color:var(--mic-color)}
@@ -20,9 +20,13 @@
 .voice-toggle-wave i:nth-child(2),.voice-toggle-wave i:nth-child(4){height:9px}
 .voice-toggle-wave i:nth-child(3){height:15px}
 .voice-toggle[data-state="muted"] .voice-toggle-wave{opacity:.25}
-.voice-toggle[aria-pressed="true"] .voice-toggle-slash{display:none}
-#mic.voice-toggle:not([data-state="muted"]){--mic-color:#93e4d7;background:#173431;border-color:#62cec76b}
-#mic.voice-toggle:not([data-state="muted"]):hover{background:#224741;border-color:#93e4d7}
+.voice-toggle .voice-toggle-mic-off{display:none}
+.voice-toggle[data-capture-state="muted"] .voice-toggle-mic-on{display:none}
+.voice-toggle[data-capture-state="muted"] .voice-toggle-mic-off{display:block}
+#mic.voice-toggle:not([data-capture-state="muted"]){--mic-color:#93e4d7;background:#173431;border-color:#62cec76b}
+#mic.voice-toggle:not([data-capture-state="muted"]):hover{background:#224741;border-color:#93e4d7}
+#mic.voice-toggle[data-capture-state="muted"]{--mic-color:#f191a6}
+#mic.voice-toggle[data-capture-state="muted"] .voice-toggle-icon{color:#f191a6}
 #mic.voice-toggle[data-state="listening"]{box-shadow:0 0 0 3px #62cec715,inset 0 1px 0 #ffffff0a;border-color:#93e4d7}
 .voice-toggle[data-state="listening"] .voice-toggle-wave i{opacity:1;animation:mic-wave .8s ease-in-out infinite alternate}
 .voice-toggle[data-state="listening"] .voice-toggle-wave i:nth-child(2){animation-delay:-.2s}
@@ -37,25 +41,16 @@
 @keyframes mic-pending{from{opacity:.45}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){.voice-toggle *{animation:none!important}.voice-toggle{transition:none!important}}
 
-/* One microphone control for the entire session, with a quiet, readable status. */
-.session-essentials #mic.voice-toggle { min-height: 42px; min-width: 126px; padding: 6px 10px; gap: 8px; border: 0; border-left: 1px solid #ffffff18; border-radius: 0; background: transparent; box-shadow: none; }
-.session-essentials #mic.voice-toggle:hover { background: #ffffff06; }
-.session-essentials #mic .voice-toggle-action { display: none; }
-.session-essentials #mic .voice-toggle-state { font-size: 12px; }
-.session-essentials #mic .voice-toggle-icon { background: transparent; width: 24px; height: 24px; }
-.session-essentials #mic[data-state="muted"] .voice-toggle-wave { display: none; }
-.session-essentials #mic.voice-toggle:not([data-state="muted"]) { background: transparent; box-shadow: none; }
-@media(max-width:600px) {
- .session-essentials #mic.voice-toggle { min-width: 0; max-width: 140px; padding: 6px 8px; gap: 5px; }
- .session-essentials #mic .voice-toggle-state { display: block; max-width: 75px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
- .session-essentials #mic .voice-toggle-wave { display: none; }
-}
-
-/* Activity stays on the shared toggle, including when capture is muted. */
-.session-essentials #mic.voice-toggle[data-state="speaking"] { --mic-color: #dcb5ff; color: var(--mic-color); background: #7e4bac18; }
-.session-essentials #mic.voice-toggle[data-state="thinking"], .session-essentials #mic.voice-toggle[data-state="transcribing"], .session-essentials #mic.voice-toggle[data-state="starting"], .session-essentials #mic.voice-toggle[data-state="waiting"] { --mic-color: #e8c58a; color: var(--mic-color); background: #e8c58a0c; }
-.session-essentials #mic.voice-toggle[data-state="listening"] { background: #62cec715; }
-.voice-toggle[data-state="thinking"] .voice-toggle-icon { animation: mic-pending 1.2s ease-in-out infinite alternate; }
-.voice-toggle[data-state="speaking"] .voice-toggle-wave i { opacity: .8; animation: mic-wave 1.2s ease-in-out infinite alternate; }
-.voice-toggle[data-state="speaking"] .voice-toggle-wave i:nth-child(2n) { animation-delay: -.4s; }
-#app .stage:fullscreen .session-dock:has(#mic[data-state="listening"]), #app .stage:fullscreen .session-dock:has(#mic[data-state="transcribing"]), #app .stage:fullscreen .session-dock:has(#mic[data-state="starting"]) { opacity: 1; pointer-events: auto; }
+/* Capture state remains red while muted; activity is shown independently. */
+.player-composer #mic.voice-toggle { min-height:44px; min-width:92px; max-width:140px; padding:8px; gap:7px; border:0; border-radius:10px; background:transparent; box-shadow:none; align-self:center; }
+.player-composer #mic.voice-toggle:hover { background:#ffffff08; }
+.player-composer #mic .voice-toggle-icon { background:transparent; width:24px; height:24px; }
+.player-composer #mic .voice-toggle-action,.player-composer #mic .voice-toggle-wave { display:none; }
+.player-composer #mic .voice-toggle-copy { min-width:0; }
+.player-composer #mic .voice-toggle-state { display:block; overflow:hidden; text-overflow:ellipsis; font-size:11px; line-height:1.3; }
+.player-composer #mic.voice-toggle:not([data-capture-state="muted"]) { background:transparent; }
+.player-composer #mic.voice-toggle[data-capture-state="muted"] .voice-toggle-icon { color:#f191a6; animation:none; }
+.player-composer #mic.voice-toggle[data-capture-state="listening"] { background:#9dd8cc12; }
+.player-composer #mic.voice-toggle[data-state="speaking"] { --mic-color:#dcb5ff; color:var(--mic-color); background:#7e4bac18; }
+.player-composer #mic.voice-toggle[data-state="preparing"],.player-composer #mic.voice-toggle[data-state="thinking"],.player-composer #mic.voice-toggle[data-state="starting"],.player-composer #mic.voice-toggle[data-state="transcribing"],.player-composer #mic.voice-toggle[data-state="waiting"] { --mic-color:#e8c58a; color:var(--mic-color); background:#e8c58a0c; }
+@media(max-width:600px) { .player-composer #mic.voice-toggle { max-width:110px; min-width:82px; gap:5px; padding:7px; } .player-composer #mic .voice-toggle-state { font-size:10px; } }

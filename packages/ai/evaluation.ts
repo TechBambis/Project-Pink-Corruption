@@ -18,7 +18,7 @@ export function conversationCases():ConversationCase[]{
   cases.push({id:`brief-${i}`,category:'explicit brevity',turns:[],request:'In exactly one sentence, explain why reducing volume does not lower pitch.',intent:'conversation',mustMention:['pitch'],mustNotMention:['chair','bed','induction'],maxSentences:1});
   cases.push({id:`greeting-${i}`,category:'mode routing',turns:[],request:['Hi','Hey','Hello','Hi Bambi','Good evening','Hello sweetie'][i],intent:'conversation',mustMention:[],mustNotMention:['close your eyes','feet on the floor','lie down','sit comfortably']});
   cases.push({id:`interruption-${i}`,category:'heard speech',turns:[{role:'user',content:'List my choices.'},{role:'assistant',content:`Your first choice is ${color}.`,interruption:'interrupted'}],request:'Was a second choice already spoken? Answer that you have no evidence of a second choice being heard.',intent:'conversation',mustMention:[],mustNotMention:['second choice was blue','second choice was green','you heard both']});
-  cases.push({id:`english-${i}`,category:'language and task fidelity',turns:[],request:`Reply with exactly this English sentence and nothing else: The selected color is ${color}.`,intent:'conversation',mustMention:[`The selected color is ${color}.`],mustNotMention:['Hallo','Natürlich','Farbe']});
+  cases.push({id:`english-${i}`,category:'language and task fidelity',turns:[],request:`Reply with exactly this English sentence and nothing else: The selected color is ${color}.`,intent:'conversation',mustMention:[`The selected color is ${color}.`],mustNotMention:['Hello','Of course','The chosen color']});
  }
  return cases;
 }

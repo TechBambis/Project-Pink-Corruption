@@ -4,12 +4,14 @@
 
 import { sessionPhases } from '../phases';
 import { ProgramSchema, parentPhaseMs, eventDurationMs, type BambiEvent, type BambiProgram, type PresentationState, type SpeechSpec } from './contract';
+import { compileEvent } from './runtime';
+import { narrationDeliveryAt, deliveryProfiles, eventDelivery, type DeliveryMode } from '../delivery';
 
 export function referenceState(overrides: Partial<PresentationState> = {}): PresentationState {
   return { activeLayers: ['main_voice', 'drone', 'motif_visual'], foreground: 'main_voice', density: { intensity: .5, effectDensity: .25, speechDensity: .3, audioDensity: .3, visualDensity: .2 }, visualState: 'motif', narrationState: 'speaking', ambientState: 'reduced', scene: 'Soft Pink', motifId: 'pink-orb', ...overrides };
 }
 const silentSpeech: SpeechSpec = { mode: 'silent', targetMs: 0, instruction: '' };
-const narrate = (targetMs: number, instruction: string, mode: SpeechSpec['mode'] = 'narrate'): SpeechSpec => ({ mode, targetMs, instruction, wordTarget: Math.max(1, Math.floor(targetMs / 1000 * 1.7)) });
+const narrate = (targetMs: number, instruction: string, mode: SpeechSpec['mode'] = 'narrate', delivery: DeliveryMode = eventDelivery(mode, 'induction')): SpeechSpec => ({ mode, targetMs, instruction, delivery, wordTarget: Math.max(1, Math.floor(targetMs / 1000 * 1.7 * deliveryProfiles[delivery].speedMultiplier * .85)) });
 const instant = { kind: 'hard_cut' as const, durationMs: 0, subtitle: 'clear' as const };
 
 /** Original engine-authored development preset. Durations are reviewable design choices, not source measurements. */
@@ -21,7 +23,11 @@ export function createReferenceProgram(durationMs: number, intensity = .6): Bamb
   const peak = referenceState({ activeLayers: ['main_voice', 'drone', 'motif_visual', 'spiral', 'center_text'], visualState: 'layered', scene: 'Spiral Focus', density: { intensity, effectDensity: .7, speechDensity: .6, audioDensity: .55, visualDensity: .7 } });
   const events: BambiEvent[] = [];
   let serial = 0;
-  const make = (phase: BambiEvent['phase'], atMs: number, type: BambiEvent['type'], activeMs: number, instruction: string): BambiEvent => ({ id: `reference-${++serial}`, type, phase, atMs, timing: { prepMs: 0, activeMs, returnMs: 0 }, state: baseline, baseline, speech: narrate(Math.min(18000, activeMs), instruction), audio: [], visual: [], haptics: [], entry: instant, exit: instant });
+  const make = (phase: BambiEvent['phase'], atMs: number, type: BambiEvent['type'], activeMs: number, instruction: string): BambiEvent => {
+    const delivery = type === 'peak' ? 'drive' : narrationDeliveryAt(atMs / 1000, durationMs / 1000);
+    const state = type !== 'layer_shift' ? baseline : delivery === 'drive' ? { ...peak, activeLayers: peak.activeLayers.filter(layer => layer !== 'center_text'), density: { ...peak.density, effectDensity: .45, visualDensity: .45 } } : delivery === 'hold' ? { ...baseline, visualState: 'sparse' as const, density: { ...baseline.density, effectDensity: .1, visualDensity: .08 } } : baseline;
+    return { id: `reference-${++serial}`, type, phase, atMs, timing: { prepMs: 0, activeMs, returnMs: 0 }, state, baseline, speech: narrate(Math.min(18000, activeMs), instruction, 'narrate', delivery), audio: [], visual: [], haptics: [], entry: instant, exit: instant };
+  };
   const fraction = (phase: BambiEvent['phase'], atMs: number, accelerating: boolean): BambiEvent => {
     const cycles = accelerating ? [{ aMs: 9000, bMs: 8000 }, { aMs: 6000, bMs: 5000 }] : [{ aMs: 9000, bMs: 8000 }, { aMs: 9000, bMs: 8000 }];
     return { ...make(phase, atMs, 'fractionation', cycles.reduce((n, c) => n + c.aMs + c.bMs, 0), ''), speech: silentSpeech,
@@ -30,7 +36,7 @@ export function createReferenceProgram(durationMs: number, intensity = .6): Bamb
   const soft = (phase: BambiEvent['phase'], atMs: number, activeMs: number, final: boolean): BambiEvent => ({
     ...make(phase, atMs, 'soft_return', activeMs, final ? 'Give a clear original closing: ordinary awareness of body and surroundings, freedom to move, and the session gently closing. No new triggers or continued fictional control.' : 'Gently connect the previous passage to a calmer familiar scene.',),
     state: final ? baseline : peak,
-    speech: narrate(Math.min(18000, final ? Math.floor(activeMs * .7) : activeMs), final ? 'Gently restore ordinary awareness of body and surroundings. Freedom to move, natural blinking, and the session closing. No new triggers.' : 'Connect the previous passage to a calmer familiar scene.', 'reanchor'),
+    speech: narrate(Math.min(18000, final ? Math.floor(activeMs * .7) : activeMs), final ? 'Gently restore ordinary awareness of body and surroundings. Freedom to move, natural blinking, and the session closing. No new triggers.' : 'Connect the previous passage to a calmer familiar scene.', 'reanchor', 'return'),
     softReturn: { final, steps: [
       { offsetMs: 0, state: final ? baseline : { ...peak, activeLayers: peak.activeLayers.filter(l => l !== 'center_text') } },
       { offsetMs: Math.floor(activeMs * .25), state: { ...baseline, visualState: 'sparse', density: { ...baseline.density, visualDensity: .12 } } },
@@ -50,7 +56,7 @@ export function createReferenceProgram(durationMs: number, intensity = .6): Bamb
     if (phase === 'deepening') { add(fraction(phase, cursor, false)); add({ ...make(phase, cursor, 'silence', 3100, ''), state: { ...blank, activeLayers: ['motif_visual'], visualState: 'motif' }, speech: silentSpeech }); }
     if (phase === 'conditioning') {
       add(fraction(phase, cursor, true));
-      add({ ...make(phase, cursor, 'mindwipe', 3100, ''), timing: { prepMs: 8000, activeMs: 3100, returnMs: 4000 }, state: blank, speech: narrate(6000, 'Use progressively simpler original fictional imagery: a busy scene becomes one quiet point. Finish before the reserved no-text blank.', 'fragment') });
+      add({ ...make(phase, cursor, 'mindwipe', 3100, ''), timing: { prepMs: 8000, activeMs: 3100, returnMs: 4000 }, baseline: { ...baseline, activeLayers: [...baseline.activeLayers, 'transition_sfx'] }, state: blank, wipe: { offsetMs: 0, durationMs: 8000, text: 'THOUGHTS' }, speech: narrate(6000, 'The current fictional scene shows a car-style windshield wiper erasing one word in an arc with a rubbing sound over the retained background. Describe that present image in short original clauses, simplify into a quiet point, and finish before the reserved no-text blank. No invented effects or timing.', 'fragment') });
       add({ ...make(phase, cursor, 'reset', 7800, 'Close the previous fictional chapter and introduce one fresh, clear starting point.'), timing: { prepMs: 1000, activeMs: 7800, returnMs: 1500 }, state: narrow });
       add({ ...make(phase, cursor, 'original_self', 14300, 'Introduce Original Self / Old Self as a fictional narrative perspective. Maintain one coherent referent. No computer or installation metaphors.'), motifId: 'pink-orb', originalSelf: 'original', state: narrow });
       add({ ...make(phase, cursor, 'mantra', 16200, ''), speech: narrate(1600, 'One original very short calming mantra, supplied only once.', 'mantra'), mantra: { count: 3, periodMs: 5400 } });
@@ -88,7 +94,8 @@ export function createReferenceProgram(durationMs: number, intensity = .6): Bamb
 export function withProgramTriggers(raw: BambiProgram, eligible: Partial<Record<BambiEvent['phase'], string[]>> | ((phase: BambiEvent['phase'], progress: number) => string[])) {
   const program = structuredClone(raw);
   for (const event of program.events) {
-    const bounds = parentPhaseMs(event.phase, program.durationMs), progress = (event.atMs - bounds.start) / (bounds.end - bounds.start) * 100;
+    const cycle = program.continuous ? Math.floor(event.atMs/program.durationMs)*program.durationMs : 0;
+    const bounds = parentPhaseMs(event.phase, program.durationMs), progress = (event.atMs - cycle - bounds.start) / (bounds.end - bounds.start) * 100;
     const phrase = (typeof eligible === 'function' ? eligible(event.phase, progress) : eligible[event.phase])?.[0];
     if (!phrase) continue;
     const cue = { requiredTrigger: phrase, triggerAtMs: 1500, triggerCooldownMs: 12000 };
@@ -108,7 +115,7 @@ export function withProgramTriggers(raw: BambiProgram, eligible: Partial<Record<
   return ProgramSchema.parse(program);
 }
 
-/** Optional low-intensity development mappings. Source videos contain no haptic evidence. */
+/** Optional development mappings. Speech-bound accents use compiled, measured word cue times. */
 export function withHapticMappings(raw: BambiProgram) {
   const program = structuredClone(raw);
   const armed = (state: PresentationState): PresentationState => ({ ...state, activeLayers: [...new Set([...state.activeLayers, 'haptics' as const])] });
@@ -122,7 +129,12 @@ export function withHapticMappings(raw: BambiProgram) {
     else if (event.type === 'peak') { offsets = [event.timing.prepMs]; event.state = armed(event.state); }
     else if (event.type === 'reset') { offsets = [event.timing.prepMs]; event.state = armed(event.state); }
     else if (event.type === 'mindwipe') { offsets = [event.timing.prepMs + event.timing.activeMs]; event.baseline = armed(event.baseline); }
-    event.haptics = offsets.map(offsetMs => ({ offsetMs, command: { type: 'device', channel: 'vib', operation: 'buzz', intensity: .1, durationMs: 150 } }));
+    const spokenCues = compileEvent(event).speech.filter(slot => slot.speech.requiredTrigger || slot.speech.fixedCue);
+    if (spokenCues.length && event.type === 'motif_recall') event.state = armed(event.state);
+    const command = { type: 'device', channel: 'vib', operation: 'buzz', intensity: .1, durationMs: 150 } as const;
+    event.haptics = spokenCues.length
+      ? spokenCues.map(slot => ({ offsetMs: slot.atMs - event.atMs + (slot.speech.triggerAtMs ?? slot.speech.cueAtMs!), speechSlotId: slot.id, command }))
+      : offsets.map(offsetMs => ({ offsetMs, command }));
   }
   return ProgramSchema.parse(program);
 }

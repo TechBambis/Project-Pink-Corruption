@@ -6,15 +6,17 @@
 .stage[data-event]{background:#000}
 .stage[data-event] [data-trigger-layer]{z-index:8!important}
 .stage[data-event] [data-trigger-layer="eye"]{z-index:10!important}
-.stage[data-event] .event-trigger-text{z-index:9;top:50%;transform:translateY(-50%);font-size:min(9vw,72px);font-weight:900}
 .event-black,.event-wash{position:absolute;inset:0;pointer-events:none;z-index:6;background:#000}
 .event-wash{background:#dd72b8;z-index:4}
 .event-motif{position:absolute;inset:0;container-type:size;z-index:5;pointer-events:none}
 .event-orb{position:absolute;left:50%;top:50%;width:min(80cqh,80cqw);aspect-ratio:1;border-radius:50%;overflow:hidden;transform:translate(-50%,-50%);background:radial-gradient(circle closest-side at 50% 50%,#1b111f 0%,#24182c 52%,#392740 63%,#614266 69%,#aa79a8 75%,#eac7e6 88%,#f9e7f5 96%,#bc87b5 100%);box-shadow:0 0 2cqh #dc79c929,0 0 5cqh #dc79c912}
 .event-scanner{position:absolute;left:50%;top:50%;width:78%;height:132%;border-radius:50%;background:radial-gradient(ellipse closest-side,#ffdff600 48%,#f9d7ee20 60%,#fff2fcaa 77%,#fff7fee0 86%,#f8d0eb40 95%,#f8d0eb00 100%);filter:blur(1.2cqh);will-change:transform;pointer-events:none}
 .event-blink-cue{position:absolute;inset:0;display:grid;place-items:center;container-type:size;z-index:7;pointer-events:none}
-.event-blink-cue>span{max-width:90%;font-family:Arial,Helvetica,sans-serif;font-size:min(18cqh,18cqw);font-weight:900;line-height:1;letter-spacing:-.06em;color:#fff0fc;text-align:center;text-shadow:0 1px 6px #160d1c80}
+.event-blink-cue>span,.session-cue-text[data-cue="blink"]{max-width:90%;font-family:Arial,Helvetica,sans-serif;font-size:min(18cqh,18cqw);font-weight:900;line-height:1;letter-spacing:-.06em;color:#fff0fc;text-align:center;text-shadow:0 1px 6px #160d1c80}
 .event-text{position:absolute;left:12%;right:12%;top:61%;text-align:center;font-size:clamp(18px,3vw,36px);line-height:1.3;color:#ffd8f0;text-shadow:0 2px 8px #000;z-index:7;pointer-events:none}
 .event-black[hidden],.event-wash[hidden],.event-motif[hidden],.event-text[hidden],.event-blink-cue[hidden]{display:none}
 .event-scanner[hidden]{display:none}
+.event-figure{position:absolute;left:50%;top:50%;width:min(76cqh,76cqw);aspect-ratio:1;transform:translate(-50%,-50%);transform-style:preserve-3d}
+.event-figure svg{display:block;width:100%;height:100%}
+.event-figure[hidden],.event-motif[data-form="heart"]>.event-orb,.event-motif[data-form="gears"]>.event-orb{display:none}
 #event-status{color:var(--teal)}

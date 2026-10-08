@@ -49,6 +49,18 @@ test('ambient agent respects original idle threshold, cooldown, busy replies and
   assert.deepEqual(agent.next(1300, true), { reason: 'idle', trigger: '' });
 });
 
+test('every snapshotted BambiCloud trigger is available offline without replacing the pinned archive',()=>{
+  const cloud=JSON.parse(readFileSync('packages/content/bambicloud-triggers.json','utf8'));
+  const names=contentCatalog().triggers.map(trigger=>trigger.name.toUpperCase());
+  assert.equal(cloud.names.length,65);
+  assert.equal(new Set(names).size,names.length);
+  for(const name of cloud.names)assert.ok(names.includes(name.toUpperCase()),name);
+  assert.ok(names.includes('BAMBI EYES LOCK'));
+  assert.ok(names.includes('BAMBI VOICE BOX OFF'));
+  assert.ok(names.includes("IT'S WHAT YOU'RE MADE FOR"));
+  assert.deepEqual(contentCatalog().defaultTriggers,['BAMBI','BAMBI SLEEP','BAMBI RESET']);
+});
+
 test('both system prompts equal the original worker with selected, fallback and custom triggers and collar settings', async () => {
   const source = readFileSync(contentRoot + 'workers/ollama.js', 'utf8');
   // Execute the actual upstream prompt code, without booting its network worker.

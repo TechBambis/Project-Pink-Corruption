@@ -5,9 +5,12 @@
 import copy
 import json
 import math
+import os
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(os.environ.get('BAMBI_RESOURCE_ROOT', Path(__file__).resolve().parents[3]))
+DATA = Path(os.environ.get('BAMBI_DATA_ROOT', ROOT))
+MODELS = Path(os.environ.get('BAMBI_MODELS_ROOT', ROOT / 'models'))
 PRESETS = ROOT / 'presets/audio'
 CANDIDATES = ['af_heart', 'af_bella', 'af_sarah', 'af_nicole', 'af_sky', 'af_river', 'af_aoede']
 CALIBRATION = ('Take a quiet moment. [pause:550] Keep the small silver key beside the blue glass. '
@@ -96,7 +99,7 @@ def validate(config):
 def load_preset(name='bambi_local_clean', overrides=None):
     if name not in [p.stem for p in PRESETS.glob('*.json')]:
         raise ValueError('Unknown audio preset')
-    data = json.loads((PRESETS / f'{name}.json').read_text())
+    data = json.loads((PRESETS / f'{name}.json').read_text(encoding='utf-8'))
     data.setdefault('trigger', {'speedMultiplier': 1, 'volumeDb': 0})
     return validate(merge(data, overrides or {}))
 

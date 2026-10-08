@@ -4,6 +4,7 @@
 
 import { clamp, SPIRAL_COMPLEXITY_MAX } from '../safety/actions';
 import type { StableSpiralSettings } from './stable';
+import { qualityFragment } from './shader-quality';
 
 export const spiralStyles = ['original', 'vortex', 'infinity', 'prism', 'orb', 'tunnel', 'loop', 'fractal'] as const;
 export type SpiralStyle = typeof spiralStyles[number];
@@ -30,8 +31,9 @@ void main(){
    shape=mix(length(q),max(abs(q.x),abs(q.y)),.76);
    ringPhase=log(shape+.018)*(6.+depth*4.)-travel*6.2831853;
   }
-  float ring=pow(.5+.5*cos(ringPhase),18.);
-  float edge=pow(.5+.5*cos(ringPhase+.28),60.);
+  float footprint=pixelWidth(ringPhase,(6.+depth*4.)/max(r,.025)/resolution.y);
+  float ring=pow(filteredWave(ringPhase,footprint),18.);
+  float edge=pow(filteredWave(ringPhase+.28,footprint),60.);
   vec3 tint=mix(colorA,colorB,.5+.5*sin(flow*2.));
   c+=tint*ring*.65+mix(colorB,vec3(1.),.6)*edge*.5;
   c+=colorA*pow(.5+.5*cos(a*(8.+2.*floor(complexity))+z*4.-time*.4),20.)*.16;
@@ -42,7 +44,9 @@ void main(){
    for(int i=0;i<5;i++){
     q=abs(q); float turn=.48+time*.025+float(i)*.10;
     q=mat2(cos(turn),-sin(turn),sin(turn),cos(turn))*q*1.65-vec2(.24,.20);
-    float ridge=exp(-abs(length(q)-.23)*(26.+depth*18.));
+    float distance=abs(length(q)-.23);
+    float ridge=exp(-distance*(26.+depth*18.));
+    ridge*=1.-smoothstep(.015,.08,pixelWidth(distance,1./resolution.y));
     petals+=ridge*strength;strength*=.68;
    }
    c=c*.42+mix(colorA,colorB,.5+.5*sin(a*6.+time*.2))*petals*.8;
@@ -60,11 +64,13 @@ void main(){
  if(style>2.5){
   float radius=.30+reaction*.035+sin(time*.6)*.007;
   float oval=mix(1.,.58,.5+.5*sin(time*.55));
-  float meridian=exp(-abs(length(vec2(p.x/oval,p.y))-radius)*100.);
-  float edge=exp(-abs(r-radius)*(60.+depth*30.));
+  float meridianDistance=abs(length(vec2(p.x/oval,p.y))-radius);
+  float meridian=exp(-meridianDistance*100.);
+  float edgeDistance=abs(r-radius);
+  float edge=1.-smoothstep(pixelWidth(edgeDistance,1./resolution.y),.004+pixelWidth(edgeDistance,1./resolution.y),edgeDistance);
   float halo=exp(-abs(r-radius)*(16.+depth*12.));
   vec3 glass=mix(colorA,colorB,.5+.5*cos(a+time*.08));
-  c+=glass*halo*.35+mix(glass,vec3(1.),.8)*edge*.8;
+  c+=glass*halo*.25+mix(glass,vec3(1.),.65)*edge*.65;
   c+=mix(glass,vec3(1.),.7)*meridian*.35*(1.-smoothstep(radius,radius+.02,r));
   c+=glass*pow(clamp(r/radius,0.,1.),5.)*.12*(1.-smoothstep(radius,radius+.01,r));
   gl_FragColor=vec4(c*alpha,1.);return;
@@ -79,7 +85,7 @@ void main(){
   phase+=sin(r*10.-time*.35)*(.7+depth);
  }
  float band=.5+.5*sin(phase),back=.5+.5*sin(-a*(arms+1.)+z*(7.+depth*7.)+time*.7);
- float width=max(.035,aa/max(r,.035));
+ float width=pixelWidth(band,max(.0003,aa*.25/max(r,.035)));
  float ribbon=smoothstep(.42-width,.42+width,band);
  float bevel=pow(band,10.)*.45+pow(max(0.,1.-abs(band-.43)*20.),3.)*.45;
  float palette=.5+.5*sin(a+z*1.8+time*.13);
@@ -87,7 +93,8 @@ void main(){
  c+=mix(ink,tint,.75)*ribbon*(.32+.40*pow(band,2.));
  c+=mix(tint,vec3(1.,.86,.97),.55)*bevel*(.5+.5*depth);
  c+=colorB*pow(back,18.)*(.10+.10*depth)*(1.-ribbon*.6);
- float rings=pow(.5+.5*cos(z*(13.+depth*8.)-time*1.1),24.);
+ float ringPhase=z*(13.+depth*8.)-time*1.1;
+ float rings=pow(filteredWave(ringPhase,pixelWidth(ringPhase,(13.+depth*8.)/max(r,.025)/resolution.y)),24.);
  c+=mix(colorA,colorB,.6)*rings*.12;
  c*=smoothstep(.004,.025,r);
  c+=mix(colorA,colorB,.5)*exp(-r*45.)*(.15+reaction*.4);
@@ -123,7 +130,9 @@ export class ImmersiveSpiral {
     // Keep sub-frame motion precise even after a long session; both shader stages must agree.
     const precision = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT)?.precision ? 'highp' : 'mediump';
     for (const [type, code] of [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, fragment]]) {
-      const shader = gl.createShader(Number(type))!; gl.shaderSource(shader, String(code).replaceAll('precision mediump float;', `precision ${precision} float;`)); gl.compileShader(shader);
+      const shader = gl.createShader(Number(type))!;
+      const source = Number(type) === gl.FRAGMENT_SHADER ? qualityFragment(gl,String(code)) : String(code).replaceAll('precision mediump float;', `precision ${precision} float;`);
+      gl.shaderSource(shader,source); gl.compileShader(shader);
       if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(shader) ?? 'Visual shader failed');
       gl.attachShader(program, shader); gl.deleteShader(shader);
     }

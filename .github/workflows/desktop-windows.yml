@@ -1,0 +1,49 @@
+name: Manual Windows desktop build
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Packaging smoke first; alpha only after native smoke acceptance
+        type: choice
+        options: [smoke, alpha]
+        default: smoke
+      version:
+        description: Immutable matching phase version (0.1.0-smoke.N or 0.1.0-alpha.N)
+        required: true
+        default: 0.1.0-smoke.2
+      quota_checked:
+        description: Actual remaining Free Actions allowance checked before dispatch; no extra paid quota
+        type: boolean
+        default: false
+      quota_record:
+        description: Check time/account and remaining allowance; no credentials
+        required: true
+      upload_packages:
+        description: Explicitly retain private packages within confirmed remaining storage (no public release)
+        type: boolean
+        default: false
+      remaining_artifact_mib:
+        description: Confirmed remaining shared artifact allowance, required for upload
+        default: '0'
+      transfer_packages:
+        description: Sequential private alpha transport within checked free storage
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: desktop-windows-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native:
+    uses: ./.github/workflows/desktop-native.yml
+    with:
+      target: windows-x64
+      phase: ${{ inputs.phase }}
+      version: ${{ inputs.version }}
+      quota_checked: ${{ inputs.quota_checked }}
+      quota_record: ${{ inputs.quota_record }}
+      upload_packages: ${{ inputs.upload_packages }}
+      transfer_packages: ${{ inputs.transfer_packages }}
+      remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}

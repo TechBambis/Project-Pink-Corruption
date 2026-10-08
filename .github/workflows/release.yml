@@ -1,0 +1,224 @@
+name: Verified desktop tag release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+# Serialize versions too: two 320 MiB transfers must not share the free quota.
+concurrency:
+  group: verified-desktop-tag-release
+  cancel-in-progress: false
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.identity.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.18.1'
+      - name: Verify exact tag, maintainer, version and available storage
+        id: identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BAMBI_FREE_ALLOWANCE_CONFIRMED: ${{ vars.RELEASE_FREE_ALLOWANCE_CONFIRMED }}
+        run: node scripts/release-pipeline.mjs preflight
+  checks:
+    needs: preflight
+    permissions:
+      contents: read
+    uses: ./.github/workflows/checks.yml
+  native:
+    needs: [preflight, checks]
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            runner: ubuntu-24.04
+          - target: windows-x64
+            runner: windows-2022
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    env:
+      BAMBI_RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+      BAMBI_RELEASE_TARGET: ${{ matrix.target }}
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.18.1'
+          cache: npm
+      - name: Freeze the exact tagged source
+        run: |
+          node --input-type=module -e 'import {context,assertTagCommit} from "./scripts/release-pipeline.mjs"; assertTagCommit(context(process.env));'
+          node scripts/desktop-release.mjs prepare smoke "$BAMBI_RELEASE_VERSION" "$RUNNER_TEMP/bambi-release"
+          echo "BAMBI_SNAPSHOT=$RUNNER_TEMP/bambi-release/source" >> "$GITHUB_ENV"
+          echo "BAMBI_TRANSFER=$RUNNER_TEMP/bambi-transfer" >> "$GITHUB_ENV"
+      - name: Install and check frozen dependencies
+        run: |
+          cd "$BAMBI_SNAPSHOT"
+          npm ci --ignore-scripts
+          node scripts/desktop-release.mjs check .
+      - name: Install native Linux test libraries
+        if: matrix.target == 'linux-x64'
+        run: |
+          cd "$BAMBI_SNAPSHOT"
+          npx --no-install playwright install-deps chromium
+          # Ubuntu's runner-only AppArmor restriction otherwise blocks Chromium's
+          # user namespace sandbox for the freshly extracted desktop executable.
+          # Keep Chromium sandboxing enabled; never pass --no-sandbox to the app.
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - name: Build the final native distributions exactly once
+        run: |
+          node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" build "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET"
+          if [ "$BAMBI_RELEASE_TARGET" = 'windows-x64' ]; then
+            echo "BAMBI_RELEASE_OUTPUT=$BAMBI_SNAPSHOT/dist/desktop-windows/$BAMBI_RELEASE_VERSION" >> "$GITHUB_ENV"
+          else
+            echo "BAMBI_RELEASE_OUTPUT=$BAMBI_SNAPSHOT/dist/desktop/$BAMBI_RELEASE_VERSION" >> "$GITHUB_ENV"
+          fi
+      - name: Compile the Windows installed-app observer
+        if: matrix.target == 'windows-x64'
+        shell: pwsh
+        run: |
+          $observer = Join-Path $env:RUNNER_TEMP 'bambi-release-observer.exe'
+          $csc = Join-Path $env:SystemRoot 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+          $wpf = Join-Path (Split-Path $csc) 'WPF'
+          & $csc /nologo /target:exe /platform:x64 /optimize+ /define:WINDOWS_UIA ('/reference:'+(Join-Path $wpf 'UIAutomationClient.dll')) ('/reference:'+(Join-Path $wpf 'UIAutomationTypes.dll')) ('/reference:'+(Join-Path $wpf 'WindowsBase.dll')) ('/out:'+$observer) (Join-Path $env:BAMBI_SNAPSHOT 'scripts/desktop-windows-observer.cs')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          'BAMBI_WINDOWS_OBSERVER='+$observer | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Exercise the final NSIS installer and installed application
+        if: matrix.target == 'windows-x64'
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" qualify "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET" "$BAMBI_RELEASE_OUTPUT"
+      - name: Exercise the final AppImage payload and launcher
+        if: matrix.target == 'linux-x64'
+        run: xvfb-run --auto-servernum node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" qualify "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET" "$BAMBI_RELEASE_OUTPUT"
+      - name: Inspect and stage only bound release downloads and records
+        run: node scripts/release-pipeline.mjs stage "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_OUTPUT" "$BAMBI_TRANSFER" "$BAMBI_RELEASE_TARGET"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ matrix.target }}
+          path: ${{ env.BAMBI_TRANSFER }}/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Retain bounded public-fixture diagnostics on a native failure
+        if: failure() && env.BAMBI_RELEASE_OUTPUT != ''
+        run: |
+          node --input-type=module <<'JS'
+          import {existsSync,readdirSync,readFileSync,writeFileSync,mkdirSync,statSync} from 'node:fs';
+          import {join} from 'node:path';
+          const root=process.env.BAMBI_RELEASE_OUTPUT,out=join(process.env.RUNNER_TEMP,'bambi-native-diagnostics');
+          mkdirSync(out,{recursive:true});let index=0,total=0;
+          function collect(folder,depth=0){
+            if(depth>4||!existsSync(folder))return;
+            for(const entry of readdirSync(folder,{withFileTypes:true})){
+              const path=join(folder,entry.name);
+              if(entry.isDirectory()&&(depth>0||entry.name.startsWith('qualification')))collect(path,depth+1);
+              if(!entry.isFile()||!['evidence.json','INSTALLER-CHECK.json','DESKTOP-QUALIFICATION.json'].includes(entry.name))continue;
+              const bytes=statSync(path).size;if(bytes>1048576||total+bytes>8388608)throw Error('Diagnostics exceeded its bounded size.');
+              const value=JSON.parse(readFileSync(path,'utf8'));
+              writeFileSync(join(out,String(++index)+'-'+entry.name),JSON.stringify(value,(key,item)=>/command|diagnostic|token|secret|password|credential/i.test(key)?undefined:item,2)+'\n');total+=bytes;
+            }
+          }
+          collect(root);
+          JS
+      - name: Save small native failure reports
+        if: failure() && env.BAMBI_RELEASE_OUTPUT != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-diagnostics-${{ matrix.target }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/bambi-native-diagnostics/*.json
+          retention-days: 1
+          if-no-files-found: ignore
+  attest:
+    needs: native
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.18.1'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: ${{ runner.temp }}/bambi-received
+          digest-mismatch: error
+      - name: Verify both native results and assemble exact bytes
+        run: node scripts/release-pipeline.mjs assemble "$RUNNER_TEMP/bambi-received" "$RUNNER_TEMP/bambi-publish"
+      - name: Attest every final asset, metadata file and checksum list
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/bambi-publish/*
+          create-storage-record: false
+  publish:
+    needs: [native, attest]
+    if: ${{ !cancelled() && needs.native.result == 'success' && (needs.attest.result == 'success' || (github.event.repository.private && needs.attest.result == 'skipped')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.18.1'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: ${{ runner.temp }}/bambi-received
+          digest-mismatch: error
+      - name: Verify and assemble the previously built files without rebuilding
+        run: node scripts/release-pipeline.mjs assemble "$RUNNER_TEMP/bambi-received" "$RUNNER_TEMP/bambi-publish"
+      - name: Verify provenance, upload a draft, confirm remote hashes and publish last
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-pipeline.mjs publish "$RUNNER_TEMP/bambi-publish"
+  cleanup:
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Remove only this successful release's temporary native transfers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BAMBI_RUN_ID: ${{ github.run_id }}
+        run: |
+          gh api "repos/$GH_REPO/actions/runs/$BAMBI_RUN_ID/artifacts" --paginate --jq '.artifacts[] | select(.name == "release-linux-x64" or .name == "release-windows-x64") | .id' > "$RUNNER_TEMP/bambi-artifact-ids"
+          while IFS= read -r artifact_id; do
+            case "$artifact_id" in ''|*[!0-9]*) exit 1 ;; esac
+            gh api --method DELETE "repos/$GH_REPO/actions/artifacts/$artifact_id"
+          done < "$RUNNER_TEMP/bambi-artifact-ids"

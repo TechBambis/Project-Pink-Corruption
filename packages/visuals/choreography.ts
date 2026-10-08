@@ -7,6 +7,7 @@ import { sessionPhaseAt, type SessionPhase } from '../session-director/phases';
 import type { TimelineEvent } from '../timeline';
 import type { StableSpiralSettings } from './stable';
 import type { Scene } from './index';
+import { deliveryProfiles, type DeliveryMode } from '../session-director/delivery';
 
 export interface VisualPresentation { scene: Scene; opacity: number; spiral: StableSpiralSettings }
 const pink = '#df0471', teal = '#008080';
@@ -47,6 +48,14 @@ export function immersiveChoreographyAt(time: number, duration: number, base: Vi
     if (current.progress + 1e-9 >= .8) result.scene = 'Audio Only';
   }
   return result;
+}
+
+/** Switch only with a heard engine-authored passage, preserving phase fade and custom timelines. */
+export function deliveryPresentation(base: VisualPresentation, mode: DeliveryMode): VisualPresentation {
+  if (base.scene === 'Audio Only') return base;
+  const profile = deliveryProfiles[mode];
+  return mergePresentation(base, { scene: 'Spiral Focus', opacity: base.opacity * profile.visualOpacity,
+    spiral: { style: profile.visualStyle, speed: profile.visualSpeed, mode: 'breathe', pulseHz: .25, alpha: 1 } });
 }
 
 /** Replay only persistent scene settings. Never replay transient flashes/sounds on a seek. */

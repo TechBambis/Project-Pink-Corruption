@@ -1,0 +1,17 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 BambiOS
+# SPDX-License-Identifier: AGPL-3.0-only
+set -eu
+# Retain the renderer sandbox. Failure to sandbox is an installation failure;
+# this launcher never silently inserts Chromium sandbox-disabling switches.
+for argument in "$@"; do
+ case "$argument" in
+  --no-sandbox|--disable-setuid-sandbox) echo 'Bambi Local requires its Chromium sandbox.' >&2; exit 64 ;;
+ esac
+done
+if [ -z "${APPDIR:-}" ]; then
+ entry_dir=${0%/*}
+ if [ "$entry_dir" = "$0" ]; then entry_dir=.; fi
+ APPDIR=$(CDPATH= cd -- "$entry_dir" && pwd -P)
+fi
+exec "$APPDIR/bambi-local" "$@"

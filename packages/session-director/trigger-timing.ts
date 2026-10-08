@@ -42,9 +42,15 @@ export function triggersForCategories(selected:readonly TriggerCategory[]):strin
 export function triggersForPhase(phase:SessionPhase,progress:number,config:TriggerTiming):string[] {
   return triggersForCategories(config.stages[triggerStageAt(phase,progress,config)]);
 }
-export function triggerTimingDirection(phase:SessionPhase,progress:number,config:TriggerTiming):string {
+export function triggerTimingDirection(phase:SessionPhase,progress:number,config:TriggerTiming,compact=false):string {
   if(!config.enabled)return '';
   const stage=triggerStageAt(phase,progress,config),allowed=triggersForPhase(phase,progress,config);
+  if(compact)return [
+    `CURRENT TRIGGER TIMING: ${stage}. Only these exact cue names may be spoken: ${JSON.stringify(allowed)}.`,
+    allowed.length?'Speak selected cues when guiding. No unselected cues, including examples or compliments.':'No named cues.',
+    stage==='deepening'&&allowed.includes('GOOD GIRL')?'Use GOOD GIRL 3–5 times in a complete segment, less in short replies.':'',
+    'Intensity unlocks no other categories. No permanent conditioning, guaranteed subconscious effects or point of no return.',
+  ].filter(Boolean).join('\n');
   return [
     'CURRENT TRIGGER TIMING (takes precedence over trigger examples in earlier instructions):',
     `Stage: ${stage}. Selected categories: ${JSON.stringify(config.stages[stage])}.`,

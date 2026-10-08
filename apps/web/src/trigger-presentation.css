@@ -1,0 +1,8 @@
+/* SPDX-FileCopyrightText: 2026 BambiOS
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+.session-cue{position:absolute;inset:0;display:grid;place-items:center;container-type:size;z-index:9;pointer-events:none}
+.session-cue[hidden]{display:none}
+.session-cue-text{max-width:76%;text-align:center;font-family:inherit;font-size:min(9vw,72px);font-weight:900;line-height:1.3;color:#ffd8f0;text-shadow:0 2px 8px #000;overflow-wrap:anywhere;transform:translate(var(--trigger-x,0px),var(--trigger-y,0px))}
+.stage[data-trigger-text]>.word,.stage[data-trigger-text]>.event-text,.stage[data-trigger-text]>.event-blink-cue{visibility:hidden}
+.stage [data-trigger-layer="eye"]{z-index:10!important}

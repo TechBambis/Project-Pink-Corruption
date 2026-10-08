@@ -21,12 +21,6 @@ export class SpeechDetector {
  constructor(private model:Pick<Silero,'process'|'reset_state'|'release'>,private onEvent:(event:FrameProcessorEvent)=>void,private onError:(error:unknown)=>void){
   this.processor=new FrameProcessor(model.process,model.reset_state,speechDetectionOptions(),32);this.processor.resume();
  }
- static async create(onEvent:(event:FrameProcessorEvent)=>void,onError:(error:unknown)=>void){
-  const [ort,{Silero}]=await Promise.all([import('onnxruntime-web/wasm'),import('@ricky0123/vad-web/dist/models/silero')]);
-  ort.env.wasm.wasmPaths='/vad/';ort.env.wasm.numThreads=1;ort.env.wasm.proxy=false;ort.env.logLevel='error';
-  const model=await Silero.new(ort,async()=>{const response=await fetch('/vad/silero_vad_v5.onnx');if(!response.ok)throw Error('Could not load local speech detection.');return response.arrayBuffer();});
-  return new SpeechDetector(model,onEvent,onError);
- }
  configure(sensitivity:string,silenceMs:number){this.processor.setOptions(speechDetectionOptions(sensitivity,silenceMs));}
  push(data:Float32Array,rate:number){
   if(this.closed)return;

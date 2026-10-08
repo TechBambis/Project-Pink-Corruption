@@ -1,0 +1,140 @@
+{
+  "version": "3.12.13",
+  "target": "x86_64-pc-windows-msvc",
+  "build": "20260610",
+  "runtimeArchive": {
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.12.13%2B20260610-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+    "bytes": 21932694,
+    "sha256": "99dce0b23bf3c3b28d350cdd7bfe3cd3be51cc4f285faae7c0df110d106d1a8d"
+  },
+  "licenseSourceArchive": {
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260610/cpython-3.12.13%2B20260610-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+    "bytes": 43448047,
+    "sha256": "cba72a21ed4e59794eb5cf4672797204b19926feee79896bc097b7416ed75e8b"
+  },
+  "notices": [
+    {
+      "file": "LICENSE.bdb.txt",
+      "bytes": 7419,
+      "sha256": "8f2d533ab34899499d5b07f209854b101b17dba2c69f3251860aecf3e4005faa"
+    },
+    {
+      "file": "LICENSE.bzip2.txt",
+      "bytes": 1780,
+      "sha256": "bd5628cc76fb0ebf9c657d1dd4d1a240a1a7b216c31663e7bbf1131c0b70a910"
+    },
+    {
+      "file": "LICENSE.cpython.txt",
+      "bytes": 36935,
+      "sha256": "8fe98bf9822926d854f56ffd8d97877d8b942617aa44eb7ea77fd99e22f2537e"
+    },
+    {
+      "file": "LICENSE.expat.txt",
+      "bytes": 1165,
+      "sha256": "8a9cfe4b5924f4b25881aa0c9f5e4561c5f31065d0c4a13cdcdbcf917edf39aa"
+    },
+    {
+      "file": "LICENSE.libX11.txt",
+      "bytes": 47960,
+      "sha256": "f353accfe2976df31ea297a77d1d454bd51ef6be8c3df39bd6aca95901579357"
+    },
+    {
+      "file": "LICENSE.libXau.txt",
+      "bytes": 1169,
+      "sha256": "cec808cd2163fccdc8de4a91d526490777afbaeea060e1168c40a804694b7444"
+    },
+    {
+      "file": "LICENSE.libedit.txt",
+      "bytes": 1643,
+      "sha256": "d9932ccdd42eccf6cdded7bcb35b088e64cfc7c24d355af2cc0d02edb6b637d3"
+    },
+    {
+      "file": "LICENSE.libffi.txt",
+      "bytes": 1153,
+      "sha256": "9afb8970cd29fc1031fa647278e4bef613399e2e3468a1e3a397f4d158c6101c"
+    },
+    {
+      "file": "LICENSE.liblzma.txt",
+      "bytes": 673,
+      "sha256": "d87d218dd908b3243ec4cbc72af400e5b7437513ea9d9229291d0812b8464fec"
+    },
+    {
+      "file": "LICENSE.libuuid.txt",
+      "bytes": 1459,
+      "sha256": "cbccaa3efe07a9a602751375085be572d4410a250b996716fbe8c5255c7ec6f2"
+    },
+    {
+      "file": "LICENSE.libxcb.txt",
+      "bytes": 1367,
+      "sha256": "29a9539190e6de1af5fd06a9139c7103137cd1f9290b08c7b11bce89c01c14d2"
+    },
+    {
+      "file": "LICENSE.mpdecimal.txt",
+      "bytes": 1308,
+      "sha256": "f094277cd46e1f6e4d87916cc4b51e22f613d45eb81f48231c3cb7caf8fc8a6a"
+    },
+    {
+      "file": "LICENSE.ncurses.txt",
+      "bytes": 1476,
+      "sha256": "4f571cad3ea6c888bf0a7092e5b215dddb3142e9e3f1857fd5fac6cf13d345d7"
+    },
+    {
+      "file": "LICENSE.openssl-1.1.txt",
+      "bytes": 6244,
+      "sha256": "ad89e3fed746413af1d34d5353978ee1520cedd361c853f8022e7bb210ac6b31"
+    },
+    {
+      "file": "LICENSE.openssl-3.txt",
+      "bytes": 10352,
+      "sha256": "ed72ce2b51ee58f117e5a021e2e04af158857f40269fbc03491f0b2a99dbcc96"
+    },
+    {
+      "file": "LICENSE.sqlite.txt",
+      "bytes": 1504,
+      "sha256": "d8eb9aba7ef6b5ed06cb3ec19a7242316af2e5933c638eb67fb781c13884e01d"
+    },
+    {
+      "file": "LICENSE.tcl.txt",
+      "bytes": 2295,
+      "sha256": "41613eabfc08921a7da9c4bfd7f3ce5d5406f55214b253d89f392ed86eebeb8f"
+    },
+    {
+      "file": "LICENSE.tix.txt",
+      "bytes": 2880,
+      "sha256": "8cdff3addb9e9eb108c78e2cf5e05f26b216c098304945733bbec382b2eaef66"
+    },
+    {
+      "file": "LICENSE.zlib.txt",
+      "bytes": 1016,
+      "sha256": "365e36720db366054863235aea5d6f440142ab968834bfaf81fa9d187c99b9b8"
+    },
+    {
+      "file": "PYTHON.json",
+      "bytes": 62407,
+      "sha256": "72142f94454c842e7aa4ae867743474cc95acb07dd57485ee247e025a46b02b2"
+    }
+  ],
+  "matchedFrozenCPythonLibraries": {
+    "_asyncio.pyd": "b0b476750e6cb843592d946cf567584f28035dcee174a25ffc31bd450b89de55",
+    "_bz2.pyd": "88addab9e8f5efa0a0a80f303cadaec631ee8a41ec1e2734a706e71cb943cbec",
+    "_ctypes.pyd": "4951a226b531868c8f8a84dd203268c1f117668385ab8dce16c07803a87f9995",
+    "_decimal.pyd": "af6c9eee3dfbe64128a47eab5f086843be63caf5e622f0275d451b2cc9c9e2e6",
+    "_hashlib.pyd": "77900db9cb20945785d30e7bb81cb7e0c8d74cf03ffe04cee9b8e96417d83042",
+    "_lzma.pyd": "e07ccfef3a7a733681662920efc06bcec8485c95fff23b67cecd7c8abcdfe6f5",
+    "_multiprocessing.pyd": "ba1f8346b7ec17310d5e532228014407a209e5f90053d08772d4b611462c58b3",
+    "_overlapped.pyd": "f99074093c46d377e3275299a8c710be552b68e1d2e730037dcf096cc012b308",
+    "_queue.pyd": "44dd278f559cf0d6c4f4b7b45e92e0201ca3840a1f83d4d509244621de143dbf",
+    "_socket.pyd": "65bf54c11bd7a2b9e1f5d94fbef43278402abcf079b49a68c1026bb422dc7f25",
+    "_ssl.pyd": "9d6276ecd581cee7b47aa62f7668eeb3253e9db9068051fb62d650524ff73af3",
+    "_uuid.pyd": "031cb45ce5d71317e4f85cfcdf10e2133cce11eba60c5ca696084d9395426f52",
+    "_wmi.pyd": "7f41a76990d4f9ca6a9914d7ef65ad435fcb60e823bd6e64cae5049c851bb109",
+    "libcrypto-3-x64.dll": "92d9af9678a7cd58fc975eea699178dfdad0944b71e49d4a02066d1d1d0d010b",
+    "libffi-8.dll": "afde15c607e75108f3e420c40777fd9a1e517c889b8ba66517c018d47f6e64dc",
+    "libssl-3-x64.dll": "f9a2fa4472fb01b441a93945f9c7537c0a45d3e942231ff30ef5db9fc3ece1de",
+    "pyexpat.pyd": "815cee4239a2a358ca9f652e90bc69b8e4d2ecfaeaf2b5dab74f2a664f3570e0",
+    "select.pyd": "cdb76c8638dff0ae628e86bb2b665fe786bfe0bb21292d99e0be58579e9bb372",
+    "unicodedata.pyd": "31fff54a30ee88fbae536e77b94276040091d2cccb4098ce3d64127f2f7862e4",
+    "python312.dll": "e8461e5da7c7ca08c51844b93362a72b4d7104194bb0ef4b2ad16fdbe3e37664"
+  },
+  "scope": "Unmodified license texts and PYTHON.json extracted from the verified full archive for the exact runtime build. Includes all distribution notices; not every listed optional library is shipped. VC runtime binaries are selected independently by PyInstaller/llama and their notices remain in their own dependency material."
+}

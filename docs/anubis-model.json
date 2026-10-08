@@ -1,0 +1,19 @@
+{
+  "repo": "TheDrummer/Anubis-Mini-8B-v1-GGUF",
+  "revision": "00475ca08bf10c8ee1c2e13e264097b8bb73851a",
+  "file": "Anubis-Mini-8B-v1h-Q4_K_M.gguf",
+  "bytes": 4920744544,
+  "sha256": "48d0fab0b15b3b573ec0aafd87b6b885c2f3d6b023a5d1549f31ba0eb724f39d",
+  "alias": "hf.co/TheDrummer/Anubis-Mini-8B-v1-GGUF:Q4_K_M",
+  "backend": "llama.cpp",
+  "architecture": "llama",
+  "training_context": 131072,
+  "context": 65536,
+  "allowed_contexts": [8192, 16384, 24576, 32768, 65536, 131072],
+  "runtime": {
+    "cache_type": "q8_0", "long_context_cache_type": "q4_0", "long_context_threshold": 32768,
+    "ubatch_size": 64,
+    "sampling": {"temperature": 0.95, "top_p": 0.95, "top_k": 64, "min_p": 0.02, "dry_multiplier": 0, "xtc_probability": 0}
+  },
+  "source": "https://huggingface.co/TheDrummer/Anubis-Mini-8B-v1-GGUF/tree/00475ca08bf10c8ee1c2e13e264097b8bb73851a"
+}

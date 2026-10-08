@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "phase": "smoke",
+  "targets": ["linux-x64", "windows-x64"],
+  "authorizedActorIds": ["337824705"],
+  "maximumTransferMiB": 400,
+  "retentionDays": 1
+}

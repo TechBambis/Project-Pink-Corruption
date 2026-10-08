@@ -6,11 +6,43 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../packages/storage';
 import { explicitMemory, memoryContext } from '../packages/ai/memory';
-import { fitContext } from '../packages/ai/context';
+import { fitContext,checkpointContextMessages } from '../packages/ai/context';
+import {LlamaBackend,type Message} from '../packages/ai';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+
+test('native checkpoint boundary preserves every instruction and counts the messages actually sent',async()=>{
+ const prefix='Complete immutable persona and voice instructions.';
+ const dynamic='\n\nCurrent session time: 2.5 minutes. Do not emit device commands.';
+ let lastCounted:Message[]=[];
+ const count=async(messages:Message[])=>{lastCounted=messages;return messages.reduce((total,message)=>total+message.content.length+20,0);};
+ const history:Message[]=[{role:'user',content:'An earlier question.'},{role:'assistant',content:'An earlier answer.'}];
+ const plan=await fitContext(prefix+dynamic,history,'My current correction.',count,2000,200,40,64,['Confirmed preference: quiet music.'],{fastPlanning:true,checkpointPrefix:prefix});
+ assert.deepEqual(plan.messages,lastCounted);
+ assert.ok(plan.messages[0].content.startsWith(prefix));
+ assert.ok(plan.messages[0].content.includes('Apply its response guidance'));
+ assert.equal(plan.messages[1].role,'user');
+ assert.ok(plan.messages[1].content.includes(dynamic));
+ assert.ok(plan.messages[1].content.includes('Confirmed preference: quiet music.'));
+ assert.deepEqual(plan.messages.slice(2,-1),history);
+ assert.deepEqual(plan.messages.at(-1),{role:'user',content:'My current correction.'});
+ assert.equal(plan.inputTokens,await count(plan.messages));
+ const changed=checkpointContextMessages([{role:'system',content:prefix+'\n\nCurrent session time: 3 minutes.'},{role:'user',content:'A new question.'}],prefix);
+ assert.deepEqual(changed[0],plan.messages[0],'Changing session state must retain the checkpoint prefix');
+ assert.throws(()=>checkpointContextMessages([{role:'system',content:'Different persona'}],prefix),/does not match/);
+});
+
+test('checkpoint message overhead participates in context admission and ordinary backends keep their layout',async()=>{
+ const prefix='All fixed instructions';
+ const counter=async(messages:Message[])=>messages.length*100;
+ await assert.rejects(fitContext(prefix+' changing state',[],'Question',counter,300,64,0,64,'',{checkpointPrefix:prefix}),/exceed/);
+ const plan=await fitContext(prefix+' changing state',[],'Question',counter,400,64,0,64);
+ assert.equal(plan.messages.length,2);
+ const warm=await fitContext(prefix,[],'Ready.',counter,400,1,0,1,'',{checkpointPrefix:prefix});
+ assert.equal(warm.messages.length,3);assert.ok(warm.messages[0].content.startsWith(prefix));
+});
 
 test('existing databases migrate without losing history and rebuild searchable older episodes', () => {
   const dir=mkdtempSync(join(tmpdir(),'bambi-memory-')),path=join(dir,'memory.sqlite');
@@ -72,4 +104,46 @@ test('remote context planning bounds tokenizer trips and verifies underestimated
  assert.equal(calls,2);assert.ok(plan.messages.length>10);assert.ok(plan.inputTokens+plan.maxTokens+plan.safetyTokens<=3000);
  const underestimated=await fitContext('Instructions',history.map(turn=>({...turn,content:'expensive '+turn.content})),'Question',count,1000,256,20,64,[],{fastPlanning:true});
  assert.ok(underestimated.inputTokens+underestimated.maxTokens+underestimated.safetyTokens<=1000);assert.ok(underestimated.droppedTurns>0);
+ assert.equal(underestimated.exactFallback,true);
+});
+
+test('native planning uses four HTTP requests for 128 turns and eight memories, with an exact final budget',async()=>{
+ const original=globalThis.fetch;let httpCalls=0;
+ globalThis.fetch=async(url,init)=>{httpCalls++;const body=JSON.parse(String(init?.body));
+  if(String(url).endsWith('/apply-template'))return Response.json({prompt:JSON.stringify(body.messages)});
+  assert.ok(String(url).endsWith('/tokenize'));return Response.json({tokens:Array(Math.ceil(body.content.length/3)).fill(1)});
+ };
+ try{
+  const backend=new LlamaBackend('http://fixture.invalid'),signal=new AbortController().signal;
+  const history:Message[]=Array.from({length:128},(_,i)=>({role:i%2?'assistant':'user',content:'Earlier exchange '+i}));
+  const plan=await fitContext('Complete stable persona. '.repeat(100),history,'My latest correction.',messages=>backend.countTokens(messages,signal),16384,2048,256,512,Array.from({length:8},(_,i)=>'Confirmed preference '+i),{fastPlanning:true});
+  assert.equal(httpCalls,4);assert.equal(plan.tokenizerCalls,2);assert.equal(plan.exactFallback,false);
+  assert.equal(plan.inputTokens,Math.ceil(JSON.stringify(plan.messages).length/3));
+  assert.equal(plan.droppedTurns,0);assert.ok(plan.inputTokens+plan.maxTokens+plan.safetyTokens<=16384);
+ }finally{globalThis.fetch=original;}
+});
+
+test('exact fallback trims older expensive history before confirmed evidence and preserves the latest correction',async()=>{
+ const history:Message[]=Array.from({length:40},(_,i)=>({role:i%2?'assistant':'user',content:i===38?'Correction: green':'round '+i}));
+ const count=async(messages:Message[])=>messages.reduce((n,m)=>n+m.content.length+(m.content.startsWith('round')?120:0),0);
+ const plan=await fitContext('Stable persona. '.repeat(50),history,'Recall?',count,1800,256,20,64,['Confirmed color: green'],{fastPlanning:true});
+ assert.equal(plan.exactFallback,true);assert.ok(plan.droppedTurns>0);
+ assert.match(plan.messages[0].content,/Confirmed color: green/);assert.ok(plan.messages.some(m=>m.content==='Correction: green'));
+ assert.equal(plan.inputTokens,await count(plan.messages));assert.ok(plan.inputTokens+plan.maxTokens+plan.safetyTokens<=1800);
+});
+
+test('exact fallback drops optional evidence when it would displace the last correction',async()=>{
+ const history:Message[]=[{role:'user',content:'Earlier question'},{role:'assistant',content:'Earlier answer'},{role:'user',content:'Correction: green'},{role:'assistant',content:'Understood'}];
+ const count=async(messages:Message[])=>messages.reduce((n,m)=>n+m.content.length+(m.content.includes('Expensive evidence')?1000:0),0);
+ const plan=await fitContext('Stable persona. '.repeat(30),history,'Recall?',count,1100,128,20,64,['Expensive evidence'],{fastPlanning:true});
+ assert.equal(plan.exactFallback,true);assert.equal(plan.optionalContextIncluded,false);
+ assert.ok(plan.messages.some(m=>m.content==='Correction: green'));assert.equal(plan.droppedTurns,0);
+ assert.ok(plan.inputTokens+plan.maxTokens+plan.safetyTokens<=1100);
+});
+
+test('a dense persona cannot make estimates discard short exchanges that fit exactly',async()=>{
+ const history:Message[]=Array.from({length:128},(_,i)=>({role:i%2?'assistant':'user',content:'ok'}));
+ const count=async(messages:Message[])=>messages.reduce((n,m)=>n+m.content.length*(m.role==='system'?10:1),0);
+ const plan=await fitContext('x'.repeat(200),history,'Recall?',count,2500,128,20,64,[],{fastPlanning:true});
+ assert.equal(plan.droppedTurns,0);assert.equal(plan.tokenizerCalls,2);assert.equal(plan.inputTokens,await count(plan.messages));
 });

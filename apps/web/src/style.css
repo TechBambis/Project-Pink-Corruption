@@ -34,3 +34,7 @@
 .stage:fullscreen>#hud{bottom:calc(var(--dock-height,80px) + 48px);max-width:calc(100% - 40px)}
 
 .stage [data-trigger-layer="eye"]{z-index:10!important}
+
+.bambicloud-import{margin:14px 0;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.bambicloud-import-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.bambicloud-import-row input{flex:1;min-width:180px;margin:0}.bambicloud-import small{display:block;color:var(--muted);font-size:11px;line-height:1.5}

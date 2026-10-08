@@ -8,6 +8,11 @@ export const sessionPhases = ['induction', 'deepening', 'conditioning', 'anchor'
 export type SessionPhase = typeof sessionPhases[number];
 export const phaseStarts = [0, .24, .4, .8, .9] as const;
 
+/** Unlimited sessions repeat finite journeys; the transport clock never resets. */
+export function phasePosition(elapsed:number,duration:number,continuous=false) {
+  return continuous && Number.isFinite(duration) && duration>0 ? Math.max(0,elapsed)%duration : elapsed;
+}
+
 /** Shared by presentation and AI metadata, including during conversation and seeking. */
 export function sessionPhaseAt(elapsed: number, duration: number) {
   const progress = clamp(elapsed / clamp(duration, 1, 86400));

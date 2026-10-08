@@ -53,7 +53,7 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
  const directory=mkdtempSync(join(tmpdir(),'bambi-local-access-'));
  const reservation=createServer();reservation.listen(0,'127.0.0.1');await once(reservation,'listening');
  const port=(reservation.address() as {port:number}).port;await new Promise<void>(done=>reservation.close(()=>done()));
- for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])symlinkSync(resolve(name),join(directory,name),'dir');
+ for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])symlinkSync(resolve(name),join(directory,name),process.platform==='win32'?'junction':'dir');
  writeFileSync(join(directory,'package.json'),'{"type":"module"}');
  writeFileSync(join(directory,'bootstrap.mjs'),`
   import dgram from 'node:dgram';
@@ -63,6 +63,7 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
   await import(${JSON.stringify(new URL('../apps/server/index.ts',import.meta.url).href)});
  `);
  const child=spawn(process.execPath,['--import','tsx','bootstrap.mjs'],{cwd:directory,env:{...process.env,BAMBI_PORT:String(port),BAMBI_DATABASE:':memory:',BAMBI_CLOUD_URL:'',BAMBI_CLOUD_API_KEY:'',BAMBI_TTS_TOKEN_FILE:join(directory,'absent.token')},stdio:['ignore','pipe','pipe']});
+ const childClosed=once(child,'close');
  let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);
  const probe=(path:string,headers:IncomingHttpHeaders={},method='GET',body?:string,upgrade=false)=>new Promise<{status:number;headers:IncomingHttpHeaders}>((done,reject)=>{
   const call=request({host:'127.0.0.1',port,path,method,headers:{...headers,...(upgrade?{Connection:'Upgrade',Upgrade:'websocket','Sec-WebSocket-Version':'13','Sec-WebSocket-Key':randomBytes(16).toString('base64')}:{})}},res=>{res.resume();done({status:res.statusCode!,headers:res.headers});});
@@ -105,8 +106,8 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
   // Stop remains available to the app and the native lifecycle script.
   assert.equal((await probe('/api/panic',{},'POST')).status,200);
  }finally{
-  const exited=once(child,'exit');child.kill('SIGTERM');
-  const timer=setTimeout(()=>child.kill('SIGKILL'),2000);
-  try{if(child.exitCode===null)await exited;}finally{clearTimeout(timer);rmSync(directory,{recursive:true,force:true});}
+  child.kill('SIGTERM');
+  const timer=setTimeout(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');},2000);
+  try{await childClosed;}finally{clearTimeout(timer);rmSync(directory,{recursive:true,force:true,maxRetries:10,retryDelay:100});}
  }
 });

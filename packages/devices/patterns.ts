@@ -3,7 +3,7 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import type {DeviceCommand} from './commands';
-export interface ActuatorState{level:number;pattern:DeviceCommand['pattern'];started:number;bpm?:number;expires?:number;fade?:{from:number;to:number;seconds:number}}
+export interface ActuatorState{level:number;pattern:DeviceCommand['pattern'];started:number;bpm?:number;expires?:number;fade?:{from:number;to:number;seconds:number};transition?:{from:number;seconds:number;started:number}}
 export const offState=(now=0):ActuatorState=>({level:0,pattern:'constant',started:now});
 export function actuatorValue(state:ActuatorState,now:number){
  if(state.expires!==undefined&&now>=state.expires)return 0;
@@ -12,7 +12,8 @@ export function actuatorValue(state:ActuatorState,now:number){
  const cycle=(seconds:number)=>(1-Math.cos(2*Math.PI*t/seconds))/2;
  const period=state.bpm?60/state.bpm:1.2;
  const multiplier=state.pattern==='breathe'?.1+.9*cycle(6):state.pattern==='wave'?.15+.85*cycle(4):state.pattern==='pulse'?(t%period<(state.bpm?Math.min(.3,period/2):.6)?1:0):state.pattern==='strobe'?(t%.5<.25?1:0):state.pattern==='ramp_up'?Math.min(1,t/10):1;
- return Math.max(0,Math.min(1,state.level*multiplier));
+ const target=state.level*multiplier,blend=state.transition?Math.max(0,Math.min(1,(now-state.transition.started)/state.transition.seconds)):1;
+ return Math.max(0,Math.min(1,state.transition?state.transition.from+(target-state.transition.from)*blend:target));
 }
 export function applyDeviceCommand(state:ActuatorState,command:DeviceCommand,now:number,defaultLevel=.3):ActuatorState{
  if(command.operation==='off')return offState(now);

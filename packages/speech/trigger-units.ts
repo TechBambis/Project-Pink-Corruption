@@ -50,7 +50,7 @@ export class TriggerSentenceChunker {
  push(text:string){
   this.buffer+=text;const out:string[]=[];
   while(true){
-   const sentence=/^([\s\S]*?[.!?。！？](?:["”']?)(?:\s|$))/.exec(this.buffer);
+   const sentence=/^([\s\S]*?[.!?。！？](?:["”']?)[*_`]*(?:\s|$))/.exec(this.buffer);
    if(sentence){
     // Conversation receives visible text without playback markers; no cue
     // lookahead is needed before speaking the first completed sentence.

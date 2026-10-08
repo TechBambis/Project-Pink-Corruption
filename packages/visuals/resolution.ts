@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
-export const visualRenderLimit={width:1920,height:1080} as const;
-/** Preserve aspect ratio within a 1080p budget, including fullscreen and high-DPI. */
+export const visualRenderLimit={width:2560,height:1440} as const;
+/** Preserve aspect ratio within a 1440p budget. WebGL uses quality=1;
+ * the CPU fallback may reduce supersampling conservatively. */
 export function visualResolution(width:number,height:number,dpr:number,quality=1,maxDimension=8192){
  const w=Math.max(1,width),h=Math.max(1,height);
  const density=Math.max(1,Math.min(2,dpr));

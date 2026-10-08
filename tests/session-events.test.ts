@@ -84,6 +84,7 @@ test('spoken Blink is engine-owned cached text, word aligned, with no LLM genera
   const dependencies={knownTriggers:[],generate:async()=>{generated++;return 'Unexpected.';},render:async(text:string)=>{assert.equal(text,'Blink');return{bytes:wav(750),words:[{word:'Blink',atMs:80}]};}};
   const rendered=await renderEventSpeech(input,dependencies,new AbortController().signal);
   assert.equal(generated,0);assert.equal(rendered.textAttempts,0);assert.equal(rendered.cueOffsetMs,80);assert.equal(slot.speech.cueAtMs,250);
+  assert.deepEqual(rendered.words,[{word:'Blink',atMs:80}]);
   await assert.rejects(renderEventSpeech(input,{...dependencies,render:async()=>({bytes:wav(750),words:[]})},new AbortController().signal),/word timing/);
 });
 test('moving motif begins with its authored narration window and is deterministic across seek and pause', () => {
@@ -153,6 +154,7 @@ test('required triggers are once in the final clause, word-timed, and aligned to
   const slot = compileEvent(e).speech[0]; const request = EventSpeechRequestSchema.parse({event:e,payloadId:slot.payloadId,allowedTriggers:['Bambi Sleep']});
   const response = await renderEventSpeech(request, { generate: async () => 'Bambi Sleep.', render: async () => ({bytes:wav(2000),words:[{word:'Bambi',atMs:0},{word:'Sleep',atMs:900}]}), knownTriggers:['Bambi','Bambi Sleep','Other Cue'] },new AbortController().signal);
   assert.equal(response.triggerOffsetMs, 0); assert.equal(slot.speech.triggerAtMs, 1500);
+  assert.deepEqual(response.words,[{word:'Bambi',atMs:0},{word:'Sleep',atMs:900}]);
   assert.throws(() => validateEventText('Bambi Sleep. Bambi Sleep.', e, 'Bambi Sleep'), /once/);
   assert.throws(() => validateEventText('Other Cue. Bambi Sleep.', e, 'Bambi Sleep', ['Other Cue']), /Unscheduled/);
   await assert.rejects(renderEventSpeech(request,{generate:async()=>'Bambi Sleep.',render:async()=>({bytes:wav(1000),words:[{word:'Bambi',atMs:NaN},{word:'Sleep',atMs:500}]}),knownTriggers:[]},new AbortController().signal), /word-timed/);
@@ -275,6 +277,27 @@ test('Pause freezes event state and delivery; seeking cannot replay expired slot
   assert.equal(r.tick(e.atMs + 10000).snapshot.label,'narrow:0'); assert.deepEqual(r.tick(e.atMs + 10000).speech,[]);
   r.resume(); r.seek(e.atMs + 10000); assert.deepEqual(r.tick(e.atMs + 10000).speech,[]); assert.deepEqual(r.tick(e.atMs + 10000).haptics,[]);
   assert.equal(r.tick(e.atMs + 17000).snapshot.label,'narrow:1');
+});
+
+test('speech haptics use compiled word times in every fractionation and motif recall, including each Blink',()=>{
+ const p=withHapticMappings(withProgramTriggers(program(),{deepening:['test cue'],conditioning:['test cue'],anchor:['test cue']}));
+ let recalls=0,blinkCues=0;
+ for(const e of p.events){
+  const compiled=compileEvent(e);
+  for(const slot of compiled.speech.filter(s=>s.speech.requiredTrigger||s.speech.fixedCue)){
+   const actions=e.haptics.filter(a=>a.speechSlotId===slot.id);assert.equal(actions.length,1);
+   assert.equal(e.atMs+actions[0].offsetMs,slot.atMs+(slot.speech.triggerAtMs??slot.speech.cueAtMs!));
+   if(e.type==='motif_recall')recalls++;
+   if(slot.speech.fixedCue)blinkCues++;
+  }
+ }
+ assert.ok(recalls>0);assert.equal(blinkCues,2);
+ const fraction=p.events.find(e=>e.fractionation&&e.phase==='deepening')!;
+ assert.equal(fraction.haptics[0].offsetMs,2500,'Includes the transition before speech and the cue inside speech');
+ const runtime=new EventRuntime(p);runtime.tick(fraction.atMs);runtime.tick(fraction.atMs+1000);
+ assert.deepEqual(runtime.tick(fraction.atMs+2500).haptics,[],'A timer cannot fire a cue when narration was not played');
+ const invalid=structuredClone(fraction);invalid.haptics[0].speechSlotId='missing';assert.throws(()=>compileEvent(invalid),/Speech-bound/);
+ invalid.haptics[0].speechSlotId=fraction.haptics[0].speechSlotId;invalid.haptics[0].offsetMs=0;assert.throws(()=>compileEvent(invalid),/Speech-bound/);
 });
 test('final return withdraws layers before completion and clears all temporary mechanism flags', () => {
   const p = withHapticMappings(program()), r = new EventRuntime(p), e = p.events.at(-1)!;

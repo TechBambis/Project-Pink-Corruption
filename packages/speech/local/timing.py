@@ -4,7 +4,7 @@
 
 import re
 from dataclasses import dataclass
-from .spoken import strip_speech_controls, strip_vocal_fillers
+from .spoken import spoken_input
 
 DEFAULT_PAUSES = {"normal": 350, "short": 550, "medium": 900, "long": 1500, "transition": 2500}
 
@@ -19,7 +19,7 @@ def phrases(text, pauses=None, max_chars=180):
     # Strip complete cues before splitting punctuation (including decimal levels).
     text = re.sub(r'\[SFX:PAUSE_(5|10)\]', lambda match: f'[pause:{int(match[1])*1000}]', text, flags=re.IGNORECASE)
     text = re.sub(r'\[PAUSE\]', '[pause:10000]', text, flags=re.IGNORECASE)
-    text = strip_vocal_fillers(strip_speech_controls(text))
+    text = spoken_input(text)
     result = []
     for part in re.split(r'(\[pause:(?:\d+|normal|short|medium|long|transition)\])', text):
         marker = re.fullmatch(r'\[pause:(\d+|normal|short|medium|long|transition)\]', part)

@@ -17,6 +17,11 @@ test('script normalization preserves words and converts actual pauses without sp
  assert.ok(units.every(u=>!u.text.includes('[SFX:')));
  assert.deepEqual(scriptUnits('[SFX:PAUSE_10]'),[{text:'',cuesBefore:['PAUSE_10'],control:true}]);
 });
+test('speech strips emphasis and code delimiters while retaining words, identifiers and control cues',()=>{
+ assert.equal(normalizeScript('*one* **two** ***three*** _four_ __five__ `six` af_heart'), 'one two three four five six af_heart');
+ assert.deepEqual(scriptUnits('*hums softly* *Ready.* [breath:in] __In.__').map(u=>({text:u.text,breath:u.breath})),[{text:'Ready.',breath:undefined},{text:'In.',breath:{direction:'in',durationMs:4000}}]);
+ assert.deepEqual(scriptUnits('*** ` __'),[]);
+});
 
 test('automatic trigger groups deduplicate explicit prefix and effects while retaining the trailing pause',()=>{
  for(const [trigger,effects] of [['BAMBI POP','INFLATE,SQUEAK,POP'],['IQ LOCK','WIPERS'],['SNAP AND FORGET','BELL']]){

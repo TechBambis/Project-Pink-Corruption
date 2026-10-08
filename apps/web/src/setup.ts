@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
+import {initModelSetup} from './model-setup';
+import {initPrivacy} from './privacy';
+
 const $=(id:string)=>document.getElementById(id)!;
 const gib=(bytes:number|null|undefined)=>typeof bytes==='number'&&Number.isFinite(bytes)?`${(bytes/2**30).toFixed(1)} GiB`:'unknown';
 function renderRecommendation(data:any){
@@ -14,10 +17,10 @@ function renderRecommendation(data:any){
 }
 async function refresh(){
  try{const response=await fetch('/api/health');if(!response.ok)throw Error('Server unavailable');const data=await response.json();$('readiness').replaceChildren();
-  const items=[['Local AI',data.ollama||data.llamaModels?.length],['Cloud AI',data.cloud?.ready],['Voice',data.kokoro],['Microphone transcription',data.whisper],['Saved conversations',data.database]];
+  const items=[['Local AI',data.ollama||data.llamaModels?.length],['Cloud AI',data.cloud?.ready],['Voice',data.kokoro],['Microphone transcription',data.whisper||data.streamingSpeech],['Saved conversations',data.database]];
   for(const [label,ready] of items){const row=document.createElement('p');row.textContent=`${label}: ${ready?'ready':'not available'}`;$('readiness').append(row);}
-  renderRecommendation(data);
-  $('cloud-note').textContent=data.cloud?.configured?(data.cloud.ready?'Cloud model found. Select Cydonia in the main app.':'Cloud is configured but unavailable. Check the GPU task, API URL and served model ID.'):'Cloud is optional. No cloud endpoint has been configured.';
+  if(data.modelRecommendation)renderRecommendation(data);
+  $('cloud-note').textContent=data.cloud?.configured?(data.cloud.ready?`Remote model found. Select ${data.cloud.model || 'Remote AI'} in the main app.`:'Remote AI is configured but unavailable. Check the inference server, API URL and served model ID.'):'Cloud is optional. No cloud endpoint has been configured.';
   const report=await(await fetch('/api/diagnostics/replies')).json();const complete=report.replies.filter((reply:any)=>reply.stages['playback-start']!==undefined);const sorted=complete.map((reply:any)=>reply.stages['playback-start']).sort((a:number,b:number)=>a-b);
   $('diagnostics').textContent=sorted.length?`${sorted.length} playback samples. Server request to browser playback: p50 ${Math.round(sorted[Math.floor((sorted.length-1)*.5)])} ms; p95 ${Math.round(sorted[Math.ceil((sorted.length-1)*.95)])} ms.`:'No playback timing samples yet. Start a spoken conversation to record one.';
  }catch{$('readiness').textContent='The local server is unavailable. Start the app and check again.';}
@@ -25,3 +28,11 @@ async function refresh(){
 $('refresh').onclick=()=>void refresh();
 $('download-diagnostics').onclick=()=>{void fetch('/api/diagnostics/replies').then(r=>r.json()).then(report=>{const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='bambi-timing-report.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});};
 void refresh();
+
+void (async()=>{
+ await initPrivacy();
+ const capabilities=await fetch('/api/desktop/capabilities').then(r=>r.ok?r.json():null);
+ if(capabilities){$('development-options').hidden=true;$('development-setup').hidden=true;}
+ const cleanup=await initModelSetup($('local-model-setup'),{finish:()=>location.assign('/'),prepared:()=>void refresh()});
+ window.addEventListener('pagehide',cleanup,{once:true});
+})().catch(error=>{$('local-model-setup').textContent='Model setup could not load. '+String(error);});

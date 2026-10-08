@@ -5,6 +5,7 @@
 import { SpiralAnimation } from './stable-renderer';
 import { clamp, SPIRAL_COMPLEXITY_MAX } from '../safety/actions';
 import type { SpiralStyle } from './immersive';
+import { qualityFragment } from './shader-quality';
 
 export interface StableSpiralSettings {
   speed: number; complexity: number; alpha: number; colorA: string; colorB: string;
@@ -23,7 +24,7 @@ void main(){
  float r=length(p),a=atan(p.y,p.x),phase=2.*a+r*pitch-rotation*2.;
  float wave=.5+.5*cos(phase);
  // Analytic edge width prevents thin pixel stair-steps, even near the center.
- float aa=clamp((2./max(r,.025)+pitch)*1.4/min(resolution.x,resolution.y),.008,.25);
+ float aa=pixelWidth(wave,clamp((2./max(r,.025)+pitch)*.35/min(resolution.x,resolution.y),.0003,.25));
  float ribbon=smoothstep(.38-aa,.38+aa,wave);
  vec3 tint=mix(colorA.rgb,colorB.rgb,smoothstep(.42,1.,wave));
  float shade=.48+.48*wave;
@@ -50,7 +51,7 @@ export class StableSpiral extends SpiralAnimation {
     const program = gl.createProgram()!;
     for (const [type, source] of [[gl.VERTEX_SHADER, gpuVertex], [gl.FRAGMENT_SHADER, gpuFragment]] as const) {
       const shader = gl.createShader(type)!;
-      gl.shaderSource(shader, source.replaceAll('highp', precision)); gl.compileShader(shader);
+      gl.shaderSource(shader, type === gl.FRAGMENT_SHADER ? qualityFragment(gl,source) : source.replaceAll('highp', precision)); gl.compileShader(shader);
       if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(shader) ?? 'Original spiral shader failed');
       gl.attachShader(program, shader); gl.deleteShader(shader);
     }
