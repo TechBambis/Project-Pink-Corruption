@@ -193,3 +193,6 @@ try{
  evidence.result='passed';evidence.limitations=['PCM verifies app output; no human listening or speaker/earbud certification.','Available runtime reference is recorded in environment.os and environment.kernel; a separate clean physical machine is not tested.','This initial runner covers packaging and sample only; local AI/speech/microphone integration remains pending. Microphone consent, native AI/speech, physical Mac installation, Gatekeeper, real audio devices, sleep/wake and Intel Macs are unqualified.'];
 }catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);if(current)await closeApp(current.application);process.exitCode=1;}
 finally{for(const application of [...applications])await closeApp(application);if(conflict?.listening)await new Promise(accept=>conflict.close(accept));writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));clearTimeout(watchdog);}
+// Failed Electron startup can retain a driver transport even after its child
+// exits. Reports and owned-child cleanup above precede this failure-only bound.
+if(process.exitCode)setTimeout(()=>process.exit(process.exitCode),3000);
