@@ -14,7 +14,7 @@ async function json(url:string,body?:unknown,timeout=15000,method=body===undefin
 }
 export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;selected?:(id:string)=>void;prepared?:()=>void}={}){
  root.classList.add('model-setup');
- root.innerHTML=`<p class="model-unavailable" role="note" hidden>This is the playback smoke build. It cannot download or run local AI. No model download has started. Use an AI-enabled alpha build for model setup; the player and Studio are available here.</p>
+ root.innerHTML=`<p class="model-loading" role="status">Reading your computer and model information…</p><p class="model-unavailable" role="note" hidden>This is the playback smoke build. It cannot download or run local AI. No model download has started. Use an AI-enabled alpha build for model setup; the player and Studio are available here.</p>
  <nav class="model-steps" aria-label="Local AI setup"><button type="button" data-step="0">1. Your computer</button><button type="button" data-step="1">2. Choose a model</button><button type="button" data-step="2">3. Install and start</button></nav>
  <p class="model-running" hidden></p>
  <section data-pane="0"><h2>What fits your computer?</h2><p class="model-intro">Check your hardware, choose a local model, then download only what you need. Your conversations stay on this computer.</p><dl class="model-hardware"></dl><p class="model-estimate"></p><button type="button" data-recheck>Check hardware again</button></section>
@@ -26,9 +26,10 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
  <section class="model-local" hidden><h3>Already have a model?</h3><p class="model-note">Choose a GGUF file or add a model folder, including one from another repository. Matching catalog files are copied into the app and checked before use. Your originals stay untouched. Saved folders can be checked again later.</p><div class="model-actions"><button type="button" data-file>Choose a model file</button><button type="button" data-folder>Add a model folder</button><button type="button" data-copy>Import complete model and voice folder</button></div><div class="model-sources"></div><p class="model-source-error" role="status" hidden></p></section>
  <p class="model-note">Downloads start only when you choose them. Verified files are kept for retry. You can leave setup and keep using the player; an active download continues.</p></section>
  <p class="model-error" role="alert" hidden></p><div class="model-wizard-actions"><button type="button" data-back disabled>Back</button><button type="button" data-next>Choose a model</button><button type="button" data-finish>Set up later</button></div>`;
+ for(const button of root.querySelectorAll<HTMLButtonElement>('button'))button.disabled=true;
  const el=<T extends HTMLElement=HTMLElement>(selector:string)=>root.querySelector<T>(selector)!;
  for(const [selector,id] of [['[data-download]','setup-install'],['[data-copy]','setup-copy'],['[data-prepare]','setup-prepare'],['[data-cancel]','setup-cancel'],['progress','setup-bar'],['.model-progress','setup-progress']])el(selector).id=id;
- let data!:Catalog,selected='',step=0,state:SetupState|null=null,requesting=false,requestLabel='',stopped=false,polling=false,statusLost=false;
+ let data!:Catalog,selected='',step=0,state:SetupState|null=null,requesting=false,initializing=true,requestLabel='',stopped=false,polling=false,statusLost=false;
  let sources:Source[]=[],speed=0,lastSample:{bytes:number;at:number;model:string;operation?:string;asset?:string;stage?:string}|undefined;
  const bridge=(window as any).bambiDesktop;
  function error(value:unknown){el('.model-error').textContent=String(value);el('.model-error').hidden=false;}
@@ -40,7 +41,9 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
  function chosen(){return data?.alternatives.find(model=>model.id===selected);}
  function showState(){
   if(!data||stopped)return;
-  const model=chosen(),busy=requesting||setupBusy(state),experimental=model?.qualification==='experimental',confirmed=!experimental||el<HTMLInputElement>('.model-experimental input').checked;
+  el('.model-loading').hidden=!initializing;
+  for(const button of root.querySelectorAll<HTMLButtonElement>('[data-step],[data-next],[data-access]'))button.disabled=false;el<HTMLButtonElement>('[data-back]').disabled=step===0;
+  const model=chosen(),busy=initializing||requesting||setupBusy(state),experimental=model?.qualification==='experimental',confirmed=!experimental||el<HTMLInputElement>('.model-experimental input').checked;
   const possible=!!model?.canDownload&&model.promptCompatible!==false&&model.memoryFit==='fits'&&model.runtime!=='platform-pending'&&data.downloadsAvailable;
   const current=state?.model===selected?state:null;
   const installedPossible=!!model?.installed&&model.promptCompatible!==false&&model.memoryFit==='fits'&&model.runtime!=='platform-pending';
@@ -53,7 +56,7 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
   const use=el<HTMLButtonElement>('[data-use]');use.hidden=data.desktop||!model?.installed;use.disabled=busy||!installedPossible||!confirmed;
   el<HTMLButtonElement>('[data-cancel]').disabled=!setupBusy(state);
   el<HTMLButtonElement>('[data-recheck]').disabled=busy;
-  el<HTMLButtonElement>('[data-finish]').disabled=requesting;
+  el<HTMLButtonElement>('[data-finish]').disabled=initializing||requesting;
   el('.model-local').hidden=!data.desktop||!data.downloadsAvailable||!(bridge?.chooseModelSource||bridge?.copyModelData);
   el('[data-file]').hidden=el('[data-folder]').hidden=!bridge?.chooseModelSource;
   el('[data-copy]').hidden=!bridge?.copyModelData;
@@ -135,7 +138,7 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
  el('[data-back]').onclick=()=>pane(Math.max(0,step-1));el('[data-next]').onclick=()=>pane(Math.min(2,step+1));
  for(const button of root.querySelectorAll<HTMLElement>('[data-step]'))button.onclick=()=>pane(Number(button.dataset.step));
  el('[data-finish]').onclick=()=>void action('Saving your setup choice',async()=>{await json('/api/models/onboarding',{});options.finish?.();});
- await reload();await loadSources();const initial=data.setup;pane(setupBusy(initial)||initial?.verified||initial?.phase==='partial'?2:0);
+ await reload();await loadSources();initializing=false;const initial=data.setup;pane(setupBusy(initial)||initial?.verified||initial?.phase==='partial'?2:0);
  const poll=async()=>{if(stopped||polling)return;polling=true;try{await readState();}catch{if(!stopped){statusLost=true;speed=0;showState();}}finally{polling=false;}};
  const timer=setInterval(poll,1000),visible=()=>{if(!document.hidden)void poll();};document.addEventListener('visibilitychange',visible);
  return ()=>{stopped=true;clearInterval(timer);window.removeEventListener('bambi-access-changed',accessChanged);document.removeEventListener('visibilitychange',visible);};
@@ -151,6 +154,6 @@ export async function initModelOnboarding(options:{selected:(id:string)=>void;pr
  dialog.addEventListener('cancel',event=>{event.preventDefault();if(!opening)void dismiss();});
  document.getElementById('local-models-open')?.addEventListener('click',()=>void open());
  const state=await json('/api/models/onboarding');
- const catalog:Catalog=await json('/api/models/catalog',undefined,20000);
- if(catalog.desktop&&catalog.downloadsAvailable&&!state.done)await open();
+ const capabilities=await fetch('/api/desktop/capabilities',{cache:'no-store',signal:AbortSignal.timeout(15000)}).then(response=>response.ok?response.json():null).catch(()=>null);
+ if(capabilities?.alpha&&!state.done)await open();
 }
