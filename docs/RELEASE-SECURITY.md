@@ -56,11 +56,11 @@ git status --short
 gh api user --jq '{login: .login, id: .id}'
 # Confirm there are no intended uncommitted release changes and the ID is 337824705.
 # This example assumes package.json and package-lock.json both declare 0.1.0.
-git tag -a v0.1.0-beta.12 -m "v0.1.0-beta.12"
-git push origin v0.1.0-beta.12
+git tag -a v0.1.0-beta.13 -m "v0.1.0-beta.13"
+git push origin v0.1.0-beta.13
 ```
 
-Use a fresh tag. The first end-to-end pipeline attempts already use beta.1 through beta.11; do not reuse or move those tags. To release a different base version, update and commit `package.json` and both lockfile root version fields first, following the existing versioning policy; never update a lockfile in the release job. `beta`, `rc` and `smoke` tags automatically create prereleases and do not become the latest stable release. A stable tag is handled as a regular release, but the current workflow still explicitly labels its packages **smoke**. Do not present them as a feature-complete application. General AI-alpha publication requires a separate reviewed scope change.
+Use a fresh tag. The first end-to-end pipeline attempts already use beta.1 through beta.12; do not reuse or move those tags. To release a different base version, update and commit `package.json` and both lockfile root version fields first, following the existing versioning policy; never update a lockfile in the release job. `beta`, `rc` and `smoke` tags automatically create prereleases and do not become the latest stable release. A stable tag is handled as a regular release, but the current workflow still explicitly labels its packages **smoke**. Do not present them as a feature-complete application. General AI-alpha publication requires a separate reviewed scope change.
 
 If any job fails, inspect its logs. If upload verification fails after draft creation, the draft remains unpublished. Review and remove that failed draft explicitly before retrying; this pipeline refuses to replace existing release assets. Never silently move a published version tag. With immutability enabled, publish a new version to correct a release.
 
@@ -73,7 +73,7 @@ Replace `OWNER/REPO` with the actual repository from the release page / `BUILD-I
 Linux example, using a recent GitHub CLI:
 
 ```sh
-gh release download v0.1.0-beta.11 --repo TechBambis/Project-Pink-Corruption --dir bambi-release
+gh release download v0.1.0-beta.12 --repo TechBambis/Project-Pink-Corruption --dir bambi-release
 cd bambi-release
 sha256sum -c SHA256SUMS
 ```
@@ -81,24 +81,24 @@ sha256sum -c SHA256SUMS
 macOS provides `shasum -a 256 -c SHA256SUMS`. Windows PowerShell can verify an individual file with:
 
 ```powershell
-Get-FileHash .\bambi-local-0.1.0-beta.11-x64.exe -Algorithm SHA256
+Get-FileHash .\bambi-local-0.1.0-beta.12-x64.exe -Algorithm SHA256
 # Compare with its exact entry in SHA256SUMS.
 ```
 
 When release immutability is enabled:
 
 ```sh
-gh release verify v0.1.0-beta.11 --repo TechBambis/Project-Pink-Corruption
-gh release verify-asset v0.1.0-beta.11 ./bambi-local-0.1.0-beta.11-x86_64.AppImage --repo TechBambis/Project-Pink-Corruption
+gh release verify v0.1.0-beta.12 --repo TechBambis/Project-Pink-Corruption
+gh release verify-asset v0.1.0-beta.12 ./bambi-local-0.1.0-beta.12-x86_64.AppImage --repo TechBambis/Project-Pink-Corruption
 ```
 
 For a **public** release with an Actions build attestation:
 
 ```sh
-gh attestation verify ./bambi-local-0.1.0-beta.11-x86_64.AppImage \
+gh attestation verify ./bambi-local-0.1.0-beta.12-x86_64.AppImage \
   --repo TechBambis/Project-Pink-Corruption \
   --signer-workflow TechBambis/Project-Pink-Corruption/.github/workflows/release.yml \
-  --source-ref refs/tags/v0.1.0-beta.11 \
+  --source-ref refs/tags/v0.1.0-beta.12 \
   --source-digest FULL_EXPECTED_COMMIT_SHA
 ```
 

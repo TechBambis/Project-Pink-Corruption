@@ -60,7 +60,23 @@ try{
  // Model warming is covered separately; this check never invokes an installed local model.
  let warmCalls=0,failWarm=false;const warmRequests=[];
  await page.route('**/api/warm',route=>{warmCalls++;warmRequests.push({settings:route.request().postData(),failed:failWarm});return route.fulfill(failWarm?{status:503,json:{error:'Fixture preparation failed'}}:{json:{ok:true}});});
- if(!realStreaming)await page.routeWebSocket('**/ws/speech',socket=>{socket.send(JSON.stringify({type:'ready'}));socket.onMessage(raw=>{if(typeof raw!=='string')return;const command=JSON.parse(raw);if(command.type==='start')socket.send(JSON.stringify({type:'partial',id:command.id,text:'My live provisional words'}));if(command.type==='finish')socket.send(JSON.stringify({type:'final',id:command.id,text:'My final microphone words because'}));});});
+ if(!realStreaming){
+  // Both health transports must describe the same synthetic recognizers from
+  // the first navigation. Replacing one HTTP route mid-test leaves earlier
+  // refreshes in flight, which can overwrite the streaming capability later.
+  const recognitionHealth=data=>({...data,whisper:true,streamingSpeech:true});
+  await page.route('**/api/health',async route=>{
+   const response=await route.fetch();await route.fulfill({response,json:recognitionHealth(await response.json())});
+  });
+  await page.routeWebSocket('**/ws',socket=>{
+   const server=socket.connectToServer();
+   server.onMessage(raw=>{
+    const data=JSON.parse(String(raw));
+    socket.send(data.type==='health'?JSON.stringify({...data,data:recognitionHealth(data.data)}):raw);
+   });
+  });
+  await page.routeWebSocket('**/ws/speech',socket=>{socket.send(JSON.stringify({type:'ready'}));socket.onMessage(raw=>{if(typeof raw!=='string')return;const command=JSON.parse(raw);if(command.type==='start')socket.send(JSON.stringify({type:'partial',id:command.id,text:'My live provisional words'}));if(command.type==='finish')socket.send(JSON.stringify({type:'final',id:command.id,text:'My final microphone words because'}));});});
+ }
  await page.addInitScript(()=>{
   const OriginalWorker=window.Worker;window.fixtureWorkers=[];window.fixtureWorkerInstances=[];
   window.Worker=class extends OriginalWorker {
@@ -205,10 +221,11 @@ try{
  },wav.toString('base64'));
  assert.equal(immediatelyStopped,true);
  // Exercise capture, the production worker client and Mute with a generated silent MediaStream.
- await page.route('**/api/health',route=>route.fulfill({json:{...health,whisper:true}}));
+ if(realStreaming)await page.route('**/api/health',route=>route.fulfill({json:{...health,whisper:true}}));
  if(realStreaming)await page.route('**/fixture-streaming.wav',route=>route.fulfill({contentType:'audio/wav',body:readFileSync(streamingFixture)}));
  await page.evaluate(realStreaming=>{
   window.fixtureMicContexts=[];window.fixtureMicStreams=[];
+  if(!realStreaming){document.getElementById('mic-recognizer').value='whisper';document.getElementById('mic-recognizer').dispatchEvent(new Event('input',{bubbles:true}));}
   navigator.mediaDevices.getUserMedia=async()=>{
    const context=new AudioContext(),destination=context.createMediaStreamDestination(),silence=context.createConstantSource();
    silence.offset.value=0;silence.connect(destination);silence.start();await context.resume();
@@ -227,7 +244,6 @@ try{
   assert.equal(await page.locator('#chat-input').inputValue(),'','Recognized microphone words are a readout, not a user draft');
   await page.waitForFunction(()=>window.fixtureRequests.some(request=>request.text==='My recognized microphone words because'));
   // Isolate recognition transport while exercising the production partial/final UI hooks.
-  await page.route('**/api/health',route=>route.fulfill({json:{...health,whisper:true,streamingSpeech:true}}));
   await page.evaluate(health=>{window.bambi.hardStop(false);window.fixtureSocket.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({type:'health',data:{...health,whisper:true,streamingSpeech:true}})}));document.getElementById('mic-recognizer').value='streaming';document.getElementById('mic-recognizer').dispatchEvent(new Event('input',{bubbles:true}));},health);
   await page.locator('#stage').hover();await page.click('#mic');
   try{await page.waitForFunction(()=>document.getElementById('mic').dataset.captureState==='ready'&&!window.fixtureWorkerInstances.at(-1).fixture.terminated);}catch(error){console.error(await page.evaluate(()=>({mic:document.getElementById('mic').dataset,notice:document.getElementById('notice').textContent,speech:window.fixtureSpeechResults,workers:window.fixtureWorkers})));throw error;}
