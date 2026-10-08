@@ -24,9 +24,18 @@ const evidence={testedAt:new Date().toISOString(),executable,output,data,launchP
 const record=(name,detail={})=>{evidence.checks.push({name,...detail});console.log('PASS',name);writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');};
 const delay=ms=>new Promise(accept=>setTimeout(accept,ms));
 const alive=running;
+const applications=new Set();
+async function launchApp(options){const application=await electron.launch(options);applications.add(application);return application;}
+async function closeApp(application){
+ if(!application)return;
+ const child=application.process();let timer;
+ try{await Promise.race([application.close().catch(()=>{}),new Promise(done=>{timer=setTimeout(done,4000);})]);}
+ finally{clearTimeout(timer);if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');applications.delete(application);}
+}
+
 async function stopped(pids){for(let i=0;i<60;i++){if(pids.every(pid=>!alive(pid)))return;await delay(100);}assert.fail('Owned processes survived shutdown: '+pids.filter(alive));}
 async function launch(port=16969){
- const launchStart=performance.now();const application=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,`--bambi-port=${port}`],cwd:output,env:environment,timeout:30000});
+ const launchStart=performance.now();const application=await launchApp({executablePath:executable,args:[`--bambi-user-data=${data}`,`--bambi-port=${port}`],cwd:output,env:environment,timeout:30000});
  const page=await application.firstWindow();page.on('pageerror',error=>evidence.errors.push(String(error)));
  await page.waitForSelector('#offline-sample',{state:'visible',timeout:30000});
 
@@ -46,6 +55,16 @@ async function launch(port=16969){
  return {application,page,ownership,supervisor,backend,startupMs:performance.now()-launchStart,pids:[supervisor.pid,backend.pid]};
 }
 let current,conflict,blocked,blockedPid;
+// A wedged automation connection must still leave a failed report and release
+// the Electron lease. Keep a separate bound from the workflow's billing cap.
+const watchdog=setTimeout(()=>{
+ evidence.result='failed';evidence.failure??='Received-app acceptance exceeded its six-minute deadline.';
+ writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');
+ console.error(evidence.failure);
+ for(const application of applications){const child=application.process();if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');}
+ // The supervisor gets the closed Electron IPC lease and cleans its group.
+ setTimeout(()=>process.exit(1),10000);
+},6*60*1000);
 try{
  // Inspect the extracted finished package, including app.asar and source archive.
  const require=createRequire(import.meta.url),asar=require('@electron/asar');const extracted=join(output,'shell-inspection');asar.extractAll(join(resources,'app.asar'),extracted);
@@ -152,25 +171,25 @@ try{
  await page.locator('#preset-save').click();await page.locator('#settings-file-name').fill('Mac smoke preset');await page.locator('#settings-transfer-confirm').click();await page.locator('#settings-transfer-dialog').waitFor({state:'hidden'});
  await page.waitForFunction(async()=>(await(await fetch('/api/settings/presets')).json()).some(p=>p.name==='Mac smoke preset'));
  record('packaged-settings-save-portable-export-import-and-named-preset');
- await application.evaluate(({app})=>app.quit());await stopped(current.pids);await application.close().catch(()=>{});record('ordinary-quit-cleans-owned-services');
+ await application.evaluate(({app})=>app.quit());await stopped(current.pids);await closeApp(application);record('ordinary-quit-cleans-owned-services');
  current=await launch();assert.equal(await current.page.evaluate(async()=>(await(await fetch('/api/preferences')).json())['bambi-name']),'Smoke persistence ü');record('reopen-retains-preferences');
- const second=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,'--bambi-port=16969'],cwd:output,env:environment,timeout:15000}).catch(()=>null);
- if(second){await delay(500);await second.close().catch(()=>{});}
+ const second=await launchApp({executablePath:executable,args:[`--bambi-user-data=${data}`,'--bambi-port=16969'],cwd:output,env:environment,timeout:15000}).catch(()=>null);
+ if(second){await delay(500);await closeApp(second);}
  assert(alive(current.backend.pid));assert.equal(await current.application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().length),1);record('second-launch-preserves-single-owner');
- process.kill(current.ownership.pid,'SIGKILL');await stopped(current.pids);await current.application.close().catch(()=>{});record('forced-electron-termination-cleans-owned-services');
- current=await launch();await current.application.evaluate(({dialog})=>{dialog.showErrorBox=(title,content)=>console.error('Expected backend failure:',title,content);});process.kill(current.backend.pid,'SIGKILL');await stopped(current.pids);await current.application.close().catch(()=>{});record('killed-backend-cleans-supervisor');
- current=await launch();process.kill(current.supervisor.pid,'SIGSTOP');process.kill(current.backend.pid,'SIGSTOP');const hungQuit=performance.now();await current.application.evaluate(({app})=>app.quit());await stopped(current.pids);await current.application.close().catch(()=>{});record('hung-supervisor-quit-is-bounded',{ms:performance.now()-hungQuit});
- current=await launch();await current.application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());await stopped(current.pids);await current.application.close().catch(()=>{});record('window-close-quits-and-reopen-after-failure');
+ process.kill(current.ownership.pid,'SIGKILL');await stopped(current.pids);await closeApp(current.application);record('forced-electron-termination-cleans-owned-services');
+ current=await launch();await current.application.evaluate(({dialog})=>{dialog.showErrorBox=(title,content)=>console.error('Expected backend failure:',title,content);});process.kill(current.backend.pid,'SIGKILL');await stopped(current.pids);await closeApp(current.application);record('killed-backend-cleans-supervisor');
+ current=await launch();process.kill(current.supervisor.pid,'SIGSTOP');process.kill(current.backend.pid,'SIGSTOP');const hungQuit=performance.now();await current.application.evaluate(({app})=>app.quit());await stopped(current.pids);await closeApp(current.application);record('hung-supervisor-quit-is-bounded',{ms:performance.now()-hungQuit});
+ current=await launch();await current.application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].close());await stopped(current.pids);await closeApp(current.application);record('window-close-quits-and-reopen-after-failure');
  conflict=createServer((_req,res)=>res.end('unrelated service'));await new Promise((accept,reject)=>conflict.once('error',reject).listen(16969,'127.0.0.1',accept));
- blocked=await electron.launch({executablePath:executable,args:[`--bambi-user-data=${data}`,'--bambi-port=16969'],cwd:output,env:environment,timeout:15000});
+ blocked=await launchApp({executablePath:executable,args:[`--bambi-user-data=${data}`,'--bambi-port=16969'],cwd:output,env:environment,timeout:15000});
  blockedPid=blocked.process().pid;
  await blocked.evaluate(({app,dialog})=>{global.__smokeOriginalQuit=app.quit.bind(app);app.quit=()=>{};dialog.showErrorBox=(title,content)=>{global.__smokeStartupError={title,content};};});
  let startupError;for(let attempt=0;attempt<150;attempt++){startupError=await blocked.evaluate(()=>global.__smokeStartupError);if(startupError)break;await delay(100);}
  assert(startupError?.content.includes('No unrelated process was stopped'),'Expected explicit startup failure');
  assert.equal(await blocked.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().length),0);assert.equal(await(await fetch(api)).text(),'unrelated service');
- await blocked.evaluate(()=>global.__smokeOriginalQuit());await blocked.close().catch(()=>{});await delay(2200);assert.equal(await(await fetch(api)).text(),'unrelated service');await new Promise(accept=>conflict.close(accept));record('port-conflict-does-not-reuse-or-kill-unrelated-listener',{startupError});
- current=await launch(16970);await current.page.locator('#offline-sample').click();await current.page.locator('#stage').hover();await current.page.locator('#pause').click();await current.page.waitForFunction(()=>document.querySelector('#media').currentTime>.3);await current.page.screenshot({path:join(output,'packaged-player.png')});await current.application.evaluate(({app})=>app.quit());await stopped(current.pids);await current.application.close().catch(()=>{});record('explicit-alternate-port-recovery');
+ await blocked.evaluate(()=>global.__smokeOriginalQuit());await closeApp(blocked);await delay(2200);assert.equal(await(await fetch(api)).text(),'unrelated service');await new Promise(accept=>conflict.close(accept));record('port-conflict-does-not-reuse-or-kill-unrelated-listener',{startupError});
+ current=await launch(16970);await current.page.locator('#offline-sample').click();await current.page.locator('#stage').hover();await current.page.locator('#pause').click();await current.page.waitForFunction(()=>document.querySelector('#media').currentTime>.3);await current.page.screenshot({path:join(output,'packaged-player.png')});await current.application.evaluate(({app})=>app.quit());await stopped(current.pids);await closeApp(current.application);record('explicit-alternate-port-recovery');
  for(const entry of before)assert.equal(hash(readFileSync(entry.path)),entry.sha,'Immutable resource changed: '+entry.path);record('resources-unchanged-and-private-user-data-separated');
  evidence.result='passed';evidence.limitations=['PCM verifies app output; no human listening or speaker/earbud certification.','Available runtime reference is recorded in environment.os and environment.kernel; a separate clean physical machine is not tested.','This initial runner covers packaging and sample only; local AI/speech/microphone integration remains pending. Microphone consent, native AI/speech, physical Mac installation, Gatekeeper, real audio devices, sleep/wake and Intel Macs are unqualified.'];
-}catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);if(current)await current.application.close().catch(()=>{});process.exitCode=1;}
-finally{if(blockedPid&&alive(blockedPid)){process.kill(blockedPid,'SIGKILL');await blocked.close().catch(()=>{});}if(conflict?.listening)await new Promise(accept=>conflict.close(accept));writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));}
+}catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);if(current)await closeApp(current.application);process.exitCode=1;}
+finally{for(const application of [...applications])await closeApp(application);if(conflict?.listening)await new Promise(accept=>conflict.close(accept));writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));clearTimeout(watchdog);}

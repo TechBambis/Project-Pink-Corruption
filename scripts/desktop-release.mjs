@@ -15,7 +15,7 @@ const [command,...args]=process.argv.slice(2);
 const usage='prepare smoke|alpha VERSION OUTSIDE_DIRECTORY | check SNAPSHOT_SOURCE | build SNAPSHOT_SOURCE TARGET | qualify SNAPSHOT_SOURCE TARGET OUTPUT_DIRECTORY | status SNAPSHOT_SOURCE [OUTPUT_DIRECTORY ...]';
 if(!command||command==='--help'){console.log('node scripts/desktop-release.mjs '+usage);process.exit(command?0:1);}
 const json=path=>JSON.parse(readFileSync(path,'utf8'));
-const run=(root,script,arguments_,env={})=>execFileSync(process.execPath,[join(root,script),...arguments_],{cwd:root,env:{...process.env,...env},stdio:'inherit',windowsHide:true});
+const run=(root,script,arguments_,env={},options={})=>execFileSync(process.execPath,[join(root,script),...arguments_],{cwd:root,env:{...process.env,...env},stdio:'inherit',windowsHide:true,...options});
 async function checkSource(root,spec){
  const record={schema:1,version:spec.version,applicationDigest:spec.applicationDigest,sourceDigest:spec.sourceDigest,
   platform:process.platform,architecture:process.arch,testedAt:new Date().toISOString(),result:'failed'};
@@ -90,7 +90,7 @@ if(command==='prepare'){
        const installed=join(received,'Applications');mkdirSync(installed);
        execFileSync('/usr/bin/ditto',[join(received,'Bambi Local Smoke.app'),join(installed,'Bambi Local Smoke.app')],{stdio:'inherit'});
        qualification.macOS={filename:archives[0],sha256:await hashFile(archive),method:'Final ZIP extraction, copied .app installation and launch in a disposable Applications directory; downloaded quarantine and physical Mac remain recipient checks.'};
-       run(root,'scripts/desktop-macos-check.mjs',[join(installed,'Bambi Local Smoke.app/Contents/MacOS/Bambi Local Smoke')],{BAMBI_SMOKE_OUTPUT:join(directory,'qualification-macos')});
+       run(root,'scripts/desktop-macos-check.mjs',[join(installed,'Bambi Local Smoke.app/Contents/MacOS/Bambi Local Smoke')],{BAMBI_SMOKE_OUTPUT:join(directory,'qualification-macos')},{timeout:7*60*1000,killSignal:'SIGKILL'});
        gates.packaging='passed';gates.installer='passed';
       }finally{rmSync(received,{recursive:true,force:true});}
      }else if(target==='windows-x64'){
