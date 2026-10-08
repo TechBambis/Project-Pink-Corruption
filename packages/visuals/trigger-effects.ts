@@ -4,7 +4,7 @@
 
 import { clamp } from '../safety/actions';
 
-export interface TriggerEffect { flash: number; flashAlpha: number; impulse: number; impulseLevel: number; shake: number; darken?: number; flashToBlack?: number; eyeClose?: { closeMs: number; holdMs: number; openMs: number } }
+export interface TriggerEffect { flash: number; flashAlpha: number; impulse: number; impulseLevel: number; shake: number; darken?: number; flashToBlack?: number; eyeClose?: { closeMs: number; holdMs: number; openMs: number }; reset?: {outMs:number;blankMs:number;inMs:number} }
 const soft: TriggerEffect = { flash: 300, flashAlpha: .4, impulse: 200, impulseLevel: .15, shake: 0 };
 const medium: TriggerEffect = { flash: 500, flashAlpha: .7, impulse: 350, impulseLevel: .35, shake: 0, darken: 100 };
 const hard: TriggerEffect = { flash: 700, flashAlpha: 1, impulse: 500, impulseLevel: .65, shake: 3, flashToBlack: 200 };
@@ -12,6 +12,8 @@ export const TRIGGER_EFFECTS: Record<string, TriggerEffect> = {
   'SNAP': medium,
   'GOOD GIRL': soft, 'SAFE AND SECURE': soft,
   'BAMBI SLEEP': { flash: 0, flashAlpha: 0, impulse: 0, impulseLevel: 0, shake: 0, eyeClose: { closeMs: 900, holdMs: 5000, openMs: 2200 } },
+  'BAMBI RESET': {flash:0,flashAlpha:0,impulse:0,impulseLevel:0,shake:0,reset:{outMs:250,blankMs:350,inMs:700}},
+  'PINK': {flash:0,flashAlpha:0,impulse:0,impulseLevel:0,shake:0},
   'BAMBI FREEZE': medium, 'BAMBI LIMP': medium, 'BAMBI LIMB': medium,
   'DROP FOR COCK': hard, 'BAMBI CUM AND COLLAPSE': hard, 'BAMBI YOU ARE NOTHING': hard,
   'COCK ZOMBIE NOW': hard, 'ZAP COCK DRAIN OBEY': hard,
@@ -20,7 +22,7 @@ export function triggerEffectFor(name: string): TriggerEffect {
   return TRIGGER_EFFECTS[name.toUpperCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()] ?? soft;
 }
 export function strongestTriggerEffect(names: string[]): TriggerEffect {
-  return names.map(triggerEffectFor).reduce((best, effect) => effect.eyeClose ? effect : best.eyeClose ? best : effect.flashAlpha > best.flashAlpha ? effect : best, soft);
+  return names.map(triggerEffectFor).reduce((best, effect) => effect.eyeClose ? effect : best.eyeClose ? best : effect.reset ? effect : best.reset ? best : effect.flashAlpha > best.flashAlpha ? effect : best, soft);
 }
 export const emptyTriggerFrame = { flash: 0, pink: 0, black: 0, impulse: 0, x: 0, y: 0, eyeOpening: 1 };
 const ease = (value: number) => { const p=clamp(value); return p*p*(3-2*p); };
@@ -32,6 +34,7 @@ export class TriggerVisualState {
   private eye: { time: number; timing: NonNullable<TriggerEffect['eyeClose']>; immediate: boolean } | null = null;
   start(time: number, effect: TriggerEffect, reduced = false) {
     this.active = reduced ? null : { time, effect };
+    if(effect.reset)this.eye=null;
     if(effect.eyeClose)this.eye={time,timing:effect.eyeClose,immediate:reduced};
   }
   pinkPulse(time: number, reduced = false) { if(!reduced)this.pinkAt=time; }
@@ -53,6 +56,12 @@ export class TriggerVisualState {
     if (reduced) this.active=null;
     if (!this.active) return frame;
     const elapsed = (time - this.active.time) * 1000, effect = this.active.effect;
+    if(effect.reset){
+      const {outMs,blankMs,inMs}=effect.reset;
+      if(elapsed>=outMs+blankMs+inMs){this.active=null;return frame;}
+      if(elapsed<0)return frame;
+      return {...frame,black:elapsed<outMs?ease(elapsed/outMs):elapsed<outMs+blankMs?1:1-ease((elapsed-outMs-blankMs)/inMs)};
+    }
     if (elapsed < 0 || elapsed >= effect.flash + (effect.flashToBlack ?? 0)) { this.active=null; return frame; }
     const flash = elapsed < effect.flash ? effect.flashAlpha * Math.sin(Math.PI * clamp(elapsed / effect.flash)) : 0;
     const impulse = elapsed < effect.impulse ? effect.impulseLevel * Math.sin(Math.PI * clamp(elapsed / effect.impulse)) : 0;

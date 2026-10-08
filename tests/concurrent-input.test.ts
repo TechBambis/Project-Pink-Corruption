@@ -50,7 +50,7 @@ test('headphone overlapping capture and speaker protection are independent of in
  mic.configure('headphones','balanced',650,false,false);assert.equal(mic.protectedPlayback,true);
 });
 test('only explicit standalone stop commands bypass model planning',()=>{
- for(const text of ['stop','Stop everything.','Bitte stopp!','please stop talking','hör auf'])assert.ok(isStopRequest(text),text);
+ for(const text of ['stop','Stop everything.','Please stop!','please stop talking','stop the session now'])assert.ok(isStopRequest(text),text);
  for(const text of ['do not stop','When you say stop, what do you mean?','I like the word stop','Stop by the shop'])assert.equal(isStopRequest(text),false,text);
 });
 test('planner output is schema validated and context cannot become system instructions',async()=>{

@@ -11,6 +11,6 @@ export function resolveReplyIntent(text: string, promptId: string, dialogue: boo
   if (explicit === 'continuation' || (!explicit && isContinuationRequest(text))) return previousIntent === 'narration' ? 'narration' : 'conversation';
   if (explicit) return explicit;
   if (!dialogue) return 'narration';
-  if (/^(?:hello|hi|hey|hallo|good (?:evening|night))(?:\s+(?:bambi|please|sweetie))?[.!…\s]*$/i.test(text.trim())) return 'conversation';
+  if (/^(?:hello|hi|hey|good (?:evening|night))(?:\s+(?:bambi|please|sweetie))?[.!…\s]*$/i.test(text.trim())) return 'conversation';
   return isSessionNarration(text, promptId, dialogue) ? 'narration' : 'conversation';
 }

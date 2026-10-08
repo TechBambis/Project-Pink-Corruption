@@ -27,6 +27,16 @@ test('phrase-only speech estimates whole words, freezes on pause and clears on i
  const reply=new ReplyProgress();reply.register(2,'Take a moment to settle in.');reply.played(2,10000);assert.equal(reply.spoken,'Take a moment to settle in.');
 });
 
+test('display reveals at caption word onset, freezes on pause and excludes future chunks',()=>{
+ const playback=new SpeechPlayback();playback.schedule(0,'Hello there.',10,2,[{word:'Hello',start_time:.2,end_time:.8},{word:'there.',start_time:.8,end_time:2}]);playback.schedule(1,'Next sentence.',13,2);
+ assert.equal(playback.revealed(10.19),'');assert.equal(playback.revealed(10.2),'Hello');
+ assert.equal(playback.revealed(10.79),'Hello');assert.equal(playback.revealed(10.8),'Hello there.');
+ assert.equal(playback.revealed(10.8),'Hello there.');
+ playback.complete(0);assert.equal(playback.revealed(10.79),'Hello','Source completion cannot bypass output latency');
+ assert.equal(playback.revealed(12.5),'Hello there.');assert.equal(playback.revealed(13),'Hello there. Next');
+ playback.clear();assert.equal(playback.revealed(20),'');
+});
+
 test('thoughtful turn timing preserves short pauses and quicker turns still reject clicks',()=>{
  const gate=new VoiceActivity();gate.silenceMs=1100;for(let i=0;i<25;i++)gate.process(.002,20);
  for(let i=0;i<20;i++)gate.process(.08,20);for(let i=0;i<40;i++)assert.equal(gate.process(.002,20).end,false);

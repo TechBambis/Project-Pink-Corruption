@@ -4,14 +4,22 @@
 
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
+import {dirname} from 'node:path';
+import {createHash} from 'node:crypto';
 import {cleanDialogueText,visibleDialogueText} from '../ai/dialogue';
 type Turn={role:'user'|'assistant';content:string;interruption?:string|null};
 export type MemoryFact={id:number;key:string;value:string;sourceTurnId:number|null;created:string;supersedes:number|null};
-export type MemoryEpisode={id:number;role:string;content:string;created:string;interruption:string|null};
-mkdirSync('data',{recursive:true});
+export type MemoryEpisode={id:number;role:Turn['role'];content:string;created:string;interruption:string|null};
+export type MemorySource={kind:'turn'|'fact';id:number;content:string};
+export type MemoryVector=Omit<MemorySource,'content'>&{hash:string;vector:Uint8Array};
+export const memoryHash=(text:string)=>createHash('sha256').update(text).digest('hex');
 export class Store {
  db:DatabaseSync;
+ private memoryListeners=new Set<(change:'write'|'forget'|'clear')=>void>();
+ onMemoryChange(listener:(change:'write'|'forget'|'clear')=>void){this.memoryListeners.add(listener);return ()=>this.memoryListeners.delete(listener);}
+ private changed(change:'write'|'forget'|'clear'='write'){for(const listener of this.memoryListeners)listener(change);}
  constructor(path='data/bambi.sqlite',readonly profileId='default'){
+  if(path!==':memory:')mkdirSync(dirname(path),{recursive:true,mode:0o700});
   this.db=new DatabaseSync(path);this.db.exec(`PRAGMA journal_mode=WAL;CREATE TABLE IF NOT EXISTS preferences(key TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS turns(id INTEGER PRIMARY KEY,role TEXT,content TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,data TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS metrics(id INTEGER PRIMARY KEY,event TEXT,data TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,data TEXT);`);
   const columns=(this.db.prepare('PRAGMA table_info(turns)').all() as {name:string}[]).map(column=>column.name);
   if(!columns.includes('interruption'))this.db.exec('ALTER TABLE turns ADD COLUMN interruption TEXT');
@@ -22,13 +30,19 @@ export class Store {
    CREATE UNIQUE INDEX IF NOT EXISTS current_memory_fact ON memory_facts(profile_id,key) WHERE current=1;
    CREATE VIRTUAL TABLE IF NOT EXISTS turns_fts USING fts5(content,content='turns',content_rowid='id');
    CREATE TRIGGER IF NOT EXISTS turns_fts_insert AFTER INSERT ON turns BEGIN INSERT INTO turns_fts(rowid,content) VALUES(new.id,new.content); END;
-   CREATE TRIGGER IF NOT EXISTS turns_fts_delete AFTER DELETE ON turns BEGIN INSERT INTO turns_fts(turns_fts,rowid,content) VALUES('delete',old.id,old.content); END;`);
+   CREATE TRIGGER IF NOT EXISTS turns_fts_delete AFTER DELETE ON turns BEGIN INSERT INTO turns_fts(turns_fts,rowid,content) VALUES('delete',old.id,old.content); END;
+   CREATE TABLE IF NOT EXISTS memory_vectors(profile_id TEXT NOT NULL,kind TEXT NOT NULL,target_id INTEGER NOT NULL,model_id TEXT NOT NULL,content_hash TEXT NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(profile_id,kind,target_id,model_id));
+   CREATE TABLE IF NOT EXISTS forgotten_memory_sources(profile_id TEXT NOT NULL,turn_id INTEGER NOT NULL,PRIMARY KEY(profile_id,turn_id));
+   CREATE TRIGGER IF NOT EXISTS memory_turn_delete AFTER DELETE ON turns BEGIN DELETE FROM memory_vectors WHERE kind='turn' AND target_id=old.id;DELETE FROM forgotten_memory_sources WHERE turn_id=old.id;END;
+   CREATE TRIGGER IF NOT EXISTS memory_turn_update AFTER UPDATE OF content ON turns BEGIN DELETE FROM memory_vectors WHERE kind='turn' AND target_id=old.id;END;
+   CREATE TRIGGER IF NOT EXISTS memory_fact_delete AFTER DELETE ON memory_facts BEGIN DELETE FROM memory_vectors WHERE kind='fact' AND target_id=old.id;END;
+   CREATE TRIGGER IF NOT EXISTS memory_fact_update AFTER UPDATE OF key,value ON memory_facts BEGIN DELETE FROM memory_vectors WHERE kind='fact' AND target_id=old.id;END;`);
   if(!this.get('memoryIndexVersion',0)){this.db.exec("INSERT INTO turns_fts(turns_fts) VALUES('rebuild')");this.set('memoryIndexVersion',1);}
  }
  private preferenceKey(key:string){return this.profileId==='default'?key:`${this.profileId}:${key}`;}
  get(key:string,fallback:unknown=null){const r=this.db.prepare('SELECT value FROM preferences WHERE key=?').get(this.preferenceKey(key)) as {value:string}|undefined;return r?JSON.parse(r.value):fallback;}
  set(key:string,value:unknown){this.db.prepare('INSERT OR REPLACE INTO preferences VALUES(?,?)').run(this.preferenceKey(key),JSON.stringify(value));}
- addTurn(role:string,content:string,interruption:string|null=null){return Number(this.db.prepare('INSERT INTO turns(role,content,interruption,profile_id,conversation_id) VALUES(?,?,?,?,?)').run(role,content,interruption,this.profileId,String(this.get('conversationId','legacy'))).lastInsertRowid);}
+ addTurn(role:string,content:string,interruption:string|null=null){const id=Number(this.db.prepare('INSERT INTO turns(role,content,interruption,profile_id,conversation_id) VALUES(?,?,?,?,?)').run(role,content,interruption,this.profileId,String(this.get('conversationId','legacy'))).lastInsertRowid);this.changed();return id;}
  private clean(turn:Turn):Turn{const interruption=turn.interruption||(turn.content.startsWith('[Response interrupted')?'interrupted':null);return {role:turn.role,content:cleanDialogueText(turn.content),...(interruption?{interruption}:{})};}
  recent(limit=8){return (this.db.prepare('SELECT role,content,interruption FROM turns WHERE profile_id=? ORDER BY id DESC LIMIT ?').all(this.profileId,limit) as Turn[]).reverse().map(turn=>this.clean(turn)).map(turn=>({...turn,content:turn.role==='assistant'?visibleDialogueText(turn.content):turn.content})).filter(turn=>turn.content.trim()).map(({role,content})=>({role,content}));}
  conversation(limit=128){const since=Number(this.get('conversationStart',0));return (this.db.prepare('SELECT role,content,interruption FROM turns WHERE id>? AND profile_id=? AND conversation_id=? ORDER BY id DESC LIMIT ?').all(since,this.profileId,String(this.get('conversationId','legacy')),Math.max(1,Math.min(256,limit))) as Turn[]).reverse().map(turn=>this.clean(turn));}
@@ -53,23 +67,59 @@ export class Store {
   key=key.trim().toLowerCase();value=value.trim();if(!key||key.length>80||!value||value.length>1000)throw Error('Invalid memory');
   if(sourceTurnId!==null&&!this.db.prepare("SELECT id FROM turns WHERE id=? AND profile_id=? AND role='user'").get(sourceTurnId,this.profileId))throw Error('Memory must refer to a user turn in this profile');
   const previous=this.db.prepare('SELECT id FROM memory_facts WHERE profile_id=? AND key=? AND current=1').get(this.profileId,key) as {id:number}|undefined;
-  this.db.exec('BEGIN IMMEDIATE');try{this.db.prepare('UPDATE memory_facts SET current=0 WHERE profile_id=? AND key=?').run(this.profileId,key);const result=this.db.prepare('INSERT INTO memory_facts(profile_id,key,value,source_turn_id,supersedes) VALUES(?,?,?,?,?)').run(this.profileId,key,value,sourceTurnId,previous?.id??null);this.db.exec('COMMIT');return Number(result.lastInsertRowid);}catch(error){this.db.exec('ROLLBACK');throw error;}
+  this.db.exec('BEGIN IMMEDIATE');try{this.db.prepare('UPDATE memory_facts SET current=0 WHERE profile_id=? AND key=?').run(this.profileId,key);const result=this.db.prepare('INSERT INTO memory_facts(profile_id,key,value,source_turn_id,supersedes) VALUES(?,?,?,?,?)').run(this.profileId,key,value,sourceTurnId,previous?.id??null);this.db.exec('COMMIT');this.changed();return Number(result.lastInsertRowid);}catch(error){this.db.exec('ROLLBACK');throw error;}
  }
- forgetFact(id:number){const row=this.db.prepare('SELECT key FROM memory_facts WHERE id=? AND profile_id=?').get(id,this.profileId) as {key:string}|undefined;if(row)this.db.prepare('DELETE FROM memory_facts WHERE profile_id=? AND key=?').run(this.profileId,row.key);return !!row;}
+ forgetFact(id:number){
+  const row=this.db.prepare('SELECT key FROM memory_facts WHERE id=? AND profile_id=?').get(id,this.profileId) as {key:string}|undefined;if(!row)return false;
+  this.db.exec('BEGIN IMMEDIATE');try{
+   // Forgotten preference revisions must not reappear through their source episodes.
+   this.db.prepare('INSERT OR IGNORE INTO forgotten_memory_sources SELECT profile_id,source_turn_id FROM memory_facts WHERE profile_id=? AND key=? AND source_turn_id IS NOT NULL').run(this.profileId,row.key);
+   this.db.prepare("DELETE FROM memory_vectors WHERE profile_id=? AND kind='turn' AND target_id IN (SELECT turn_id FROM forgotten_memory_sources WHERE profile_id=?)").run(this.profileId,this.profileId);
+   this.db.prepare('DELETE FROM memory_facts WHERE profile_id=? AND key=?').run(this.profileId,row.key);this.db.exec('COMMIT');
+  }catch(error){this.db.exec('ROLLBACK');throw error;}
+  this.changed('forget');return true;
+ }
+ private episodeCutoff(){const boundary=this.db.prepare('SELECT id FROM turns WHERE profile_id=? ORDER BY id DESC LIMIT 1 OFFSET 31').get(this.profileId) as {id:number}|undefined;return Math.max(Number(this.get('conversationStart',0)),boundary?.id??0);}
+ memorySource(kind:MemorySource['kind'],id:number):MemorySource|null{
+  if(kind==='fact'){const fact=this.db.prepare('SELECT key,value FROM memory_facts WHERE id=? AND profile_id=? AND current=1').get(id,this.profileId) as {key:string;value:string}|undefined;return fact?{kind,id,content:fact.key+': '+fact.value}:null;}
+  const row=this.db.prepare('SELECT role,content,interruption FROM turns WHERE id=? AND profile_id=? AND NOT EXISTS(SELECT 1 FROM forgotten_memory_sources f WHERE f.profile_id=turns.profile_id AND f.turn_id=turns.id)').get(id,this.profileId) as Turn|undefined;
+  return row?{kind,id,content:visibleDialogueText(this.clean(row).content).slice(0,1200)}:null;
+ }
+ pendingMemorySources(model:string,limit=8):MemorySource[]{
+  const rows=this.db.prepare(`SELECT 'fact' AS kind,f.id FROM memory_facts f WHERE f.profile_id=? AND f.current=1 AND NOT EXISTS(SELECT 1 FROM memory_vectors v WHERE v.profile_id=f.profile_id AND v.kind='fact' AND v.target_id=f.id AND v.model_id=?)
+   UNION ALL SELECT 'turn' AS kind,t.id FROM turns t WHERE t.profile_id=? AND trim(t.content)!='' AND NOT EXISTS(SELECT 1 FROM forgotten_memory_sources f WHERE f.profile_id=t.profile_id AND f.turn_id=t.id) AND NOT EXISTS(SELECT 1 FROM memory_vectors v WHERE v.profile_id=t.profile_id AND v.kind='turn' AND v.target_id=t.id AND v.model_id=?)
+   ORDER BY kind,id DESC LIMIT ?`).all(this.profileId,model,this.profileId,model,limit) as {kind:MemorySource['kind'];id:number}[];
+  return rows.map(row=>this.memorySource(row.kind,row.id)).filter((s):s is MemorySource=>!!s);
+ }
+ saveMemoryVector(source:MemorySource,model:string,vector:Float32Array){
+  const current=this.memorySource(source.kind,source.id);if(!current||current.content!==source.content)return false;
+  if(!vector.length||vector.length>4096||Array.from(vector).some(n=>!Number.isFinite(n)))throw Error('Invalid memory vector');
+  const bytes=Buffer.alloc(vector.length*4);vector.forEach((n,i)=>bytes.writeFloatLE(n,i*4));
+  this.db.prepare('INSERT OR REPLACE INTO memory_vectors VALUES(?,?,?,?,?,?)').run(this.profileId,source.kind,source.id,model,memoryHash(source.content),bytes);return true;
+ }
+ memoryVectors(model:string,limit=10000):MemoryVector[]{
+  const rows=this.db.prepare(`SELECT v.kind,v.target_id AS id,v.content_hash AS hash,v.vector FROM memory_vectors v WHERE v.profile_id=? AND v.model_id=? AND (
+   v.kind='fact' AND EXISTS(SELECT 1 FROM memory_facts f WHERE f.id=v.target_id AND f.profile_id=v.profile_id AND f.current=1) OR
+   v.kind='turn' AND v.target_id<=? AND EXISTS(SELECT 1 FROM turns t WHERE t.id=v.target_id AND t.profile_id=v.profile_id) AND NOT EXISTS(SELECT 1 FROM forgotten_memory_sources f WHERE f.profile_id=v.profile_id AND f.turn_id=v.target_id)) ORDER BY v.kind,v.target_id DESC LIMIT ?`).all(this.profileId,model,this.episodeCutoff(),Math.max(1,Math.min(10000,limit))) as MemoryVector[];
+  return rows;
+ }
+ episodesById(ids:number[]):MemoryEpisode[]{
+  if(!ids.length)return [];const rows=this.db.prepare(`SELECT id,role,content,created,interruption FROM turns WHERE profile_id=? AND id<=? AND id IN (${ids.map(()=>'?').join(',')}) AND NOT EXISTS(SELECT 1 FROM forgotten_memory_sources f WHERE f.profile_id=turns.profile_id AND f.turn_id=turns.id)`).all(this.profileId,this.episodeCutoff(),...ids) as MemoryEpisode[];
+  return ids.flatMap(id=>{const row=rows.find(row=>row.id===id);return row?[{...row,content:visibleDialogueText(this.clean(row).content).slice(0,1200)}]:[];});
+ }
  searchEpisodes(query:string,limit=6):MemoryEpisode[]{
-  const stop=new Set('the and that this with from have what when where why how please remember about your you are was were can could would should tell me my for'.split(' '));
+  const stop=new Set('the and that this with from have what which when where why how please remember about your you are is was were can could would should tell me my for favorite favourite prefer like enjoy'.split(' '));
   const words=[...new Set(query.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu)??[])].filter(word=>!stop.has(word)).slice(0,16);
   if(!words.length)return [];
   const match=words.map(word=>'"'+word+'"').join(' OR ');
-  const boundary=this.db.prepare('SELECT id FROM turns WHERE profile_id=? ORDER BY id DESC LIMIT 1 OFFSET 31').get(this.profileId) as {id:number}|undefined;
-  const cutoff=Math.max(Number(this.get('conversationStart',0)),boundary?.id??0);
+  const cutoff=this.episodeCutoff();
   const rows=this.db.prepare(`SELECT t.id,t.role,t.content,t.created,t.interruption FROM turns_fts JOIN turns t ON t.id=turns_fts.rowid
-   WHERE turns_fts MATCH ? AND t.profile_id=? AND t.id<=? ORDER BY bm25(turns_fts),t.id DESC LIMIT ?`).all(match,this.profileId,cutoff,Math.max(1,Math.min(12,limit))) as MemoryEpisode[];
+   WHERE turns_fts MATCH ? AND t.profile_id=? AND t.id<=? AND NOT EXISTS(SELECT 1 FROM forgotten_memory_sources f WHERE f.profile_id=t.profile_id AND f.turn_id=t.id) ORDER BY bm25(turns_fts),t.id DESC LIMIT ?`).all(match,this.profileId,cutoff,Math.max(1,Math.min(12,limit))) as MemoryEpisode[];
   return rows.map(row=>({...row,content:visibleDialogueText(row.content).slice(0,1200)}));
  }
  exportMemory(){return {version:1,profileId:this.profileId,facts:this.memoryFacts(),turns:this.db.prepare('SELECT id,role,content,created,interruption,conversation_id AS conversationId FROM turns WHERE profile_id=? ORDER BY id').all(this.profileId)};}
  metric(event:string,data:unknown){this.db.prepare('INSERT INTO metrics(event,data) VALUES(?,?)').run(event,JSON.stringify(data));}
  saveSession(id:string,data:unknown){this.db.prepare('INSERT OR REPLACE INTO sessions(id,data) VALUES(?,?)').run(id,JSON.stringify(data));}
  sessions(){return this.db.prepare('SELECT * FROM sessions ORDER BY created DESC LIMIT 40').all();}
- clearMemory(){this.db.exec('BEGIN IMMEDIATE');try{this.db.prepare('DELETE FROM memory_facts WHERE profile_id=?').run(this.profileId);this.db.prepare('DELETE FROM turns WHERE profile_id=?').run(this.profileId);this.set('summary','');this.set('conversationStart',0);this.set('conversationId',crypto.randomUUID());this.set('conversationSummary','');this.set('conversationSummaryCursor',0);this.set('replyIntent','conversation');this.db.exec('COMMIT');}catch(error){this.db.exec('ROLLBACK');throw error;}}
+ clearMemory(){this.db.exec('BEGIN IMMEDIATE');try{this.db.prepare('DELETE FROM memory_facts WHERE profile_id=?').run(this.profileId);this.db.prepare('DELETE FROM turns WHERE profile_id=?').run(this.profileId);this.db.prepare('DELETE FROM memory_vectors WHERE profile_id=?').run(this.profileId);this.db.prepare('DELETE FROM forgotten_memory_sources WHERE profile_id=?').run(this.profileId);this.set('summary','');this.set('conversationStart',0);this.set('conversationId',crypto.randomUUID());this.set('conversationSummary','');this.set('conversationSummaryCursor',0);this.set('replyIntent','conversation');this.db.exec('COMMIT');}catch(error){this.db.exec('ROLLBACK');throw error;}this.changed('clear');}
 }

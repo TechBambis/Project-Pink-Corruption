@@ -1,0 +1,11 @@
+# Clean CPython 3.12.13 native build environment; no developer venv is copied.
+-r local/requirements.lock
+sherpa-onnx==1.13.8
+sherpa-onnx-core==1.13.8
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.8
+altgraph==0.17.5
+setuptools==84.0.0
+# Windows-only PyInstaller build dependencies; Linux runtime pins stay unchanged.
+pefile==2024.8.26; sys_platform == "win32"
+pywin32-ctypes==0.2.3; sys_platform == "win32"

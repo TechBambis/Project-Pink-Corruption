@@ -3,6 +3,7 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import {soundNames,soundSpecs,soundDuration,synthesizeDesignSound,type SoundCue} from './sound-design';
+import { wiperProfile, wiperFrame, emptyWiperFrame, type WiperProfile, type WiperFrame } from './wiper';
 
 export interface SoundDesignEvent {name:string;time:number;duration:number;gainDb:number;gain:number;source:'asset'|'generated'|'local';reason:string}
 export interface SelectedDesignSample {buffer:AudioBuffer;source:'local'|'generated';output:AudioNode;gainDb:number}
@@ -11,8 +12,14 @@ export class SoundRenderer {
   readonly events:SoundDesignEvent[]=[];
   private buffers=new Map<string,{buffer:AudioBuffer;source:'asset'|'generated'}>();
   private sources=new Map<AudioBufferSourceNode,GainNode>();
-  private playback=new Map<AudioBufferSourceNode,{start:number;duration:number;offset:number;output:AudioNode}>();
-  private paused:{buffer:AudioBuffer;loop:boolean;duration:number;offset:number;level:number;output:AudioNode}[]=[];
+  private playback=new Map<AudioBufferSourceNode,{start:number;duration:number;offset:number;output:AudioNode;profile?:WiperProfile}>();
+  private paused:{buffer:AudioBuffer;loop:boolean;duration:number;offset:number;delay?:number;level:number;output:AudioNode;profile?:WiperProfile}[]=[];
+  private heldWiper:WiperFrame=emptyWiperFrame;
+  wiperAt(time:number){
+    if(this.paused.length)return this.heldWiper;
+    const window=[...this.playback.values()].filter(w=>w.profile&&time>=w.start&&time<w.start+w.duration).sort((a,b)=>b.start-a.start)[0];
+    return window?wiperFrame({...window,profile:window.profile!},time):emptyWiperFrame;
+  }
   private loading:Promise<void>|undefined;
   constructor(private context:AudioContext,private output:AudioNode,
     private window:(source:AudioBufferSourceNode,start:number,end:number)=>void,
@@ -48,7 +55,7 @@ export class SoundRenderer {
     const source=this.context.createBufferSource(),gain=this.context.createGain();source.buffer=sound.buffer;source.loop=cue.name==='wiper';
     gain.gain.setValueAtTime(level,time);gain.gain.setValueAtTime(level,time+duration-.005);gain.gain.linearRampToValueAtTime(0,time+duration);
     const output=selected?.output??this.output;
-    source.connect(gain);gain.connect(output);this.sources.set(source,gain);this.playback.set(source,{start:time,duration,offset:0,output});this.window(source,time,time+duration);
+    source.connect(gain);gain.connect(output);this.sources.set(source,gain);this.playback.set(source,{start:time,duration,offset:0,output,...(cue.name==='wiper'?{profile:wiperProfile(sound.buffer)}:{})});this.window(source,time,time+duration);
     source.onended=()=>{this.sources.delete(source);this.playback.delete(source);this.finished(source);source.disconnect();gain.disconnect();};
     this.events.push({name:cue.inverted?'sub_rise':cue.name,time,duration,gainDb:db,gain:level,source:sound.source,reason});
     if(this.events.length>256)this.events.shift();
@@ -57,20 +64,22 @@ export class SoundRenderer {
   pause(){
     if(this.paused.length)return;
     const now=this.context.currentTime;
-    for(const [source,gain] of this.sources){const window=this.playback.get(source);if(source.buffer&&window&&now>=window.start&&now<window.start+window.duration)this.paused.push({buffer:source.buffer,loop:source.loop,duration:window.start+window.duration-now,offset:window.offset+now-window.start,level:gain.gain.value,output:window.output});}
+    this.heldWiper=this.wiperAt(now);
+    for(const [source,gain] of this.sources){const window=this.playback.get(source);if(source.buffer&&window&&now<window.start+window.duration&&(now>=window.start||window.profile))this.paused.push({buffer:source.buffer,loop:source.loop,duration:window.duration-Math.max(0,now-window.start),offset:window.offset+Math.max(0,now-window.start),delay:Math.max(0,window.start-now),level:gain.gain.value,output:window.output,profile:window.profile});}
     this.stop(false);
   }
   resume(){
-    const now=this.context.currentTime,paused=this.paused;this.paused=[];
+    const now=this.context.currentTime,paused=this.paused;this.paused=[];this.heldWiper=emptyWiperFrame;
     for(const sound of paused){
+      const start=now+(sound.delay??0);
       const source=this.context.createBufferSource(),gain=this.context.createGain();source.buffer=sound.buffer;source.loop=sound.loop;
-      gain.gain.setValueAtTime(sound.level,now);gain.gain.setValueAtTime(sound.level,now+Math.max(0,sound.duration-.005));gain.gain.linearRampToValueAtTime(0,now+sound.duration);
-      source.connect(gain);gain.connect(sound.output);this.sources.set(source,gain);this.playback.set(source,{start:now,duration:sound.duration,offset:sound.offset,output:sound.output});this.window(source,now,now+sound.duration);
+      gain.gain.setValueAtTime(sound.level,start);gain.gain.setValueAtTime(sound.level,start+Math.max(0,sound.duration-.005));gain.gain.linearRampToValueAtTime(0,start+sound.duration);
+      source.connect(gain);gain.connect(sound.output);this.sources.set(source,gain);this.playback.set(source,{start,duration:sound.duration,offset:sound.offset,output:sound.output,profile:sound.profile});this.window(source,start,start+sound.duration);
       source.onended=()=>{this.sources.delete(source);this.playback.delete(source);this.finished(source);source.disconnect();gain.disconnect();};
-      source.start(now,sound.loop?sound.offset%sound.buffer.duration:sound.offset);source.stop(now+sound.duration);
+      source.start(start,sound.loop?sound.offset%sound.buffer.duration:sound.offset);source.stop(start+sound.duration);
     }
   }
-  stop(clearPaused=true){if(clearPaused)this.paused=[];for(const [source,gain] of this.sources){source.onended=null;try{source.stop();}catch{}this.finished(source);source.disconnect();gain.disconnect();}this.sources.clear();this.playback.clear();}
+  stop(clearPaused=true){if(clearPaused){this.paused=[];this.heldWiper=emptyWiperFrame;}for(const [source,gain] of this.sources){source.onended=null;try{source.stop();}catch{}this.finished(source);source.disconnect();gain.disconnect();}this.sources.clear();this.playback.clear();}
   get activeCount(){return this.sources.size;}
 }
 

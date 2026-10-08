@@ -3,7 +3,7 @@
 // Separate commercial permissions: see LICENSING.md.
 
 /** Explicitly editable preferences, separate from the conversation transcript. */
-export function initMemoryPanel(notice: (text: string) => void) {
+export function initMemoryPanel(notice: (text: string) => void,clearPending:()=>void=()=>{}) {
   const dialog = document.getElementById('memory-dialog') as HTMLDialogElement;
   const content = document.getElementById('memory-content')!;
   const form = document.getElementById('memory-form') as HTMLFormElement;
@@ -13,6 +13,7 @@ export function initMemoryPanel(notice: (text: string) => void) {
     const response = await fetch('/api/memory');
     if (!response.ok) throw Error('Memories are unavailable.');
     const data = await response.json(); content.replaceChildren();
+    const retrieval=document.createElement('p');retrieval.textContent=data.semantic==='ready'?'Memories can be found by meaning, even with different wording.':'Memories are searched by matching words.';content.append(retrieval);
     for (const fact of data.facts ?? []) {
       const row = document.createElement('p');
       const text = document.createElement('span'); text.textContent = `${fact.key}: ${fact.value} `;
@@ -29,7 +30,7 @@ export function initMemoryPanel(notice: (text: string) => void) {
   }
   document.getElementById('memory')!.onclick = () => { void refresh().then(() => dialog.showModal()).catch(e => notice(String(e))); };
   document.getElementById('close-memory')!.onclick = () => dialog.close();
-  document.getElementById('forget')!.onclick = () => { void fetch('/api/memory', { method: 'DELETE' }).then(r => { if(!r.ok)throw Error('Could not clear memories.');document.getElementById('messages')?.replaceChildren();return refresh(); }).catch(e => notice(String(e))); };
+  document.getElementById('forget')!.onclick = () => { clearPending();void fetch('/api/memory', { method: 'DELETE' }).then(r => { if(!r.ok)throw Error('Could not clear memories.');document.getElementById('messages')?.replaceChildren();return refresh(); }).catch(e => notice(String(e))); };
   form.onsubmit = event => {
     event.preventDefault();
     void fetch('/api/memory/facts', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: key.value, value: value.value }) })

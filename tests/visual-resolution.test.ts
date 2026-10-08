@@ -15,17 +15,17 @@ test('adaptive quality reduces actual pixel work while preserving the scene aspe
   assert.ok(Math.abs(size.width/size.height-16/9)<.002);
  }
 });
-test('high-density displays and 4K fullscreen stay within the 1080p render budget',()=>{
- assert.deepEqual(visualResolution(1920,1080,2),{width:1920,height:1080});
- assert.deepEqual(visualResolution(3840,2160,1,.5),{width:960,height:540});
- assert.deepEqual(visualResolution(2560,1440,1),{width:1920,height:1080});
- assert.deepEqual(visualResolution(2160,3840,2),{width:1080,height:1920});
+test('high-density displays and 4K fullscreen stay within the 1440p render budget',()=>{
+ assert.deepEqual(visualResolution(1920,1080,2),{width:2560,height:1440});
+ assert.deepEqual(visualResolution(3840,2160,1,.5),{width:1280,height:720});
+ assert.deepEqual(visualResolution(2560,1440,1),{width:2560,height:1440});
+ assert.deepEqual(visualResolution(2160,3840,2),{width:1440,height:2560});
 });
 test('pixel and hardware caps preserve ultrawide aspect ratios rather than squeezing scenes',()=>{
  for(const [w,h,dpr,limit] of [[5120,1440,2,8192],[7680,4320,1,8192],[1920,1080,2,2048]]){
   const size=visualResolution(w,h,dpr,1,limit);
   assert.ok(size.width<=limit&&size.height<=limit);
-  assert.ok(size.width*size.height<=1920*1080);
+  assert.ok(size.width*size.height<=2560*1440);
   assert.ok(Math.abs(size.width/size.height-w/h)<.003);
  }
  assert.deepEqual(visualResolution(0,0,1),{width:1,height:1});

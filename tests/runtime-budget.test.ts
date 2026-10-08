@@ -8,7 +8,7 @@ import {fitContext} from '../packages/ai/context';
 import {InferenceQueue,speechBatchBoundary} from '../packages/ai/inference';
 import {compilePromptDocument} from '../packages/content/runtime-prompt';
 import {prompts} from '../packages/content';
-import {modelContext,communityQwen,communityQwen36} from '../packages/ai/models';
+import {modelContext,modelLabel,modelSampling,communityQwen,communityQwen36,sthenoV32,anubisMiniV1,mistralRpNoromaid7B} from '../packages/ai/models';
 import {Store} from '../packages/storage';
 import {ReplyProgress} from '../packages/ai/dialogue';
 import {llamaSampling} from '../config/sampling';
@@ -51,6 +51,17 @@ test('every unique authored line and section of every installed template is avai
  assert.equal(modelContext(communityQwen36,'bambisleep-classic'),16384);
  assert.equal(modelContext('ollama-fixture','bambisleep-classic'),24576);
  assert.equal(modelContext('ollama-fixture','custom'),4096);
+ assert.equal(modelContext(sthenoV32,'bambisleep-classic'),8192);
+ assert.equal(modelLabel(sthenoV32),'Llama 3.1 8B · Stheno v3.2 · Q4_K_M');
+ assert.equal(modelContext(anubisMiniV1,'bambisleep-classic'),65536);
+ assert.equal(modelLabel(anubisMiniV1),'Anubis Mini 8B v1 · TheDrummer · Q4_K_M');
+ const anubisSampling=modelSampling(anubisMiniV1);
+ assert.equal(anubisSampling.temperature,.95);assert.equal(anubisSampling.top_k,64);assert.equal(anubisSampling.min_p,.02);
+ assert.equal(anubisSampling.presence_penalty,0);assert.equal(anubisSampling.repeat_penalty,1);
+ assert.equal(anubisSampling.dry_multiplier,0);assert.equal(anubisSampling.dry_base,1.75);assert.equal(anubisSampling.dry_allowed_length,2);
+ assert.equal(anubisSampling.xtc_probability,0);assert.equal(anubisSampling.xtc_threshold,.1);
+ assert.equal(modelContext(mistralRpNoromaid7B,'bambisleep-classic'),24576);
+ assert.equal(modelLabel(mistralRpNoromaid7B),'MistralRP Noromaid 7B · Moophlo · Q8_0');
 });
 
 test('older optional memory never displaces complete persona instructions or recent corrections',async()=>{

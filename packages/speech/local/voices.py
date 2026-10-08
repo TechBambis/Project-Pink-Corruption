@@ -7,7 +7,8 @@ import json
 import re
 from pathlib import Path
 import numpy as np
-from .config import CANDIDATES, ROOT
+from .config import CANDIDATES, ROOT, DATA
+import os
 
 def parse_mix(expression):
     parts = []
@@ -28,7 +29,7 @@ def parse_mix(expression):
 class VoiceRegistry:
     def __init__(self, bundle, directory=None):
         self.bundle = bundle
-        self.directory = Path(directory or ROOT / 'voices')
+        self.directory = Path(directory or (DATA if os.environ.get('BAMBI_DATA_ROOT') else ROOT) / 'voices')
         self.custom = {}
         for path in self.directory.glob('*.npy'):
             if re.fullmatch(r'[a-z][a-z0-9_]*', path.stem):
@@ -36,6 +37,13 @@ class VoiceRegistry:
                 self._validate(style)
                 self.custom[path.stem] = style.astype(np.float32)
         self.cache = {}
+        if os.environ.get('BAMBI_DESKTOP_ALPHA') == '1':
+            # Recreate only the approved public blend; never copy developer voices.
+            style = self.style('af_nicole:0.15 + af_bella:0.425 + af_heart:0.425')
+            if hashlib.sha256(style.tobytes()).hexdigest() != '906e9b9050f2bd38b175298e26b6d255e7db0270570fcc66979f6fbccd1cdf61':
+                raise ValueError('Approved voice fingerprint mismatch')
+            self.custom['bambi_classic'] = style
+            self.cache.clear()
 
     def _validate(self, style):
         if style.shape != self.bundle['af_heart'].shape or not np.isfinite(style).all():
@@ -71,7 +79,7 @@ class VoiceRegistry:
                       'upstream': 'hexgrad/Kokoro-82M v1.0 via thewh1teagle model-files-v1.1',
                       'license': 'Apache-2.0 (derived voice embedding)', 'sha256': hashlib.sha256(style.tobytes()).hexdigest(),
                       'referenceRecordings': [], 'description': 'Original local blend; no commercial reference voice or recordings used.'}
-        (self.directory / f'{name}.json').write_text(json.dumps(provenance, indent=2))
+        (self.directory / f'{name}.json').write_text(json.dumps(provenance, indent=2), encoding='utf-8')
         self.custom[name] = style
         self.cache.clear()
         return provenance

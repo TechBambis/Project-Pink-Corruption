@@ -1,0 +1,56 @@
+{
+  "protocol": 1,
+  "alias": "bambi-qwen35-9b-hauhau:q4_k_m",
+  "context": 24576,
+  "assets": [
+    {
+      "path": "community/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+      "bytes": 5627044224,
+      "sha256": "2ca636d9e81d3d23ca9b60c234fe185d30ec082eeba69ce770fdb0c76559a4f5",
+      "url": "https://huggingface.co/HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive/resolve/0a41c68809d375475f954be12ba7c40efa56c2a9/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+      "license": "apache-2.0"
+    },
+    {
+      "path": "kokoro/kokoro-v1.0.onnx",
+      "bytes": 325505369,
+      "sha256": "beb0d1848dee9a49da392cc3df26958d46cfa35d321edf434f52949153f0df3a",
+      "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "kokoro/voices-v1.0.bin",
+      "bytes": 28214398,
+      "sha256": "bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d",
+      "url": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "streaming/encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "bytes": 71083163,
+      "sha256": "563fde436d16cf7607cf408cd6b30909819d03162652ef389c2450ced3f45ac1",
+      "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26/resolve/672fbf1b30579d6585301139bb363f42a0ad4a24/encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "streaming/decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "bytes": 1307236,
+      "sha256": "98da299f471e38bb4e1a8df579b8cc9122d6039576a77e357b3c60f17dd83b02",
+      "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26/resolve/672fbf1b30579d6585301139bb363f42a0ad4a24/decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "streaming/joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "bytes": 259335,
+      "sha256": "d944208d660d67c8d72cd2acaeac971fa5ceb8c80e76c1968148846fedd6e297",
+      "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26/resolve/672fbf1b30579d6585301139bb363f42a0ad4a24/joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+      "license": "Apache-2.0"
+    },
+    {
+      "path": "streaming/tokens.txt",
+      "bytes": 5048,
+      "sha256": "49e3c2646595fd907228b3c6787069658f67b17377c60aeb8619c4551b2316fb",
+      "url": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26/resolve/672fbf1b30579d6585301139bb363f42a0ad4a24/tokens.txt",
+      "license": "Apache-2.0"
+    }
+  ]
+}

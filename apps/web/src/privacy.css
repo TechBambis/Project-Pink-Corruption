@@ -1,0 +1,13 @@
+/* SPDX-FileCopyrightText: 2026 BambiOS
+ * SPDX-License-Identifier: AGPL-3.0-only */
+#privacy-access{max-width:740px;max-height:85vh;overflow:auto;color:var(--text,#f4e7f6)}
+#privacy-access h2{font-size:27px;margin:0 0 12px}#privacy-access h3{font-size:17px;margin:0 0 10px}
+.privacy-intro{line-height:1.6;max-width:65ch}.privacy-choices{display:grid;gap:0;margin:20px 0}
+.privacy-choice{display:flex;gap:13px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line,#50394f);margin:0}
+.privacy-choice input[type=checkbox]{width:17px;min-width:17px;height:17px;margin:5px 0 0;accent-color:var(--pink,#e9a4d6)}
+.privacy-choice>span{display:grid;gap:5px;min-width:0;overflow-wrap:anywhere}.privacy-choice strong{font-size:15px;color:var(--pink,#e9a4d6)}.privacy-choice span span{font-size:13px;line-height:1.6;color:var(--muted,#c0a8c7)}
+.privacy-required{margin-top:20px}.privacy-required-choice strong{color:var(--muted,#c0a8c7)}.privacy-required-choice input{filter:grayscale(1);cursor:default}
+.privacy-context{padding:18px 0}.privacy-context p{overflow-wrap:anywhere}.privacy-context a{font-size:13px}.privacy-baseline{font-size:13px;line-height:1.6;color:var(--muted,#c0a8c7)}
+.privacy-actions,.privacy-place-actions{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}.privacy-actions{border-top:1px solid var(--line,#50394f);padding-top:18px}.privacy-actions button[type=submit]{margin-left:auto}
+#privacy-access [data-privacy-error]{color:#ffb4ca}#privacy-access [hidden]{display:none!important}#privacy-access button{font:inherit}
+@media(max-width:600px){#privacy-access h2{font-size:23px}.privacy-actions button[type=submit]{margin-left:0}.privacy-choice{gap:10px}}

@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
+import {stripSpeechFormatting} from './formatting';
+
 export interface BreathCue {direction:'in'|'out';durationMs:number}
 export function parseBreathMarker(marker:string):BreathCue|undefined {
  const match=/^\[breath:(in|out)(?::(\d{4,5}))?\]$/i.exec(marker);
@@ -16,9 +18,10 @@ export function validBreathCue(value:unknown):value is BreathCue {
 }
 /** Older prompts can still provide an unambiguous, standalone breathing instruction. */
 export function breathInstruction(text:string):BreathCue|undefined {
- const instruction=text.replace(/\[pause:[^\]]*\]/gi,'').replace(/[.!…]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
- if(['in','and in','breathe in','einatmen','atme ein','und ein'].includes(instruction))return {direction:'in',durationMs:4000};
- if(['out','and out','breathe out','ausatmen','atme aus','und aus'].includes(instruction))return {direction:'out',durationMs:4000};
+ const instruction=stripSpeechFormatting(text).replace(/\[pause:[^\]]*\]/gi,'').replace(/[.!…"“”]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+ const suffix='(?:\\s+(?:slowly|gently|comfortably|now|again|for me|please))*';
+ if(new RegExp('^(?:and )?(?:in|breathe in|inhale)'+suffix+'$').test(instruction))return {direction:'in',durationMs:4000};
+ if(new RegExp('^(?:and )?(?:out|breathe out|exhale)'+suffix+'$').test(instruction))return {direction:'out',durationMs:4000};
 }
 export const breathDirection=[
  '=== BREATHING PROTOCOL ===',

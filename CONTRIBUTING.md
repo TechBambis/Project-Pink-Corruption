@@ -2,6 +2,8 @@
 
 Bug reports and suggestions are welcome without signing a CLA. Please keep personal data, credentials, recordings and private conversation history out of issues and PRs.
 
+Use English for repository documentation, UI text, code comments, examples and test fixtures. Preserve third-party attribution, license notices and pinned upstream content.
+
 ## Licensing before submitting code
 
 Read [LICENSING.md](LICENSING.md) and the [Contributor License Agreement](CLA.md). Contributions need explicit acceptance of the CLA, or separately verified permissions sufficient for the same licensing model, before merging. A PR alone is not acceptance. The CLA permits proprietary/commercial relicensing without royalties; you retain copyright. If that does not work for you, do not submit work for inclusion.
@@ -9,10 +11,6 @@ Read [LICENSING.md](LICENSING.md) and the [Contributor License Agreement](CLA.md
 The maintainer provides an immutable `CLA.md` link and its SHA-256. Follow the acceptance text in that document for the work you authored. Identify any employer rights, coauthors, copied code, assets and their licenses. Never change third-party attribution to claim it as your own. Preserve existing notices and pinned upstream files.
 
 ## Checks
-
-See [Checks and default-branch protection](.github/BRANCH_PROTECTION.md) for
-required check names, manual CI reruns and the prepared ruleset configuration.
-The private repository's current Free plan does not enforce merge protection.
 
 ```sh
 npm ci --ignore-scripts

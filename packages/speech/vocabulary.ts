@@ -13,7 +13,7 @@ import {devicePatterns} from '../devices/commands';
 import {soundNames} from '../audio/sound-design';
 import {triggerData,prompts,brainwavePresets} from '../content';
 
-const essentials=['Breathing','breathe in','breathe out','Atemübungen','Einatmen','Ausatmen','Atemkreis','breathing circle','Bambi','Mikrofon','microphone'];
+const essentials=['Breathing','breathe in','breathe out','breathing exercises','breathing circle','Bambi','microphone'];
 const normalize=(value:string)=>value.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim();
 const plain=(value:string)=>value.replace(/<[^>]+>/g,' ').replace(/&amp;/g,'&').replace(/&[^;]+;/g,' ').replace(/\s+/g,' ').trim();
 function termsFromJSON(value:unknown):string[]{

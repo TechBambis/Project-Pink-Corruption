@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {DeviceController,type DeviceTransport} from '../packages/devices/controller';
 import {DeviceCommandSchema,DeviceSettingsSchema,parseDeviceMarker,devicePrompt} from '../packages/devices/commands';
 import {actuatorValue,applyDeviceCommand,offState} from '../packages/devices/patterns';
+import {devicePlaybackPlan} from '../packages/devices/playback';
 import {ScriptDisplayStream,scriptUnits} from '../packages/speech/script';
 import {TriggerSentenceChunker} from '../packages/speech/trigger-units';
 import {Kokoro} from '../packages/speech/tts';
@@ -14,9 +15,10 @@ import {Kokoro} from '../packages/speech/tts';
 function fixture(){let time=100;const packets:string[]=[];const transport:DeviceTransport={send:packet=>packets.push(packet),close(){}};const engine=new DeviceController(transport,()=>time,()=>.5,false),owner={};
  const beat=(elapsed:number,running=true,paused=false)=>engine.heartbeat(owner,{running,paused,elapsed,duration:1000});
  const advance=(seconds:number)=>{time+=seconds;engine.bridgeStatus({connected:true,device:'fixture'});};
+ const withoutBridge=(seconds:number)=>{time+=seconds;};
  const arm=(settings:Record<string,unknown>={})=>{engine.bridgeStatus({connected:true});assert.ok(engine.configure(owner,{enabled:true,vibrationChannel:1,rotationChannel:2,...settings}));beat(0);};
  const command=(marker:string)=>engine.command(owner,parseDeviceMarker(marker));
- return {engine,owner,packets,beat,advance,arm,command};
+ return {engine,owner,packets,beat,advance,withoutBridge,arm,command};
 }
 
 test('conversation interruption discards future word commands while preserving the current bounded session pattern',()=>{
@@ -80,7 +82,7 @@ test('pause, interrupt, owner disconnect and heartbeat timeout stop motors and q
 });
 
 test('phase defaults, later deepening rotation, bounded random intervals and awakening fade',()=>{
- const f=fixture();f.arm({randomRotation:true});f.engine.tick();assert.equal(f.engine.status.channels[1],0);
+ const f=fixture();f.arm({randomRotation:true,transitionMs:0});f.engine.tick();assert.equal(f.engine.status.channels[1],0);
  f.beat(250);f.engine.tick();assert.equal(f.engine.status.channels[1],0);f.beat(330);f.engine.tick();assert.equal(f.engine.status.channels[1],20);
  f.command('[rot:off]');f.engine.tick();assert.equal(f.engine.status.channels[1],0,'Manual off survives phase automation');
  f.beat(400);f.engine.tick();assert.deepEqual(f.engine.status.channels,[30,0,0,0]);f.beat(459);f.engine.tick();assert.equal(f.engine.status.channels[1],0);f.beat(460);f.engine.tick();assert.equal(f.engine.status.channels[1],30);
@@ -88,8 +90,73 @@ test('phase defaults, later deepening rotation, bounded random intervals and awa
  f.arm();f.beat(900);f.engine.tick();f.advance(10);f.beat(910);f.engine.tick();assert.deepEqual(f.engine.status.channels,[0,0,0,0]);
 });
 
+test('a temporary accent returns to the advancing wave, and explicit off cancels queued accents',()=>{
+ const f=fixture();f.arm({phaseDefaults:false,vibrationMax:.6});f.command('[vib:on:0.25]');f.command('[vib:pattern:wave]');
+ f.advance(.2);f.beat(.2);f.command('[vib:buzz:0.6:300]');f.engine.tick();assert.equal(f.engine.status.channels[0],60);
+ f.advance(.3);f.beat(.5);f.engine.tick();
+ assert.equal(f.engine.status.channels[0],Math.round(actuatorValue({level:.25,pattern:'wave',started:100},100.5)*100));
+ assert.ok(f.engine.command(f.owner,parseDeviceMarker('[vib:buzz:0.6:300]'),100));f.command('[vib:off]');
+ f.advance(.1);f.beat(.6);f.engine.tick();assert.deepEqual(f.engine.status.channels,[0,0,0,0]);
+});
+
+test('pause discards a transient accent and restores only the baseline; halt cannot revive it',()=>{
+ const f=fixture();f.arm({phaseDefaults:false});f.command('[vib:on:0.3]');f.command('[vib:buzz:0.1:1000]');f.engine.tick();assert.equal(f.engine.status.channels[0],10);
+ f.beat(0,true,true);f.engine.tick();assert.equal(f.engine.status.channels[0],0);
+ f.advance(.2);f.beat(0);f.engine.tick();assert.equal(f.engine.status.channels[0],30);
+ f.command('[vib:buzz:0.1:1000]');f.engine.halt(f.owner);f.advance(.2);f.beat(.2);f.engine.tick();assert.equal(f.engine.status.channels[0],0);
+});
+
+test('phase changes blend from current capped output; awakening never starts an inactive motor',()=>{
+ const f=fixture();f.arm({vibrationMax:.2});f.command('[vib:on:1]');f.command('[rot:off]');f.engine.tick();assert.deepEqual(f.engine.status.channels,[20,0,0,0]);
+ f.beat(900);f.engine.tick();assert.deepEqual(f.engine.status.channels,[20,0,0,0]);
+ f.advance(5);f.beat(905);f.engine.tick();assert.deepEqual(f.engine.status.channels,[10,0,0,0]);
+ f.advance(5);f.beat(910);f.engine.tick();assert.deepEqual(f.engine.status.channels,[0,0,0,0]);
+ const blend=fixture();blend.arm();blend.command('[vib:on:0.2]');blend.beat(400);blend.engine.tick();assert.equal(blend.engine.status.channels[0],20);
+ blend.advance(.125);blend.beat(400.125);blend.engine.tick();assert.equal(blend.engine.status.channels[0],25);
+ blend.advance(.125);blend.beat(400.25);blend.engine.tick();assert.equal(blend.engine.status.channels[0],30);
+});
+
+test('live limit updates preserve the running pattern and do not resume a halted controller',()=>{
+ const f=fixture();f.arm({phaseDefaults:false});f.command('[vib:on:0.3]');
+ assert.ok(f.engine.configure(f.owner,{...f.engine.settings,vibrationMax:.2}));f.engine.tick();assert.equal(f.engine.status.channels[0],20);
+ f.engine.halt(f.owner);assert.ok(f.engine.configure(f.owner,{...f.engine.settings,vibrationMax:.3}));f.engine.tick();assert.equal(f.engine.status.channels[0],0);assert.equal(f.engine.status.automationPaused,true);
+ assert.ok(f.engine.configure(f.owner,{...f.engine.settings,phaseDefaults:true},true));f.engine.tick();f.advance(.25);f.beat(.25);f.engine.tick();assert.ok(f.engine.status.channels[0]>0);
+});
+
+test('stale motion cues are discarded while delayed stops still execute; completion disarms',()=>{
+ const f=fixture();f.arm({phaseDefaults:false});f.command('[vib:on:0.2]');
+ f.engine.command(f.owner,parseDeviceMarker('[vib:buzz:0.3:500]'),100);f.advance(.4);f.beat(.4);f.engine.tick();assert.equal(f.engine.status.channels[0],20);
+ f.engine.command(f.owner,parseDeviceMarker('[both:off]'),100);f.advance(.4);f.beat(.8);f.engine.tick();assert.deepEqual(f.engine.status.channels,[0,0,0,0]);
+ f.command('[vib:on:0.2]');f.engine.command(f.owner,parseDeviceMarker('[vib:on:0.3]'),1000);f.beat(1000);f.engine.tick();assert.equal(f.engine.status.enabled,false);assert.deepEqual(f.engine.status.channels,[0,0,0,0]);
+});
+
+test('losing bridge status cancels future motion even when current output is zero',()=>{
+ const f=fixture();f.arm({phaseDefaults:false});f.engine.command(f.owner,parseDeviceMarker('[vib:on:0.3]'),5000);
+ f.withoutBridge(2.1);f.beat(2.1);f.engine.tick();assert.equal(f.engine.status.automationPaused,true);
+ f.advance(2.9);f.beat(5);f.engine.tick();assert.deepEqual(f.engine.status.channels,[0,0,0,0]);
+});
+
+test('playback calibration uses independent motor leads, preserves global stop and explicit metadata',()=>{
+ const settings=DeviceSettingsSchema.parse({vibrationLeadMs:120,rotationLeadMs:200,accentIntensity:.23,accentDurationMs:450});
+ const fade=parseDeviceMarker('[both:fade:0]')!, plan=devicePlaybackPlan(fade,500,settings);
+ assert.deepEqual(plan.map(p=>[p.command.channel,p.delayMs]),[['vib',380],['rot',300]]);
+ assert.deepEqual(devicePlaybackPlan(parseDeviceMarker('[both:off]')!,500,settings).map(p=>[p.command.channel,p.delayMs]),[['both',500]]);
+ const buzz=parseDeviceMarker('[vib:buzz:0.1:150]')!;
+ assert.deepEqual(devicePlaybackPlan(buzz,100,settings,'speech'),[{command:{...buzz,intensity:.23,durationMs:450},delayMs:0}]);
+ assert.deepEqual(devicePlaybackPlan(buzz,500,settings),[{command:buzz,delayMs:380}]);
+ assert.deepEqual(devicePlaybackPlan(buzz,500,{...settings,speechAccents:false},'speech'),[]);
+ assert.deepEqual(devicePlaybackPlan(fade,500,{...settings,rotationChannel:0}).map(p=>p.command.channel),['vib']);
+ for(const field of ['vibrationLeadMs','rotationLeadMs','transitionMs','accentDurationMs'])assert.equal(DeviceSettingsSchema.safeParse({[field]:-1}).success,false);
+});
+
 test('an explicit short channel test has its own deadline and cannot remain latched',()=>{
  const f=fixture();f.arm();f.beat(0,false);assert.ok(f.engine.testChannel(f.owner,2));f.engine.tick();assert.deepEqual(f.engine.status.channels,[0,10,0,0]);f.advance(.5);f.beat(0,false);f.engine.tick();assert.deepEqual(f.engine.status.channels,[0,0,0,0]);assert.equal(f.engine.testChannel({},1),false);
+});
+
+test('lowering a limit during a channel test immediately caps that in-flight test',()=>{
+ const f=fixture();f.arm({phaseDefaults:false});f.engine.testChannel(f.owner,1,.3);f.engine.tick();assert.equal(f.engine.status.channels[0],30);
+ f.engine.configure(f.owner,{...f.engine.settings,vibrationMax:.1});f.engine.tick();assert.equal(f.engine.status.channels[0],10);
+ f.advance(.5);f.beat(.5);f.engine.tick();assert.deepEqual(f.engine.status.channels,[0,0,0,0]);
 });
 
 

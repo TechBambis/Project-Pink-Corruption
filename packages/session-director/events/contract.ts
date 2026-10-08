@@ -3,6 +3,7 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import { z } from 'zod';
+import { deliveryModes } from '../delivery';
 import { sessionPhases, phaseStarts, type SessionPhase } from '../phases';
 import { buses, type Bus } from '../../audio';
 import { sceneNames } from '../../safety/actions';
@@ -12,6 +13,7 @@ export const layerIds = ['main_voice', 'left_voice', 'right_voice', 'echo_voice'
 export type LayerId = typeof layerIds[number];
 export const contentBuses = buses.filter((bus): bus is Exclude<Bus, 'MASTER' | 'MIC_MONITOR'> => bus !== 'MASTER' && bus !== 'MIC_MONITOR');
 const ms = z.number().finite().min(0).max(86400000);
+const timestamp = z.number().finite().min(0).max(Number.MAX_SAFE_INTEGER);
 const unit = z.number().finite().min(0).max(1);
 const id = z.string().min(1).max(100);
 export const DensitySchema = z.object({ intensity: unit, effectDensity: unit, speechDensity: unit, audioDensity: unit, visualDensity: unit }).strict();
@@ -24,7 +26,8 @@ export const PresentationStateSchema = z.object({
   ambientState: z.enum(['active', 'reduced', 'silent']),
   scene: z.enum(sceneNames),
   motifId: id.optional(),
-  motifMotion: z.object({ kind: z.literal('coin_scan'), startMs: ms, periodMs: z.number().finite().min(1000).max(30000), strength: unit }).strict().optional(),
+  motifForm: z.enum(['ring', 'heart', 'gears']).optional(),
+  motifMotion: z.object({ kind: z.literal('coin_scan'), startMs: timestamp, periodMs: z.number().finite().min(1000).max(30000), strength: unit }).strict().optional(),
 }).strict().superRefine((state, ctx) => {
   if (new Set(state.activeLayers).size !== state.activeLayers.length) ctx.addIssue({ code: 'custom', message: 'Active layers must be unique' });
   if (state.foreground && !state.activeLayers.includes(state.foreground)) ctx.addIssue({ code: 'custom', message: 'Foreground must be an active layer' });
@@ -38,7 +41,9 @@ export const SpeechSpecSchema = z.object({
   targetMs: ms,
   wordTarget: z.number().int().min(1).max(500).optional(),
   instruction: z.string().max(2000),
+  delivery: z.enum(deliveryModes).optional(),
   fixedCue: z.literal('Blink').optional(),
+  fixedText: z.string().min(1).max(300).optional(),
   cueAtMs: ms.optional(),
   requiredTrigger: z.string().min(1).max(100).optional(),
   triggerAtMs: ms.optional(),
@@ -46,6 +51,7 @@ export const SpeechSpecSchema = z.object({
 }).strict().superRefine((speech, ctx) => {
   if (!!speech.fixedCue !== (speech.cueAtMs !== undefined) || speech.fixedCue && (speech.mode === 'silent' || speech.requiredTrigger || speech.cueAtMs! >= speech.targetMs)) ctx.addIssue({ code: 'custom', message: 'Fixed cue needs its own spoken window and firing offset' });
   if (speech.mode === 'silent' && (speech.targetMs !== 0 || speech.requiredTrigger || speech.wordTarget || speech.fixedCue)) ctx.addIssue({ code: 'custom', message: 'Silent windows have zero text budget and no spoken trigger' });
+  if (speech.fixedText && (speech.mode === 'silent' || speech.fixedCue || speech.requiredTrigger || /[\[\]<>]/.test(speech.fixedText))) ctx.addIssue({ code: 'custom', message: 'Fixed narration must be plain spoken text without a cue' });
   if (speech.mode !== 'silent' && speech.targetMs <= 0) ctx.addIssue({ code: 'custom', message: 'Spoken windows need a positive budget' });
   if (speech.requiredTrigger && (speech.triggerAtMs === undefined || speech.triggerAtMs >= speech.targetMs || speech.triggerCooldownMs === undefined)) ctx.addIssue({ code: 'custom', message: 'Spoken triggers need an engine firing offset and cooldown' });
   if (!speech.requiredTrigger && (speech.triggerAtMs !== undefined || speech.triggerCooldownMs !== undefined)) ctx.addIssue({ code: 'custom', message: 'Trigger timing requires an authored trigger' });
@@ -59,7 +65,7 @@ export const TransitionSchema = z.object({
 export type Transition = z.infer<typeof TransitionSchema>;
 const audioAction = z.object({ offsetMs: ms, bus: z.enum(contentBuses as [typeof contentBuses[number], ...typeof contentBuses[number][]]), gain: unit, durationMs: ms }).strict();
 const visualAction = z.object({ offsetMs: ms, opacity: unit.optional(), motion: unit.optional(), blurPx: z.number().finite().min(0).max(20).optional(), zoom: z.number().finite().min(.5).max(2).optional(), text: z.string().max(200).optional(), durationMs: ms }).strict();
-const hapticAction = z.object({ offsetMs: ms, command: DeviceCommandSchema }).strict();
+const hapticAction = z.object({ offsetMs: ms, command: DeviceCommandSchema, speechSlotId: z.string().min(1).max(128).optional() }).strict();
 const fractionation = z.object({
   stateA: PresentationStateSchema, stateB: PresentationStateSchema,
   pattern: z.enum(['constant', 'accelerating', 'decelerating', 'irregular']),
@@ -80,12 +86,14 @@ const softReturn = z.object({ steps: z.array(z.object({ offsetMs: ms, state: Pre
 
 export const EventSchema = z.object({
   id, type: z.enum(['fractionation', 'mindwipe', 'reset', 'original_self', 'mantra', 'peak', 'silence', 'motif_recall', 'soft_return', 'blink_trigger', 'layer_shift']),
-  phase: z.enum(sessionPhases), atMs: ms,
+  phase: z.enum(sessionPhases), atMs: timestamp,
   timing: z.object({ prepMs: ms, activeMs: ms, returnMs: ms }).strict(),
   state: PresentationStateSchema, baseline: PresentationStateSchema,
   speech: SpeechSpecSchema,
   audio: z.array(audioAction).max(128), visual: z.array(visualAction).max(128), haptics: z.array(hapticAction).max(128),
   entry: TransitionSchema, exit: TransitionSchema,
+  rhythm: z.object({ offsetMs: ms, untilMs: ms, stepMs: z.number().finite().min(500).max(5000), endStepMs: z.number().finite().min(500).max(5000).optional() }).strict().optional(),
+  wipe: z.object({ offsetMs: ms, durationMs: z.number().finite().min(100).max(20000), text: z.string().min(1).max(48) }).strict().optional(),
   fractionation: fractionation.optional(), blink: blink.optional(), mantra: mantra.optional(), softReturn: softReturn.optional(),
   motifId: id.optional(), originalSelf: z.enum(['original', 'old']).optional(),
 }).strict().superRefine((event, ctx) => {
@@ -93,6 +101,11 @@ export const EventSchema = z.object({
   const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
   if (total <= 0 || total > 86400000) issue('Event must have a finite positive total duration');
   if (event.entry.durationMs > prepMs || event.exit.durationMs > returnMs) issue('Transition envelopes must fit preparation/return windows');
+  if (event.wipe) {
+    if (event.wipe.offsetMs + event.wipe.durationMs > (event.type === 'mindwipe' ? prepMs : total)) issue('Wipe must finish before the reserved blank/event boundary');
+    if (!event.baseline.activeLayers.includes('transition_sfx')) issue('Wipe requires an authored effects layer');
+    if (event.type === 'silence') issue('Silence cannot contain a wipe sound');
+  }
   for (const key of ['fractionation', 'blink', 'mantra', 'softReturn'] as const) {
     const expected = { fractionation: 'fractionation', blink: 'blink_trigger', mantra: 'mantra', softReturn: 'soft_return' }[key];
     if ((event.type === expected) !== (event[key] !== undefined)) issue(`Only ${expected} events require ${key} configuration`);
@@ -126,6 +139,9 @@ export const EventSchema = z.object({
   if (event.type === 'peak' && !event.state.foreground) issue('A layered peak needs one active foreground');
   if (event.type === 'reset' && returnMs <= 0) issue('Reset needs an explicit completion/return window');
   if (event.softReturn?.final && event.phase !== 'awakening') issue('Final return belongs to the fixed awakening phase');
+  if (event.speech.fixedText && !event.softReturn?.final || event.fractionation?.speechA.fixedText || event.fractionation?.speechB.fixedText) issue('Fixed narration belongs only to the final closing');
+  if (event.rhythm && (event.rhythm.offsetMs >= event.rhythm.untilMs || event.rhythm.untilMs > total || !event.state.activeLayers.includes('transition_sfx'))) issue('Rhythm must fit its declared effect lane and event');
+  if (event.rhythm && (event.rhythm.untilMs - event.rhythm.offsetMs) / Math.min(event.rhythm.stepMs, event.rhythm.endStepMs ?? event.rhythm.stepMs) > 256) issue('Rhythm exceeds its bounded beat budget');
   if (['motif_recall', 'original_self'].includes(event.type) && !event.motifId) issue('Recall/viewpoint needs a known motif');
   if ((event.type === 'original_self') !== (event.originalSelf !== undefined)) issue('Original Self referent belongs only to original_self events');
   if (event.softReturn && (event.softReturn.steps[0].offsetMs !== 0 || event.softReturn.steps.some((s, i, a) => s.offsetMs >= activeMs || i > 0 && s.offsetMs <= a[i - 1].offsetMs))) issue('Soft return stages must be ordered within active window');
@@ -136,9 +152,10 @@ export type BambiEvent = z.infer<typeof EventSchema>;
 export type BambiEventType = BambiEvent['type'];
 export const eventDurationMs = (event: BambiEvent) => event.timing.prepMs + event.timing.activeMs + event.timing.returnMs;
 
-export const MotifSchema = z.object({ id, visualPreset: z.enum(sceneNames), audioPreset: z.string().max(100).optional(), textAnchor: z.string().max(200), firstIntroducedAtMs: ms }).strict();
+export const MotifSchema = z.object({ id, visualPreset: z.enum(sceneNames), audioPreset: z.string().max(100).optional(), textAnchor: z.string().max(200), firstIntroducedAtMs: timestamp }).strict();
 export const ProgramSchema = z.object({
   version: z.literal(1), durationMs: ms.refine(n => n > 0), baseline: PresentationStateSchema,
+  continuous: z.boolean().optional(),
   motifs: z.array(MotifSchema).max(32), events: z.array(EventSchema).max(500),
 }).strict().superRefine((program, ctx) => {
   const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
@@ -147,7 +164,8 @@ export const ProgramSchema = z.object({
   let end = 0;
   for (const event of [...program.events].sort((a, b) => a.atMs - b.atMs)) {
     if (ids.has(event.id)) issue('Duplicate event identity'); ids.add(event.id);
-    const i = sessionPhases.indexOf(event.phase), from = phaseStarts[i] * program.durationMs, to = (phaseStarts[i + 1] ?? 1) * program.durationMs;
+    const cycle = program.continuous ? Math.floor(event.atMs / program.durationMs) * program.durationMs : 0;
+    const i = sessionPhases.indexOf(event.phase), from = cycle + phaseStarts[i] * program.durationMs, to = cycle + (phaseStarts[i + 1] ?? 1) * program.durationMs;
     if (event.atMs < from || event.atMs + eventDurationMs(event) > to + .001) issue('Event extends outside its fixed parent phase');
     if (event.atMs < end) issue('Foreground events cannot overlap; compose stages explicitly');
     end = event.atMs + eventDurationMs(event);

@@ -10,7 +10,16 @@ export const contentRoot = fileURLToPath(new URL('./stable-2.0/', import.meta.ur
 const read = (path: string) => JSON.parse(readFileSync(contentRoot + path, 'utf8'));
 export interface Trigger { id: string; name: string; description: string; effect: string; category: string }
 export interface Prompt { id: string; name: string; description: string; main: string; collar_addon: string; strategy: string }
-export const triggerData = read('workers/triggers.json') as { source: string; version: string; categories: Record<string, string>; triggers: Trigger[] };
+const stableTriggerData = read('workers/triggers.json') as { source: string; version: string; categories: Record<string, string>; triggers: Trigger[] };
+const cloudTriggers = JSON.parse(readFileSync(new URL('./bambicloud-triggers.json', import.meta.url), 'utf8')) as {names:string[]};
+const knownTriggers = new Set(stableTriggerData.triggers.map(trigger => trigger.name.toUpperCase()));
+export const triggerData = {...stableTriggerData, categories:{...stableTriggerData.categories,Cloud:'Additional BambiCloud session cues'},triggers:[
+  ...stableTriggerData.triggers,
+  ...cloudTriggers.names.filter(name => !knownTriggers.has(name.toUpperCase())).map(name => ({
+    id:'cloud_'+name.toLowerCase().replace(/[^a-z0-9]+/g,'_'),name,category:'Cloud',
+    description:'BambiCloud trigger; fictional audiovisual session cue.',effect:'Session text and audiovisual cue.',
+  })),
+]};
 // Prompt texts can be stored as editable line lists or as legacy strings.
 export const prompts: Prompt[] = ['bambisleep-classic', 'gentle-induction'].map(id => {
   const prompt = read(`workers/prompts/${id}.json`);
