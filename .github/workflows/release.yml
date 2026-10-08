@@ -121,6 +121,35 @@ jobs:
           retention-days: 1
           compression-level: 0
           if-no-files-found: error
+      - name: Retain bounded public-fixture diagnostics on a native failure
+        if: failure() && env.BAMBI_RELEASE_OUTPUT != ''
+        run: |
+          node --input-type=module <<'JS'
+          import {existsSync,readdirSync,readFileSync,writeFileSync,mkdirSync,statSync} from 'node:fs';
+          import {join} from 'node:path';
+          const root=process.env.BAMBI_RELEASE_OUTPUT,out=join(process.env.RUNNER_TEMP,'bambi-native-diagnostics');
+          mkdirSync(out,{recursive:true});let index=0,total=0;
+          function collect(folder,depth=0){
+            if(depth>4||!existsSync(folder))return;
+            for(const entry of readdirSync(folder,{withFileTypes:true})){
+              const path=join(folder,entry.name);
+              if(entry.isDirectory()&&(depth>0||entry.name.startsWith('qualification')))collect(path,depth+1);
+              if(!entry.isFile()||!['evidence.json','INSTALLER-CHECK.json','DESKTOP-QUALIFICATION.json'].includes(entry.name))continue;
+              const bytes=statSync(path).size;if(bytes>1048576||total+bytes>8388608)throw Error('Diagnostics exceeded its bounded size.');
+              const value=JSON.parse(readFileSync(path,'utf8'));
+              writeFileSync(join(out,String(++index)+'-'+entry.name),JSON.stringify(value,(key,item)=>/command|diagnostic|token|secret|password|credential/i.test(key)?undefined:item,2)+'\n');total+=bytes;
+            }
+          }
+          collect(root);
+          JS
+      - name: Save small native failure reports
+        if: failure() && env.BAMBI_RELEASE_OUTPUT != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-diagnostics-${{ matrix.target }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/bambi-native-diagnostics/*.json
+          retention-days: 1
+          if-no-files-found: ignore
   attest:
     needs: native
     if: ${{ !github.event.repository.private }}
