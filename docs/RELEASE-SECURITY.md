@@ -11,21 +11,41 @@ The tag release pipeline produces **Linux x64 AppImage and Windows x64 per-user 
 3. Freeze that commit's reviewed source independently on standard `ubuntu-24.04` and `windows-2022` x64 runners. Install with `npm ci --ignore-scripts`, check the frozen source and build once using the existing native builders. Downloads outside npm already use the builders' pinned runtime checksums; no dependency/lockfile updates are performed.
 4. Exercise the finished AppImage's extracted payload through its `AppRun`, and exercise the finished Windows installer through installation, application checks, uninstallation and reinstallation. Inspect bound runtime/source inventories and reject obvious sensitive/local paths in transferred source/notice archives. Original third-party notices are preserved.
 5. Stage only one primary executable per platform, matching source, notices, native evidence, runtime manifests and a scoped npm CycloneDX SBOM. Transfer these exact bytes using official artifact actions with digest mismatch configured to fail.
-6. Verify both targets have successful bound checks, matching canonical application source, unchanged downloads and the expected tag/commit/run. Assemble `BUILD-INFO.json` and `SHA256SUMS` deterministically from transferred records. No executable is rebuilt.
-7. In public repositories, the pinned official `actions/attest` creates build provenance for **every final attached file**, including source/notice archives, metadata, SBOMs and `SHA256SUMS`. Private repositories skip this unsupported Free-plan operation.
+6. Verify both targets have successful bound checks, matching canonical application source, unchanged downloads and the expected tag/commit/run. Copy the two executables unchanged, collect supplementary files and `BUILD-INFO.json` in one deterministic technical ZIP, then generate `SHA256SUMS` for the three downloadable artifacts. No executable is rebuilt.
+7. In public repositories, the pinned official `actions/attest` creates build provenance for **every final attached file**: both executables, the technical ZIP and `SHA256SUMS`. The attested ZIP binds the source/notice archives, metadata and SBOMs inside it. Private repositories skip this unsupported Free-plan operation.
 8. The publication job independently assembles the same bytes, verifies public build attestations against repository/workflow/tag/commit, confirms the remote tag, creates a draft with GitHub CLI, uploads all assets, checks GitHub's uploaded SHA-256 digests and sizes, rechecks the tag and publishes last. A failed platform or required verification prevents publication. Existing releases are never overwritten.
 9. Remove only the current successful run's two temporary transfer artifacts. Failed-run artifacts expire after one day; their retention is not permanent distribution storage.
 
 ## Downloadable files
 
-Each release includes:
+For normal use, download **one file for your operating system**. Windows users run the `.exe` installer; Linux users make the AppImage executable and open it. Installing Node/npm separately is not required for these packaged smoke builds. Release notes start with explicit Windows and Linux download links.
 
-- `bambi-local-VERSION-x86_64.AppImage` and `bambi-local-VERSION-x64.exe`.
-- `SHA256SUMS` and aggregate `BUILD-INFO.json`.
-- Per-platform `linux-x64-` / `windows-x64-` `BUILD-INFO.json`, `RUNTIME-MANIFEST.json`, `SOURCE-CHECKS.json`, `DESKTOP-QUALIFICATION.json`, `PACKAGING-CHECK.json`, `SBOM.cdx.json` and `NOTICES.tar.gz`; Windows also includes `INSTALLER-CHECK.json`.
-- `bambi-local-VERSION-linux-x64-source.tar.gz` and `bambi-local-VERSION-windows-x64-source.tar.gz`. These are the exact matching application source retained by the native builders. Separate archives preserve each native source-byte identity; canonical identity must agree even when checkouts differ in line endings.
+The pipeline attaches only four files:
 
-The extra runtime tar, unpacked runtime, caches, local databases, logs and working directories are not uploaded. GitHub's automatic source archives also remain available, but do not replace matching source and bundled third-party license/source records. Generated source archives cannot be verified as release assets using `gh release verify-asset`; the attached matching-source archives can.
+- `bambi-local-VERSION-x64.exe` — Windows x64 installer.
+- `bambi-local-VERSION-x86_64.AppImage` — Linux x64 application.
+- `bambi-local-VERSION-technical-details-and-source.zip` — optional technical records and matching source.
+- `SHA256SUMS` — hashes of the two executables and the complete ZIP.
+
+Inside the optional ZIP, `README.txt` explains the layout and `BUILD-INFO.json` records the tag, exact commit/run and original file hashes. All per-platform `BUILD-INFO.json`, `RUNTIME-MANIFEST.json`, `SOURCE-CHECKS.json`, `DESKTOP-QUALIFICATION.json`, `PACKAGING-CHECK.json`, scoped `SBOM.cdx.json` and `NOTICES.tar.gz` remain available; Windows also includes `INSTALLER-CHECK.json`. The two `bambi-local-VERSION-TARGET-source.tar.gz` files preserve each native build's matching source bytes and original licenses. They are copied unchanged into the ZIP. Canonical application identity must agree even when checkouts differ in line endings.
+
+The ZIP excludes the installers themselves to avoid duplicate large downloads. It uses sorted flat entries, fixed timestamps/permissions and stored entries for deterministic bytes in both public aggregation jobs; already compressed source/notice archives are not recompressed. Before publication, ZIP paths, regular-file attributes, CRCs, size bounds, identity and every original file hash are checked. No archive paths are extracted by the publisher.
+
+GitHub also displays its automatic **Source code (zip/tar.gz)** links and, when enabled, the release attestation. Those platform-provided entries remain visible; the pipeline controls its four attachments. Normal users do not need them. GitHub's source snapshots do not replace the matching source and bundled third-party records in the optional ZIP.
+
+Beta.12 and earlier releases retain their original separate files. Immutable releases are not retroactively repackaged. The compact layout applies to releases made by this updated pipeline.
+
+To inspect the optional archive after verifying its checksum, use your operating system's ZIP extractor. For example:
+
+```sh
+unzip bambi-local-VERSION-technical-details-and-source.zip -d technical-details
+```
+
+```powershell
+Expand-Archive .\bambi-local-VERSION-technical-details-and-source.zip -DestinationPath .\technical-details
+```
+
+The extracted `BUILD-INFO.json` identifies the exact executable hashes; extracting the ZIP alone does not validate them. Verify the complete ZIP with `SHA256SUMS` or the appropriate release/build attestation first. The source/notice archives retain their original tar.gz format inside the ZIP.
 
 ## One-time maintainer setup
 
@@ -68,7 +88,7 @@ Optional defense in depth: configure free SSH/GPG Git tag signing and use `git t
 
 ## Verify a download
 
-Replace `OWNER/REPO` with the actual repository from the release page / `BUILD-INFO.json`; currently the origin is `TechBambis/Project-Pink-Corruption`. Do not blindly trust a different repository identifier supplied with an unsolicited binary. Private beta downloads require authenticated access to the private repository. GitHub Release links do not make private binaries publicly downloadable.
+Replace `OWNER/REPO` with the actual repository from the release page / `BUILD-INFO.json` inside the optional technical ZIP; currently the origin is `TechBambis/Project-Pink-Corruption`. Do not blindly trust a different repository identifier supplied with an unsolicited binary. Private beta downloads require authenticated access to the private repository. GitHub Release links do not make private binaries publicly downloadable.
 
 Linux example, using a recent GitHub CLI:
 
@@ -102,7 +122,7 @@ gh attestation verify ./bambi-local-0.1.0-beta.12-x86_64.AppImage \
   --source-digest FULL_EXPECTED_COMMIT_SHA
 ```
 
-Obtain the expected commit independently from the trusted tag/source view. Substitute the Windows installer filename to verify that download. Checksums cover every attached file except `SHA256SUMS` itself; the public build attestation covers the checksum file too. Verification does not require disabling any operating-system security controls.
+Obtain the expected commit independently from the trusted tag/source view. Substitute the Windows installer filename to verify that download. Checksums cover both executables and the technical ZIP; the public build attestation covers these files and `SHA256SUMS` itself. Internal metadata keeps hashes of the original supplementary files and executables. For existing beta.12, checksums still cover its original individual attachments. Verification does not require disabling any operating-system security controls.
 
 ## Private beta and public protection
 
@@ -136,7 +156,7 @@ These controls distinguish three claims:
 
 No Windows Authenticode signing or macOS notarization is provided by GitHub attestations. Windows download reputation/SmartScreen/Smart App Control, Linux FUSE/direct mounting, recipient hardware, physical audio/microphone and macOS distribution remain separate qualification work. The Linux CI path exercises the exact AppImage payload and launcher using extraction, so it does not pretend to certify every recipient's FUSE setup.
 
-These builds are source-traceable, **not claimed byte-for-byte reproducible across independent builds**. Runtime manifests contain build times; npm SBOMs and package tools can contain timestamps/identifiers. The exact already-built files are retained and published without rebuilding.
+These builds are source-traceable, **not claimed byte-for-byte reproducible across independent builds**. The supplementary ZIP itself is deterministic for identical inputs; runtime manifests contain original build times, and npm SBOMs and package tools can contain timestamps/identifiers. The exact already-built files are retained and published without rebuilding.
 
 The npm SBOM describes the committed npm dependency tree, including build dependencies. It is not an exhaustive inventory of external Electron/Node/native binaries. Runtime manifests and original notices supplement that scope; shipping an npm-only SBOM does not claim complete native coverage.
 

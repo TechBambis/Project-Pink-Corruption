@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,readdirSync,rmSync,copyFileSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,readdirSync,rmSync,copyFileSync,utimesSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
+import AdmZip from 'adm-zip';
 import {releaseTag,desktopVersion} from '../scripts/desktop-release-version.mjs';
-import {context,assertSafePath,inspectArchive,stageTarget,assemble,verifyPublication,publish,findRelease} from '../scripts/release-pipeline.mjs';
+import {context,assertSafePath,inspectArchive,stageTarget,assemble,verifyPublication,publish,findRelease,downloadNames,readTechnicalDetails} from '../scripts/release-pipeline.mjs';
 import {archiveTool,hashFile} from '../scripts/desktop-windows-support.mjs';
 
 const build={tag:'v0.1.0-smoke.20',version:'0.1.0-smoke.20',phase:'smoke',prerelease:true,
@@ -51,6 +52,9 @@ async function fixture(t){
   write(join(folder,target+'-SOURCE-CHECKS.json'),{schema:1,...runtime,applicationDigest,result:'passed'});
   write(join(folder,target+'-DESKTOP-QUALIFICATION.json'),{version:build.version,target,applicationDigest,sourceDigest,payload:[{filename:executable,sha256:executableSha}],gates:Object.fromEntries(config.gates.smoke.filter(g=>target==='windows-x64'||g!=='installer').map(g=>[g,'passed'])),...(target==='linux-x64'?{appImage:{filename:executable,sha256:executableSha}}:{})});
   write(join(folder,target+'-PACKAGING-CHECK.json'),{result:'passed',checks:[{name:'fixture'}]});
+  write(join(folder,target+'-SBOM.cdx.json'),{bomFormat:'CycloneDX',components:[{name:'fixture'}]});
+  const material=join(base,target+'-material');mkdirSync(material);write(join(material,'LICENSE.txt'),'Original fixture license bytes\r\n');
+  for(const filename of [target+'-NOTICES.tar.gz',`bambi-local-${build.version}-${target}-source.tar.gz`])execFileSync(archiveTool,['-czf',join(folder,filename),'-C',material,'LICENSE.txt']);
   if(target==='windows-x64')write(join(folder,target+'-INSTALLER-CHECK.json'),{result:'passed',installerSha256:executableSha});
   const assets=[];for(const filename of readdirSync(folder).sort())assets.push({filename,bytes:readFileSync(join(folder,filename)).length,sha256:await hashFile(join(folder,filename))});
   write(join(folder,target+'-BUILD-INFO.json'),{schema:1,...build,target,applicationDigest,sourceDigest,assets});
@@ -65,11 +69,55 @@ async function rebind(input,target){
 }
 
 test('assembly is deterministic across attestation/publication jobs and preserves final executable bytes',async t=>{
- const {base,input}=await fixture(t),a=join(base,'first'),b=join(base,'second');await assemble(input,a,build);await assemble(input,b,build);
+ const {base,input}=await fixture(t),a=join(base,'first'),b=join(base,'second');await assemble(input,a,build);
+ for(const target of ['linux-x64','windows-x64'])for(const name of readdirSync(join(input,'release-'+target)))utimesSync(join(input,'release-'+target,name),new Date(2000,0,1),new Date(2026,5,1));
+ await assemble(input,b,build);
  assert.deepEqual(readdirSync(a),readdirSync(b));for(const name of readdirSync(a))assert.equal(await hashFile(join(a,name)),await hashFile(join(b,name)));
- const checks=await verifyPublication(a,build);assert(checks.some(a=>a.filename==='BUILD-INFO.json'));
+ const checks=await verifyPublication(a,build);assert.equal(checks.length,3);assert(checks.some(a=>a.filename===downloadNames(build).details));
  const exe=`bambi-local-${build.version}-x64.exe`;assert.equal(await hashFile(join(a,exe)),await hashFile(join(input,'release-windows-x64',exe)));
  write(join(a,exe),'changed');await assert.rejects(verifyPublication(a,build),/bytes changed/);
+});
+
+test('four downloads retain matching source, licenses, SBOMs and native proof together without duplicating executables',async t=>{
+ const {base,input}=await fixture(t),output=join(base,'publish'),names=downloadNames(build);await assemble(input,output,build);
+ assert.deepEqual(readdirSync(output).sort(),[...Object.values(names),'SHA256SUMS'].sort());
+ const archived=await readTechnicalDetails(join(output,names.details));
+ assert(!archived.has(names.windows));assert(!archived.has(names.linux));
+ for(const target of ['linux-x64','windows-x64'])for(const filename of readdirSync(join(input,'release-'+target))){
+  if(filename.endsWith('.exe')||filename.endsWith('.AppImage'))continue;
+  assert.deepEqual(archived.get(filename),readFileSync(join(input,'release-'+target,filename)),filename);
+ }
+ const info=JSON.parse(archived.get('BUILD-INFO.json'));assert.equal(info.commit,build.commit);assert.equal(info.targets.length,2);
+ assert(archived.get('README.txt').toString().includes('not an installer'));
+ // Independent archive implementation checks real extraction and ZIP CRCs.
+ if(process.platform!=='win32'){
+  execFileSync('python3',['-c','import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; assert z.read("README.txt").startswith(b"Bambi Local")',join(output,names.details)]);
+ }else assert(execFileSync(archiveTool,['-tf',join(output,names.details)],{encoding:'utf8'}).includes('BUILD-INFO.json'));
+});
+
+async function regenerateChecksums(directory){
+ const entries=[];for(const name of readdirSync(directory).sort())if(name!=='SHA256SUMS')entries.push(`${await hashFile(join(directory,name))}  ${name}`);
+ write(join(directory,'SHA256SUMS'),entries.join('\n')+'\n');
+}
+
+test('rewriting outer checksums cannot conceal changed executable bytes or archived evidence',async t=>{
+ const {base,input}=await fixture(t),a=join(base,'exe'),b=join(base,'archive'),names=downloadNames(build);await assemble(input,a,build);await assemble(input,b,build);
+ write(join(a,names.windows),'modified executable');await regenerateChecksums(a);await assert.rejects(verifyPublication(a,build),/metadata\/asset mismatch/);
+ const zip=new AdmZip(join(b,names.details));zip.updateFile('windows-x64-PACKAGING-CHECK.json',Buffer.from('{"result":"failed"}'));zip.writeZip(join(b,names.details));await regenerateChecksums(b);
+ await assert.rejects(verifyPublication(b,build),/metadata\/asset mismatch/);
+});
+
+test('technical archive rejects extra/private entries and forged build identity despite rewritten checksums',async t=>{
+ const {base,input}=await fixture(t),names=downloadNames(build);
+ for(const [index,change] of [
+  zip=>zip.addFile('.env',Buffer.from('public test fixture')),
+  zip=>zip.addFile('../escape.txt',Buffer.from('public test fixture')),
+  zip=>zip.addFile('unexpected.txt',Buffer.from('public test fixture')),
+  zip=>zip.updateFile('BUILD-INFO.json',Buffer.from(JSON.stringify({...JSON.parse(zip.readAsText('BUILD-INFO.json')),commit:'0'.repeat(40)}))),
+ ].entries()){
+  const output=join(base,String(index));await assemble(input,output,build);const zip=new AdmZip(join(output,names.details));change(zip);zip.writeZip(join(output,names.details));await regenerateChecksums(output);
+  await assert.rejects(verifyPublication(output,build),/Unsafe|Sensitive|inventory disagreement|identity mismatch/);
+ }
 });
 
 test('missing targets, extra files, changed downloads and source disagreement prevent publication assembly',async t=>{
@@ -119,6 +167,10 @@ test('draft discovery paginates authenticated releases and fails closed on unrea
 test('private publication skips unsupported attestations, confirms remote digests and publishes the draft last',async t=>{
  const {base,input}=await fixture(t),directory=join(base,'publish');await assemble(input,directory,build);const mock=await publicationMock(directory);await publish(directory,build,mock);
  assert.deepEqual(mock.commands.map(c=>c.slice(0,2)),[['release','create'],['release','edit']]);assert(mock.commands[0].includes('--verify-tag'));assert(mock.commands[0].includes('--prerelease'));assert(mock.commands[1].includes('--draft=false'));assert(mock.commands[1].includes('--latest=false'));
+ const notes=readFileSync(join(base,'release-notes.md'),'utf8'),names=downloadNames(build),first=notes.split('\n')[0];
+ assert(first.includes(`[Download for Windows (x64)](https://github.com/${build.repository}/releases/download/${build.tag}/${names.windows})`));
+ assert(first.includes(`[Download for Linux (x64)](https://github.com/${build.repository}/releases/download/${build.tag}/${names.linux})`));
+ assert(notes.includes('Local AI and speech are not included.'));assert(notes.includes('matching source (optional ZIP)'));
 });
 
 test('public publication verifies every asset against workflow/ref/commit before creating its draft',async t=>{

@@ -4,7 +4,7 @@ import {readFileSync,writeFileSync,readdirSync,lstatSync,mkdirSync,existsSync,co
 import {join,resolve,basename} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {archiveTool,hashFile} from './desktop-windows-support.mjs';
+import {archiveTool,hashFile,digest} from './desktop-windows-support.mjs';
 import {releaseTag} from './desktop-release-version.mjs';
 import {releaseReport,sourceChecksMatch} from './desktop-release-support.mjs';
 
@@ -13,6 +13,29 @@ const json=path=>JSON.parse(readFileSync(path,'utf8'));
 const writeJson=(path,value)=>writeFileSync(path,JSON.stringify(value,null,2)+'\n');
 const sha=/^[a-f0-9]{64}$/;
 const namePattern=/^[A-Za-z0-9_.-]+$/;
+
+export function downloadNames(build){
+ return {windows:`bambi-local-${build.version}-x64.exe`,linux:`bambi-local-${build.version}-x86_64.AppImage`,
+  details:`bambi-local-${build.version}-technical-details-and-source.zip`};
+}
+
+// Read only the small, flat supplementary archive. Never extract its paths.
+export async function readTechnicalDetails(path){
+ const limit=32*2**20;
+ if(!lstatSync(path).isFile()||lstatSync(path).size>limit)throw Error('Invalid technical archive size/type.');
+ const {default:AdmZip}=await import('adm-zip'),zip=new AdmZip(path),entries=zip.getEntries(),files=new Map();let total=0;
+ if(!entries.length||entries.length>100)throw Error('Invalid technical archive entry count.');
+ for(const entry of entries){
+  const name=entry.entryName,type=entry.attr>>>16&0xf000;
+  if(!namePattern.test(name)||entry.isDirectory||type!==0x8000||files.has(name))throw Error('Unsafe/duplicate technical archive entry.');
+  assertSafePath(name);total+=entry.header.size;
+  if(total>limit)throw Error('Technical archive exceeds its unpacked size bound.');
+  const bytes=entry.getData(); // CRC validation is part of the ZIP reader.
+  if(bytes.length!==entry.header.size)throw Error('Technical archive entry size mismatch.');
+  files.set(name,bytes);
+ }
+ return files;
+}
 
 export function context(environment,project=root){
  const e=environment,pkg=json(join(project,'package.json')),lock=json(join(project,'package-lock.json'));
@@ -139,34 +162,63 @@ export async function assemble(input,destination,build,project=root){
   targets.push(record);
  }
  if(new Set(targets.map(t=>t.applicationDigest)).size!==1)throw Error('Native targets used different application source.');
- mkdirSync(destination,{recursive:true});
- for(const target of policy.targets)for(const filename of readdirSync(join(input,'release-'+target))){
-  if(existsSync(join(destination,filename)))throw Error('Release asset collision.');
-  copyFileSync(join(input,'release-'+target,filename),join(destination,filename));
- }
- const assets=[];
- for(const filename of readdirSync(destination).sort()){
-  if(filename.endsWith('.tar.gz'))inspectArchive(join(destination,filename));
-  assets.push(await asset(join(destination,filename)));
+ const names=downloadNames(build),files=new Map(),assets=[];
+ for(const target of policy.targets)for(const filename of readdirSync(join(input,'release-'+target)).sort()){
+  if(files.has(filename))throw Error('Release asset collision.');
+  const path=join(input,'release-'+target,filename);assertSafePath(filename);
+  if(filename.endsWith('.tar.gz'))inspectArchive(path);
+  assets.push(await asset(path));files.set(filename,path);
  }
  if(assets.reduce((sum,a)=>sum+a.bytes,0)>policy.maximumTransferMiB*2**20)throw Error('Combined release exceeds the storage bound.');
- writeJson(join(destination,'BUILD-INFO.json'),{schema:1,...build,applicationDigest:targets[0].applicationDigest,targets,assets,
-  limitations:['Smoke: offline sample and desktop packaging; local AI/speech are not included.','Qualification is on hosted runners; recipient hardware/audio, Windows download reputation and Linux FUSE remain separate.','Native builds and qualification run in this workflow; the aggregation job attests their verified final files. This is not an independent source audit.']});
+ const readme=Buffer.from(`Bambi Local ${build.version}: technical details and matching source\n\nWindows users only need ${names.windows}.\nLinux users only need ${names.linux}.\nThis optional archive preserves build records, native checks, SBOMs, licenses\nand the exact matching source archives for both downloads. It is not an installer.\n\nBUILD-INFO.json records the original files and their SHA-256 hashes.\nSHA256SUMS on the release page verifies the two executables and this entire ZIP.\nExtract the matching source and NOTICES tar.gz archives to inspect their files.\nVerification guide: https://github.com/${build.repository}/blob/${build.tag}/docs/RELEASE-SECURITY.md\n`);
+ files.set('README.txt',readme);assets.push({filename:'README.txt',bytes:readme.length,sha256:digest(readme)});
+ assets.sort((a,b)=>a.filename.localeCompare(b.filename,'en'));
+ const record={schema:1,...build,applicationDigest:targets[0].applicationDigest,targets,assets,
+  limitations:['Smoke: offline sample and desktop packaging; local AI/speech are not included.','Qualification is on hosted runners; recipient hardware/audio, Windows download reputation and Linux FUSE remain separate.','Native builds and qualification run in this workflow; the aggregation job attests their verified final files. This is not an independent source audit.']};
+ const {default:AdmZip}=await import('adm-zip'),zip=new AdmZip();
+ files.set('BUILD-INFO.json',Buffer.from(JSON.stringify(record,null,2)+'\n'));
+ if([...files].filter(([name])=>name!==names.windows&&name!==names.linux)
+  .reduce((sum,[,value])=>sum+(Buffer.isBuffer(value)?value.length:lstatSync(value).size),0)>32*2**20)throw Error('Technical archive exceeds its unpacked size bound.');
+ mkdirSync(destination,{recursive:true});
+ for(const [filename,bytes] of [...files].sort(([a],[b])=>a.localeCompare(b,'en'))){
+  if(filename===names.windows||filename===names.linux){copyFileSync(bytes,join(destination,filename));continue;}
+  const entry=zip.addFile(filename,Buffer.isBuffer(bytes)?bytes:readFileSync(bytes),'',0o644);
+  // Fixed DOS date, permissions and ordering make the two aggregation jobs
+  // produce identical ZIP bytes regardless of input mtimes or host timezone.
+  entry.header.time=new Date(1980,0,1);entry.header.method=0;
+ }
+ writeFileSync(join(destination,names.details),zip.toBuffer());
  const checksums=[];
  for(const filename of readdirSync(destination).sort())checksums.push(`${await hashFile(join(destination,filename))}  ${filename}`);
  writeFileSync(join(destination,'SHA256SUMS'),checksums.join('\n')+'\n');
- return json(join(destination,'BUILD-INFO.json'));
+ await verifyPublication(destination,build);
+ return record;
 }
 
 export async function verifyPublication(directory,build){
- const record=json(join(directory,'BUILD-INFO.json'));
- for(const key of ['tag','version','commit','repository','runId','runAttempt'])if(record[key]!==build[key])throw Error('Publication identity mismatch.');
+ const names=downloadNames(build);
+ if(JSON.stringify(readdirSync(directory).sort())!==JSON.stringify([...Object.values(names),'SHA256SUMS'].sort()))throw Error('Expected exactly four release downloads.');
  const entries=readFileSync(join(directory,'SHA256SUMS'),'utf8').trim().split('\n').map(line=>{
   const match=line.match(/^([a-f0-9]{64})  ([A-Za-z0-9_.-]+)$/);if(!match)throw Error('Invalid checksum record.');return {sha256:match[1],filename:match[2]};
  });
  if(new Set(entries.map(e=>e.filename)).size!==entries.length||JSON.stringify([...entries.map(e=>e.filename),'SHA256SUMS'].sort())!==JSON.stringify(readdirSync(directory).sort()))throw Error('Publication asset/checksum disagreement.');
  for(const entry of entries)if(await hashFile(join(directory,entry.filename))!==entry.sha256)throw Error('Publication bytes changed: '+entry.filename);
- for(const entry of record.assets)if(entries.find(e=>e.filename===entry.filename)?.sha256!==entry.sha256)throw Error('Build metadata/asset mismatch.');
+ const files=await readTechnicalDetails(join(directory,names.details));
+ if(!files.has('BUILD-INFO.json'))throw Error('Missing archived build metadata.');
+ const record=JSON.parse(files.get('BUILD-INFO.json').toString('utf8'));
+ for(const key of ['tag','version','phase','commit','repository','workflow','workflowPath','runId','runAttempt','runUrl'])if(record[key]!==build[key])throw Error('Publication identity mismatch.');
+ for(const entry of record.assets){
+  if(!namePattern.test(entry.filename)||!sha.test(entry.sha256)||!Number.isSafeInteger(entry.bytes)||entry.bytes<0)throw Error('Invalid archived asset record.');
+  assertSafePath(entry.filename);
+ }
+ const archived=record.assets.filter(e=>e.filename!==names.windows&&e.filename!==names.linux).map(e=>e.filename);
+ if(new Set(record.assets.map(e=>e.filename)).size!==record.assets.length||JSON.stringify([...archived,'BUILD-INFO.json'].sort())!==JSON.stringify([...files.keys()].sort()))throw Error('Technical archive/build inventory disagreement.');
+ for(const executable of [names.windows,names.linux])if(!record.assets.some(e=>e.filename===executable))throw Error('Missing executable build binding.');
+ for(const entry of record.assets){
+  const bytes=files.get(entry.filename),path=join(directory,entry.filename);
+  const actual=bytes?{bytes:bytes.length,sha256:digest(bytes)}:await asset(path);
+  if(actual.bytes!==entry.bytes||actual.sha256!==entry.sha256)throw Error('Build metadata/asset mismatch: '+entry.filename);
+ }
  return entries;
 }
 
@@ -202,7 +254,8 @@ export async function publish(directory,build,{api=githubApi,gh=(args)=>execFile
  // including the aggregate metadata/checksums, before obtaining a release URL.
  if(!repository.private)for(const filename of readdirSync(directory).sort())gh(['attestation','verify',join(directory,filename),'--repo',build.repository,'--signer-workflow',build.repository+'/'+build.workflowPath,'--source-ref','refs/tags/'+build.tag,'--source-digest',build.commit]);
  const notes=join(directory,'..','release-notes.md');
- writeFileSync(notes,`Bambi Local ${build.version} — Linux x64 and Windows x64 smoke packages.\n\nCommit: ${build.commit}\nSource: https://github.com/${build.repository}/tree/${build.tag}\nBuild: ${build.runUrl}\n\nOffline sample and packaging checks passed; local AI/speech are not included.\nVerification: https://github.com/${build.repository}/blob/${build.tag}/docs/RELEASE-SECURITY.md\n`);
+ const names=downloadNames(build),download=`https://github.com/${build.repository}/releases/download/${build.tag}/`;
+ writeFileSync(notes,`[Download for Windows (x64)](${download+names.windows}) · [Download for Linux (x64)](${download+names.linux})\n\nDownload only the file for your operating system. On Windows, run the .exe installer; on Linux, make the AppImage executable and open it.\n\n**Smoke test version:** includes the offline sample and desktop shell. Local AI and speech are not included.\n\n[Technical details and matching source (optional ZIP)](${download+names.details}) · [Checksums](${download}SHA256SUMS) · [Verification guide](https://github.com/${build.repository}/blob/${build.tag}/docs/RELEASE-SECURITY.md)\n\nBambi Local ${build.version} · Commit: ${build.commit}\nSource: https://github.com/${build.repository}/tree/${build.tag}\nBuild: ${build.runUrl}\n`);
  gh(['release','create',build.tag,...readdirSync(directory).sort().map(n=>join(directory,n)),'--repo',build.repository,'--verify-tag','--draft','--title',`Bambi Local ${build.version} (smoke)`,'--notes-file',notes,'--generate-notes',...(build.prerelease?['--prerelease']:[])]);
  const draft=await findRelease(repo,build.tag,api);
  const expected=[...entries,await asset(join(directory,'SHA256SUMS'))];

@@ -10,6 +10,12 @@ Choose a voice. Set the pace. Make the session yours.
 
 The app has its own TypeScript server, browser UI and local storage. It uses pinned prompts, triggers, guides and presets from [js-bambisleep-chat STABLE-2.0](https://github.com/HarleyVader/js-bambisleep-chat/tree/STABLE-2.0) by [HarleyVader](https://github.com/HarleyVader). The original work keeps its credits. [Here's what comes from where](docs/STABLE_CONTENT.md).
 
+## Try the desktop test build
+
+[**Download the current beta for Windows or Linux**](https://github.com/TechBambis/Project-Pink-Corruption/releases)
+
+On the release page, Windows users only need the `.exe` installer; Linux users only need the `.AppImage`. Upcoming releases put **Download for Windows** and **Download for Linux** links at the top. Technical details and source are optional. These smoke builds include the offline sample and desktop shell; **local AI and speech are not included yet**. Beta releases are listed on the releases page even when GitHub has no stable “Latest” release.
+
 ## Bring something of your own ♡
 
 An idea. A fix. A different way to do things.
@@ -20,7 +26,7 @@ Come say hi in [Discussions](https://github.com/TechBambis/Project-Pink-Corrupti
 
 ## First, the essentials
 
-Native setup currently targets **Fedora/Linux x64**. Windows and Apple Silicon macOS installation, startup and shutdown have not been verified yet. A successful web build doesn't establish that local AI and audio work on those platforms.
+Native development setup currently targets **Fedora/Linux x64**. The packaged smoke builds have passed hosted Ubuntu x64 and Windows Server 2022 x64 installation/lifecycle checks; recipient hardware/audio and Windows 11 still need tester checks. Apple Silicon macOS packaging remains unverified. A successful smoke/web build does not establish local AI and speech support on another platform.
 
 You'll need **Node.js 22.13+** and npm for the app. Local AI and speech services have their own setup below. The checkout includes source and runtime assets. Model weights, installed environments, private recordings and credentials stay outside Git.
 
