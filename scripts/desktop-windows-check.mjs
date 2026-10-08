@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {_electron as electron} from 'playwright';
 import assert from 'node:assert/strict';
-import {mkdirSync,mkdtempSync,readFileSync,writeFileSync,existsSync,realpathSync,cpSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,readFileSync,writeFileSync,existsSync,realpathSync,cpSync,statSync} from 'node:fs';
 import {resolve,dirname,join,relative,isAbsolute} from 'node:path';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
-import {execFileSync,spawn} from 'node:child_process';
+import {execFileSync,spawn,spawnSync} from 'node:child_process';
 import {createServer} from 'node:http';
 import {hashFile,digest,inventory,assertNativeTree,logicalPath,files} from './desktop-windows-support.mjs';
-import {observeOwnedRows,observeRows,observeAcl,startObserver,stopObserver,machineConditions} from './desktop-windows-processes.mjs';
+import {observeOwnedRows,observeRows,observeAcl,startObserver,stopObserver,machineConditions,powershell} from './desktop-windows-processes.mjs';
 
 if(process.argv.includes('--help')){console.log('Native Windows: node scripts/desktop-windows-check.mjs "path to Bambi Local.exe". Evidence stays in LOCALAPPDATA/Bambi qualification.');process.exit(0);}
 if(process.platform!=='win32'||process.arch!=='x64')throw Error('Run acceptance on native Windows x64.');
@@ -97,6 +97,19 @@ try{
   assert(!/(?:^|\/)(?:\.env(?:\.|$)|\.git|\.runtime|internal|models|recordings|imported-sounds)(?:\/|$)|\.(?:sqlite|key|pem|p12|pfx)$/.test(logicalPath(entry.path)),'Excluded private/local path in artifact '+entry.path);
  }
  record('finished-package-matching-source-and-native-PE-audit',{sourceDigest:runtime.sourceDigest,scope:'Per-file hashes, native x64 PE headers and excluded paths; not a semantic secret scan.'});
+ const profileProof=join(output,'Private profile reuse ü'),profileMarker=join(profileProof,'.bambi-desktop-profile');
+ const secureProfile=()=>spawnSync(process.env.BAMBI_WINDOWS_JOB_HELPER,['--secure-data',profileProof],{encoding:'utf8',windowsHide:true,timeout:5000,env:{SystemRoot:process.env.SystemRoot||process.env.WINDIR}});
+ const initialProfile=secureProfile();assert.equal(initialProfile.status,0,initialProfile.error?.message||initialProfile.stderr);
+ writeFileSync(join(profileProof,'public-fixture.txt'),'Public qualification fixture; no user data.');
+ const markerBefore=statSync(profileMarker).mtimeMs,aclBefore=await observeAcl(profileProof);
+ await delay(100);
+ const reusedProfile=secureProfile();assert.equal(reusedProfile.status,0,reusedProfile.error?.message||reusedProfile.stderr);
+ assert.equal(statSync(profileMarker).mtimeMs,markerBefore,'A reused private profile must not rewrite its marker');
+ assert.deepEqual(await observeAcl(profileProof),aclBefore,'A reused private profile must retain its ACL');
+ powershell("$acl=Get-Acl -LiteralPath $env:BAMBI_ACL_FIXTURE; $sid=[System.Security.Principal.SecurityIdentifier]::new('S-1-1-0'); $rule=[System.Security.AccessControl.FileSystemAccessRule]::new($sid,[System.Security.AccessControl.FileSystemRights]::ReadAndExecute,[System.Security.AccessControl.AccessControlType]::Allow); $acl.AddAccessRule($rule); Set-Acl -LiteralPath $env:BAMBI_ACL_FIXTURE -AclObject $acl",{BAMBI_ACL_FIXTURE:profileProof});
+ const changedProfile=secureProfile();assert.equal(changedProfile.status,1,changedProfile.error?.message||changedProfile.stderr);assert.match(changedProfile.stderr,/Private user-data permissions have changed/);
+ assert.equal(statSync(profileMarker).mtimeMs,markerBefore);assert.equal(readFileSync(join(profileProof,'public-fixture.txt'),'utf8'),'Public qualification fixture; no user data.');
+ record('private-profile-reuse-is-read-only-and-changed-ACL-is-rejected',{markerUnchanged:true,aclUnchanged:true,broaderPermissionsRejected:true,existingDataRetained:true});
  const before=await inventory(resources);
  canary=spawn(join(backendRoot,'node/bin/node.exe'),['-e','setInterval(()=>{},1000)'],{windowsHide:true,stdio:'ignore'});
  // Verify a normal launch and duplicate start without Playwright or debug flags.

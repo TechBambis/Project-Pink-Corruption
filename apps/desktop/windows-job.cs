@@ -140,9 +140,30 @@ public static class BambiWindowsJob
         string marker = Path.Combine(directory.FullName, ".bambi-desktop-profile");
         if (directory.Exists)
         {
-            if (!directory.GetAccessControl().GetOwner(typeof(SecurityIdentifier)).Equals(user))
+            DirectorySecurity existing = directory.GetAccessControl();
+            if (!existing.GetOwner(typeof(SecurityIdentifier)).Equals(user))
                 throw new InvalidOperationException("User-data directory is not owned by the current user");
-            if (directory.GetFileSystemInfos().Length != 0 && (!File.Exists(marker) || File.ReadAllText(marker) != "Bambi Local private desktop profile v1\n"))
+            if (File.Exists(marker) && File.ReadAllText(marker) == "Bambi Local private desktop profile v1\n")
+            {
+                // Reapplying inheritable ACLs walks the live Chromium profile.
+                // Reuse a verified private profile without changing its ACL or
+                // marker; a duplicate can then reach Electron's ownership lock.
+                AuthorizationRuleCollection rules = existing.GetAccessRules(true, true, typeof(SecurityIdentifier));
+                if (!existing.AreAccessRulesProtected || rules.Count != 3)
+                    throw new InvalidOperationException("Private user-data permissions have changed; existing data is retained");
+                foreach (SecurityIdentifier identity in new SecurityIdentifier[] { user, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null) })
+                {
+                    bool found = false;
+                    foreach (FileSystemAccessRule rule in rules)
+                        if (rule.IdentityReference.Equals(identity) && rule.AccessControlType == AccessControlType.Allow && !rule.IsInherited
+                            && rule.FileSystemRights == FileSystemRights.FullControl
+                            && rule.InheritanceFlags == (InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit)
+                            && rule.PropagationFlags == PropagationFlags.None) found = true;
+                    if (!found) throw new InvalidOperationException("Private user-data permissions have changed; existing data is retained");
+                }
+                return 0;
+            }
+            if (directory.GetFileSystemInfos().Length != 0)
                 throw new InvalidOperationException("Choose an empty dedicated user-data directory; existing unrelated data is retained");
         }
         else directory.Create();
