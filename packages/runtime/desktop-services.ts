@@ -110,6 +110,9 @@ export class DesktopServices {
       '--host','127.0.0.1','--port',this.env.BAMBI_LLM_PORT!,'--api-key',this.env.BAMBI_LLM_TOKEN!,
       '--ctx-size',String(context),'--parallel','1','--batch-size','512','--ubatch-size','128',
       '--poll','0','--poll-batch','0','--ctx-checkpoints','16','--checkpoint-min-step','512','--cache-ram','2048',
+      // The pinned llama runtime emits tensor/offload evidence at level 4.
+      // Level 5 debug and prompt logging remain disabled.
+      '--log-verbosity','4',
       ...attempt.args,
       '--flash-attn','on','--jinja','--reasoning','off','--no-webui','--n-predict','8192','--cache-type-k','f16','--cache-type-v','f16',
      ];

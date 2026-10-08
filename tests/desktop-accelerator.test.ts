@@ -67,6 +67,7 @@ test('automatic preparation preserves full context, selects GPU, verifies infere
  const rows=await events(),launch=rows.find(row=>row.args?.includes('--gpu-layers')).args;
  const value=(flag:string)=>launch[launch.indexOf(flag)+1];
  assert.equal(value('--gpu-layers'),'auto');assert.equal(value('--fit-ctx'),'24576');assert.equal(value('--fit-target'),'1024');assert.equal(value('--ctx-size'),'24576');
+ assert.equal(value('--log-verbosity'),'4');assert(!launch.includes('--log-verbose'));assert(!launch.includes('--log-prompts-dir'));
  assert.equal(rows.filter(row=>row.inference).length,1);
  await services.prepare(alphaModels.alias,24576);assert.equal((await events()).length,rows.length);
  await services.stop();assert.equal(services.modelReady,false);assert.equal(services.speechReady,false);

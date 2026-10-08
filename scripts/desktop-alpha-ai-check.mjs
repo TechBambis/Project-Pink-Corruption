@@ -24,13 +24,24 @@ try{
  page=await application.firstWindow();page.on('pageerror',e=>evidence.errors.push(String(e)));
  await page.waitForSelector('#offline-sample',{state:'visible'});
  const privacyAccess=await page.evaluate(async()=>{const response=await fetch('/api/access');return response.ok?response.json():{configured:true};});
- if(!privacyAccess.configured){await page.locator('#privacy-access[open]').waitFor();await page.locator('#privacy-access [name=microphone]').check();await page.locator('#privacy-access button[type=submit]').click();await page.locator('#privacy-access').waitFor({state:'hidden'});}
+ if(!privacyAccess.configured){await page.locator('#privacy-access[open]').waitFor();await page.locator('#privacy-access [data-local-only]').click();await page.locator('#privacy-access').waitFor({state:'hidden'});}
  const onboarding=await page.evaluate(async()=>(await(await fetch('/api/models/onboarding')).json()).done);
  if(!onboarding){await page.locator('#model-onboarding[open]').waitFor();await page.locator('#model-onboarding [data-finish]').click();await page.locator('#model-onboarding').waitFor({state:'hidden'});}
  evidence.measurements.startupMs=performance.now()-started;record('isolated-start',{startupMs:evidence.measurements.startupMs});
  await page.goto('http://127.0.0.1:17969/setup');await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='not-installed');
  await application.evaluate(({dialog},directory)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[directory]});},process.env.BAMBI_ALPHA_DATA_SOURCE||root);
  await page.getByRole('button',{name:'3. Install and start',exact:true}).click();
+ const denied=await page.evaluate(async()=>{const response=await fetch('/api/desktop/setup/install',{method:'POST'});let microphone;try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(track=>track.stop());microphone='granted';}catch(error){microphone=error.name;}return {download:response.status,microphone};});
+ assert.equal(denied.download,403);assert.equal(denied.microphone,'NotAllowedError');record('packaged-denied-download-and-microphone-access',{denied});
+ await page.locator('[data-access]').click();await page.locator('#privacy-access[open]').waitFor();await page.locator('#privacy-access [name=microphone]').check();await page.locator('#privacy-access [name=modelDownloads]').check();await page.locator('#privacy-access button[type=submit]').click();await page.locator('#privacy-access').waitFor({state:'hidden'});
+ for(let attempt=1;attempt<=2;attempt++){
+  await page.locator('#setup-install').click();await until(()=>page.evaluate(async()=>{const state=await(await fetch('/api/desktop/setup')).json();if(state.phase==='failed')throw Error(state.error);return state.phase==='downloading'&&state.completed>0;}),60000);
+  await page.waitForFunction(()=>document.querySelector('progress').value>0);await page.locator('#setup-cancel').click();await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='cancelled');record('actual-download-progress-cancel-and-retry',{attempt});
+ }
+ await page.locator('[data-folder]').click();await until(()=>page.locator('.model-source').count().then(count=>count===1));
+ const saved=await page.evaluate(async()=>(await(await fetch('/api/desktop/setup/sources')).json()).sources);assert.equal(saved.length,1);assert(saved[0].models.includes('bambi-qwen35-9b-hauhau:q4_k_m'));
+ await page.goto('http://127.0.0.1:17969/setup');await page.getByRole('button',{name:'3. Install and start',exact:true}).click();await until(()=>page.locator('.model-source').count().then(count=>count===1));
+ await page.locator('[data-folder]').click();await until(()=>page.evaluate(async()=>(await(await fetch('/api/desktop/setup/sources')).json()).sources.length===1));record('native-chosen-model-folder-persists-and-deduplicates',{supportedModels:saved[0].models});
  const installStart=performance.now();await page.locator('#setup-copy').click();
  await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='installed',{},{timeout:180000});
  evidence.measurements.verifiedCopyMs=performance.now()-installStart;record('explicit-native-folder-copy-and-verification',{ms:evidence.measurements.verifiedCopyMs});

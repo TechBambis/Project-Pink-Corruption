@@ -272,6 +272,16 @@ try{
   },expectedModel);
   assert(!files(join(data,'models')).some(path=>path.endsWith('.partial')));
   record('actual-pinned-Setup-download-progress-cancel-and-retry',{attempts:setupChecks,fullModelActivated:false});
+  const chosenFolder=join(output,'Chosen model folder ü'),chosenFile=join(chosenFolder,'unknown.gguf');mkdirSync(chosenFolder);writeFileSync(chosenFile,'GGUF-public-unreviewed-fixture');
+  await current.application.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},chosenFolder);
+  await current.page.locator('[data-folder]').click();await current.page.waitForFunction(()=>document.querySelectorAll('.model-source').length===1);
+  await current.page.reload();await current.page.getByRole('button',{name:'3. Install and start',exact:true}).click();await current.page.waitForFunction(()=>document.querySelectorAll('.model-source').length===1);
+  await current.page.locator('[data-folder]').click();
+  await current.page.waitForFunction(()=>document.querySelectorAll('.model-source').length===1&&!document.querySelector('[data-folder]').disabled);
+  const savedSources=await current.page.evaluate(async()=>(await(await fetch('/api/desktop/setup/sources')).json()).sources);
+  assert.equal(savedSources.length,1);assert.equal(logicalPath(savedSources[0].path),logicalPath(realpathSync(chosenFolder)));assert.deepEqual(savedSources[0].models,[]);
+  await current.page.getByRole('button',{name:'Forget location',exact:true}).click();await current.page.waitForFunction(()=>document.querySelectorAll('.model-source').length===0);assert.equal(readFileSync(chosenFile,'utf8'),'GGUF-public-unreviewed-fixture');
+  record('native-model-folder-choice-persists-deduplicates-and-forgets-without-changing-originals',{unicodePath:true,unknownModelNotImported:true,scope:'Actual Setup buttons and native bridge; only the disposable chooser result is supplied. Full supported-weight import is a reference-machine check.'});
   await current.page.goto('http://127.0.0.1:16969/');
   await current.page.waitForSelector('#offline-sample');
   const afterCancel=await current.page.evaluate(async()=>{
