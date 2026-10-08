@@ -206,6 +206,8 @@ jobs:
         run: node scripts/release-pipeline.mjs publish "$RUNNER_TEMP/bambi-publish"
   cleanup:
     needs: publish
+    # A skipped public-only ancestor must not skip successful private cleanup.
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
