@@ -40,7 +40,7 @@ if(command==='prepare'){
  Object.assign(spec,{applicationDigest:manifest.applicationDigest,sourceDigest:manifest.sourceDigest});
  writeFileSync(join(source,'RELEASE-SPEC.json'),JSON.stringify(spec,null,2)+'\n');
  const archive=`bambi-local-${version}-release-source.tar.gz`;
- execFileSync('tar',['-czf',join(destination,archive),'-C',source,'.'],{stdio:'inherit'});
+ execFileSync('tar',['-czf',archive,'-C',source,'.'],{cwd:destination,stdio:'inherit'});
  writeFileSync(join(destination,'SHA256SUMS'),`${await hashFile(join(destination,archive))}  ${archive}\n`);
  writeFileSync(join(destination,'RELEASE-STATUS.json'),JSON.stringify(releaseReport(spec),null,2)+'\n');
  console.log(JSON.stringify({source,version,applicationDigest:spec.applicationDigest,status:'prepared; no target built'},null,2));
@@ -82,7 +82,7 @@ if(command==='prepare'){
        if(reports.length>1)throw Error('Multiple native application reports in the fresh qualification directory.');
        if(reports.length)writeFileSync(join(directory,'WINDOWS-PACKAGING-CHECK.json'),readFileSync(join(testOutput,reports[0],'evidence.json')));
        const notices=join(directory,'win-unpacked/resources/notices');
-       if(existsSync(notices))execFileSync('tar',['-czf',join(directory,'NOTICES.tar.gz'),'-C',notices,'.'],{stdio:'inherit'});
+       if(existsSync(notices))execFileSync('tar',['-czf','NOTICES.tar.gz','-C',notices,'.'],{cwd:directory,stdio:'inherit'});
       }
       const installed=json(join(directory,'INSTALLER-CHECK.json'));if(installed.result!=='passed'||installed.version!==spec.version)throw Error('Installer acceptance failed.');
       gates.installer='passed';gates.packaging='passed';
@@ -90,7 +90,7 @@ if(command==='prepare'){
      }else{
       const received=mkdtempSync(join(tmpdir(),'Bambi release received '));
       try{
-       execFileSync('tar',['-xzf',join(directory,`bambi-local-${spec.version}-x64.tar.gz`),'-C',received],{stdio:'inherit'});
+       execFileSync('tar',['-xzf',`bambi-local-${spec.version}-x64.tar.gz`,'-C',received],{cwd:directory,stdio:'inherit'});
        const executable=join(received,spec.phase==='alpha'?'bambi-local':'bambi-local-smoke');
        run(root,spec.phase==='alpha'?'scripts/desktop-alpha-check.mjs':'scripts/desktop-smoke.mjs',[executable],{BAMBI_SMOKE_OUTPUT:join(directory,'qualification-linux')});gates.packaging='passed';
       }finally{rmSync(received,{recursive:true,force:true});}

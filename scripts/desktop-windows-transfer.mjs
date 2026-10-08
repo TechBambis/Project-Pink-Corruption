@@ -60,7 +60,7 @@ async function prepare(output,transport,allowance){
  files.push({name:'SHA256SUMS',bytes:statSync(join(output,'SHA256SUMS')).size,sha256:await hashFile(join(output,'SHA256SUMS'))});
  if(existsSync(transport))throw Error('Transfer output already exists.');mkdirSync(transport,{recursive:true});
  const bundle=join(transport,'handoff.tar');
- execFileSync('tar',['-cf',bundle,'-C',output,...files.map(f=>f.name)],{stdio:'inherit'});
+ execFileSync('tar',['-cf',bundle.split(/[\\/]/).at(-1),'-C',output,...files.map(f=>f.name)],{cwd:output,stdio:'inherit'});
  const parts=splitBundle(bundle,join(transport,'parts'),Math.floor(allowance*1024**2*0.90));
  const manifest={schema:1,runId:process.env.GITHUB_RUN_ID,headSha:process.env.GITHUB_SHA,version:runtime.version,bundle:{bytes:statSync(bundle).size,sha256:await hashFile(bundle)},files,parts:[]};
  for(const part of parts)manifest.parts.push({index:part.index,name:part.name,bytes:part.bytes,sha256:await hashFile(part.path)});
