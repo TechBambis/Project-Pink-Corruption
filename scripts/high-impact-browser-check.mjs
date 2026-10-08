@@ -153,12 +153,14 @@ try{
  assert.ok(revealTrace.some(item=>item.word==='The'&&item.reply==='The'),'Reply begins with the caption first word, without showing the queued sentence: '+JSON.stringify(revealTrace));
  assert.ok(revealTrace.every(item=>item.reply.trim().split(/\s+/).at(-1)===item.word),'The latest reply word matches the caption on the same display frame');
  // Hover controls follow pointer activity, independently of AI voice playback.
- const longSpeech=Buffer.alloc(44+16000*2*6);wav.copy(longSpeech,0,0,44);longSpeech.writeUInt32LE(longSpeech.length-8,4);longSpeech.writeUInt32LE(longSpeech.length-44,40);
+ // Keep this fixture playing throughout the UI assertions even when runner
+ // IPC takes several seconds. The check explicitly stops it below.
+ const longSpeech=Buffer.alloc(44+16000*2*30);wav.copy(longSpeech,0,0,44);longSpeech.writeUInt32LE(longSpeech.length-8,4);longSpeech.writeUInt32LE(longSpeech.length-44,40);
  await page.evaluate(async encoded=>{
   document.getElementById('narration-enabled').checked=false;document.getElementById('narration-enabled').dispatchEvent(new Event('input',{bubbles:true}));
   document.getElementById('master').value='.1';document.getElementById('master').dispatchEvent(new Event('input',{bubbles:true}));
   document.activeElement?.blur();
-  await window.bambi.audio.playVoice(Uint8Array.from(atob(encoded),c=>c.charCodeAt(0)).buffer,()=>{},()=>{window.fixtureLongSpeechEnded=true;},undefined,{conversation:true,spokenSeconds:6});
+  await window.bambi.audio.playVoice(Uint8Array.from(atob(encoded),c=>c.charCodeAt(0)).buffer,()=>{},()=>{window.fixtureLongSpeechEnded=true;},undefined,{conversation:true,spokenSeconds:30});
  },longSpeech.toString('base64'));
  await page.waitForFunction(()=>window.bambi.audio.foregroundOutputActive('AI_VOICE'));
  await page.mouse.move(2,2);await page.waitForTimeout(3200);
