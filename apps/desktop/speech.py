@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Frozen console entry point. Services retain their existing DSP/protocol."""
 import sys
+import faulthandler
+
+# Native Windows DLL failures need a Python stack in the private service log.
+faulthandler.enable()
 
 if len(sys.argv) != 2 or sys.argv[1] not in ('kokoro', 'streaming'):
     raise SystemExit('Choose kokoro or streaming')

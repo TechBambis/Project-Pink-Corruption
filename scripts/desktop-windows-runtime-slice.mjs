@@ -31,6 +31,8 @@ Object.assign(env,{PATH:'',PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8',BAMBI_RESOURC
 function launch(executable,args,environment=env){
  const child=spawn(executable,args,{cwd:data,env:environment,windowsHide:true,stdio:['pipe','pipe','pipe']});children.add(child);
  let diagnostics='';child.stderr.on('data',chunk=>{diagnostics=(diagnostics+chunk).slice(-12000);});
+ // Drain service stdout too. Only this public synthetic fixture is retained.
+ child.stdout.on('data',chunk=>{diagnostics=(diagnostics+chunk).slice(-12000);});
  child.on('error',error=>{child.launchError=String(error);});child.diagnostics=()=>diagnostics;return child;
 }
 async function stop(child){
@@ -109,7 +111,13 @@ try{
  streaming.stdin.end();await new Promise((accept,reject)=>{if(streaming.exitCode!==null)return accept();const timer=setTimeout(()=>reject(Error('Worker did not stop on pipe EOF')),5000);streaming.once('exit',code=>{clearTimeout(timer);code===0?accept():reject(Error('Worker EOF exit '+code));});});
  record('streaming-pipe-EOF-stops-owned-worker');await stop(kokoro);record('owned-Kokoro-process-stops');
  assert.deepEqual(await inventory(backend),original);record('relocated-runtime-resources-unchanged');evidence.result='passed';
-}catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);process.exitCode=1;}
+}catch(error){
+ evidence.result='failed';evidence.failure=String(error.stack||error);
+ evidence.failureCause=error.cause?String(error.cause.stack||error.cause):undefined;
+ await delay(250);
+ evidence.publicFixtureServiceDiagnostics=[...children].map(child=>({pid:child.pid,exitCode:child.exitCode,signalCode:child.signalCode,launchError:child.launchError,diagnostics:child.diagnostics()}));
+ console.error(error);process.exitCode=1;
+}
 finally{
  for(const child of children)try{await stop(child);}catch(error){evidence.cleanupFailure=String(error);process.exitCode=1;evidence.result='failed';}
  save();console.log('Native slice evidence:',output);
