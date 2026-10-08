@@ -58,8 +58,8 @@ try{
  const accessResponse=await fetch(base+'/api/access',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({microphone:true,devices:false,modelDownloads:false,onlineMedia:false,cloudAI:true,localClock:false,approximateLocation:false,contextToCloud:false})});assert.equal(accessResponse.status,200);
  const page=await browser.newPage({viewport:{width:1280,height:900}});page.on('pageerror',error=>errors.push(String(error)));
  // Model warming is covered separately; this check never invokes an installed local model.
- let warmCalls=0,failWarm=false;
- await page.route('**/api/warm',route=>{warmCalls++;return route.fulfill(failWarm?{status:503,json:{error:'Fixture preparation failed'}}:{json:{ok:true}});});
+ let warmCalls=0,failWarm=false;const warmRequests=[];
+ await page.route('**/api/warm',route=>{warmCalls++;try{warmRequests.push(route.request().postDataJSON());}catch{warmRequests.push(null);}return route.fulfill(failWarm?{status:503,json:{error:'Fixture preparation failed'}}:{json:{ok:true}});});
  if(!realStreaming)await page.routeWebSocket('**/ws/speech',socket=>{socket.send(JSON.stringify({type:'ready'}));socket.onMessage(raw=>{if(typeof raw!=='string')return;const command=JSON.parse(raw);if(command.type==='start')socket.send(JSON.stringify({type:'partial',id:command.id,text:'My live provisional words'}));if(command.type==='finish')socket.send(JSON.stringify({type:'final',id:command.id,text:'My final microphone words because'}));});});
  await page.addInitScript(()=>{
   const OriginalWorker=window.Worker;window.fixtureWorkers=[];window.fixtureWorkerInstances=[];
@@ -114,7 +114,8 @@ try{
  failWarm=true;
  await page.evaluate(()=>{const select=document.getElementById('sampling-profile');select.value=select.value==='qwen'?'creative':'qwen';select.dispatchEvent(new Event('change',{bubbles:true}));});
  await page.waitForFunction(()=>document.body.textContent.includes('Fixture preparation failed'));
- const failedWarmCalls=warmCalls;await page.waitForTimeout(6500);assert.equal(warmCalls,failedWarmCalls,'Failed settings stay idle until an explicit retry');
+ const failedWarmCalls=warmCalls,failedWarmSettings=warmRequests.at(-1);await page.waitForTimeout(6500);
+ assert.equal(warmRequests.filter(settings=>JSON.stringify(settings)===JSON.stringify(failedWarmSettings)).length,1,'Identical failed settings stay idle until an explicit retry');
  failWarm=false;await page.evaluate(()=>window.bambi.startSession());
  await page.waitForFunction(()=>window.bambi.director.active&&window.bambi.clock.running);assert.ok(warmCalls>failedWarmCalls,'Start retries failed preparation');
  await page.locator('#chat-input').focus();
