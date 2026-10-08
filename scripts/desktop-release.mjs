@@ -61,7 +61,8 @@ if(command==='prepare'){
    if(command==='build'){
     if(!existsSync(join(root,'node_modules/typescript')))throw Error('Install the frozen source dependencies with npm ci --ignore-scripts first.');
     if(!sourceChecksMatch(sourceChecks(root),spec))await checkSource(root,spec);
-    if(target==='windows-x64')run(root,'scripts/desktop-windows-build.mjs',[spec.phase,spec.version]);
+    if(target==='macos-arm64')run(root,'scripts/desktop-macos-build.mjs',[spec.phase,spec.version]);
+    else if(target==='windows-x64')run(root,'scripts/desktop-windows-build.mjs',[spec.phase,spec.version]);
     else run(root,'scripts/desktop-build.mjs',[],{[spec.phase==='alpha'?'BAMBI_ALPHA_VERSION':'BAMBI_SMOKE_VERSION']:spec.version});
     await verifySnapshot(root);console.log('Built from the frozen source; native qualification remains pending.');
    }else{
@@ -71,11 +72,28 @@ if(command==='prepare'){
     const checks=sourceChecks(root);
     if(checks)writeFileSync(join(directory,'SOURCE-CHECKS.json'),JSON.stringify(checks,null,2)+'\n');
     const gates={sourceChecks:sourceChecksMatch(checks,spec)?'passed':checks?.result==='failed'?'failed':'pending'};const payload=[];
-    for(const filename of readdirSync(directory).filter(name=>/\.(?:exe|AppImage|tar\.gz)$/.test(name)||['RUNTIME-MANIFEST.json','SOURCE-CHECKS.json'].includes(name)))payload.push({filename,sha256:await hashFile(join(directory,filename))});
-    if(!payload.some(p=>/\.(exe|AppImage)$/.test(p.filename)))throw Error('No distribution executable found.');
+    for(const filename of readdirSync(directory).filter(name=>/\.(?:exe|AppImage|tar\.gz|zip)$/.test(name)||['RUNTIME-MANIFEST.json','SOURCE-CHECKS.json'].includes(name)))payload.push({filename,sha256:await hashFile(join(directory,filename))});
+    if(!payload.some(p=>target==='macos-arm64'?p.filename.endsWith('-macos-arm64.zip'):/\.(exe|AppImage)$/.test(p.filename)))throw Error('No distribution executable found.');
     const qualification={schema:1,version:spec.version,target,applicationDigest:spec.applicationDigest,sourceDigest:runtime.sourceDigest,payload,gates,testedAt:new Date().toISOString()};
     try{
-     if(target==='windows-x64'){
+     if(target==='macos-arm64'){
+      const received=mkdtempSync(join(tmpdir(),'Bambi Mac received ü '));
+      try{
+       const archives=readdirSync(directory).filter(name=>name.endsWith('-macos-arm64.zip'));
+       if(archives.length!==1)throw Error('Expected exactly one finished Apple Silicon ZIP.');
+       const archive=join(directory,archives[0]);
+       const {default:AdmZip}=await import('adm-zip');
+       for(const entry of new AdmZip(archive).getEntries()){
+        if(!entry.entryName.startsWith('Bambi Local Smoke.app/')||entry.entryName.split('/').includes('..')||entry.entryName.includes('\\'))throw Error('Invalid app archive path.');
+       }
+       execFileSync('/usr/bin/ditto',['-x','-k',archive,received],{stdio:'inherit'});
+       const installed=join(received,'Applications');mkdirSync(installed);
+       execFileSync('/usr/bin/ditto',[join(received,'Bambi Local Smoke.app'),join(installed,'Bambi Local Smoke.app')],{stdio:'inherit'});
+       qualification.macOS={filename:archives[0],sha256:await hashFile(archive),method:'Final ZIP extraction, copied .app installation and launch in a disposable Applications directory; downloaded quarantine and physical Mac remain recipient checks.'};
+       run(root,'scripts/desktop-macos-check.mjs',[join(installed,'Bambi Local Smoke.app/Contents/MacOS/Bambi Local Smoke')],{BAMBI_SMOKE_OUTPUT:join(directory,'qualification-macos')});
+       gates.packaging='passed';gates.installer='passed';
+      }finally{rmSync(received,{recursive:true,force:true});}
+     }else if(target==='windows-x64'){
       const testOutput=mkdtempSync(join(directory,'qualification-'));
       try{run(root,'scripts/desktop-windows-install-check.mjs',[directory],{BAMBI_WINDOWS_TEST_OUTPUT:testOutput});}
       finally{

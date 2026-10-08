@@ -40,7 +40,9 @@
     "desktop:release": "node scripts/desktop-release.mjs",
     "desktop:update": "tsx scripts/desktop-update.ts",
     "pretest:settings": "npm run build",
-    "test:settings": "node --import tsx scripts/settings-browser-check.mjs"
+    "test:settings": "node --import tsx scripts/settings-browser-check.mjs",
+    "desktop:macos-build": "node scripts/desktop-macos-build.mjs",
+    "desktop:macos-check": "node scripts/desktop-macos-check.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0",

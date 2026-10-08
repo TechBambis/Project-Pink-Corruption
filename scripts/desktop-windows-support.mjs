@@ -65,7 +65,7 @@ export function sourcePathAllowed(path){
  path=logicalPath(path);
  return !/(?:^|\/)(?:\.git|\.runtime|node_modules|internal|reports|models|recordings|imported-sounds|__pycache__)(?:\/|$)/.test(path)
   &&!path.startsWith('apps/web/public/vad/')
-  &&/\.(?:ts|mts|mjs|cjs|json|py|lock|md|html|css|js|svg|wav|spec|cs|txt|cmd|ps1|yml|manifest)$/.test(path);
+  &&/\.(?:ts|mts|mjs|cjs|json|py|lock|md|html|css|js|svg|wav|spec|cs|txt|cmd|ps1|yml|manifest|plist)$/.test(path);
 }
 export function llamaEntries(listing){
  const approved=listing.map(logicalPath).filter(path=>/^lib\/ollama\/(?:[^/]*(?:LICENSE|NOTICE|COPYING)[^/]*|llama-server\.exe|ggml(?:-base|-cpu-[a-z0-9]+)?\.dll|lib(?:c\+\+|llama|llama-common|llama-server-impl|mtmd|omp|unwind|winpthread-1)\.dll|vulkan\/(?:ggml-vulkan|concrt140|msvcp140(?:_[12]|_atomic_wait|_codecvt_ids)?|vccorlib140|vcruntime140(?:_1|_threads)?)\.dll)$/.test(path));

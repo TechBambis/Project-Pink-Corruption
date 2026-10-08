@@ -205,3 +205,8 @@ test-results/
 !/scripts/settings-browser-check.mjs
 
 !/docs/SETTINGS_BACKUP.md
+
+# Apple Silicon native packaging and received-artifact checks.
+!/scripts/desktop-macos-build.mjs
+!/scripts/desktop-macos-check.mjs
+!/scripts/desktop-macos-support.mjs

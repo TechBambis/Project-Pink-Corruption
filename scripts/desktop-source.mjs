@@ -17,7 +17,7 @@ export async function stageDesktopSource(root,destination,version){
  // Local authoring/benchmark helpers can have source extensions too.
  const reviewedScripts=new Set([...readFileSync(join(root,'.gitignore'),'utf8').matchAll(/^!\/scripts\/([^\r\n]+)$/gm)].map(match=>match[1]));
  for(const folder of roots){mkdirSync(join(destination,folder),{recursive:true});copyTree(join(root,folder),join(destination,folder),path=>sourcePathAllowed(folder+'/'+path)&&(folder!=='scripts'||reviewedScripts.has(path)));}
- for(const path of top)copy(join(root,path),join(destination,path));
+ for(const path of [...top,...(existsSync(join(root,'desktop-macos-builder.cjs'))?['desktop-macos-builder.cjs']:[])])copy(join(root,path),join(destination,path));
  for(const path of ['.gitattributes','CLA.md','CONTRIBUTING.md','ARCHITECTURE.md'])if(existsSync(join(root,path)))copy(join(root,path),join(destination,path));
  for(const path of ['AppRun','AppRun.alpha'])copy(join(root,'apps/desktop',path),join(destination,'apps/desktop',path));
  if(existsSync(join(root,'voices/bambi_classic.npy')))copy(join(root,'voices/bambi_classic.npy'),join(destination,'voices/bambi_classic.npy'));
@@ -40,6 +40,7 @@ export function validateReleaseSource(manifest,spec){
  if(manifest.version!==spec.version)throw Error('Release/source version mismatch.');
  const paths=new Set(manifest.files.map(file=>file.path));
  for(const [feature,required] of Object.entries(spec.features))for(const path of required)if(!paths.has(path))throw Error(`Missing ${feature} source: ${path}`);
+ for(const path of spec.macosRequired??[])if(!paths.has(path))throw Error('Missing qualified macOS source: '+path);
  for(const path of spec.windowsRequired)if(!paths.has(path))throw Error('Missing qualified Windows source: '+path);
 }
 

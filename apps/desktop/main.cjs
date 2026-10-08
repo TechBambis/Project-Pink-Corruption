@@ -112,10 +112,10 @@ else {
    await shell.openExternal('https://www.geojs.io/privacy/');return {ok:true};
   });
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
-  window.webContents.on('before-input-event',(event,input)=>{if(input.type==='keyDown'&&input.control&&!input.alt&&input.key.toLowerCase()==='q'){event.preventDefault();app.quit();}});
+  window.webContents.on('before-input-event',(event,input)=>{if(input.type==='keyDown'&&(process.platform==='darwin'?input.meta:input.control)&&!input.alt&&input.key.toLowerCase()==='q'){event.preventDefault();app.quit();}});
   window.webContents.on('will-navigate',(event,url)=>{if(!url.startsWith(origin+'/'))event.preventDefault();});
   window.webContents.on('render-process-gone',()=>app.quit());
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'Bambi Local',submenu:[{label:'Quit',accelerator:'Control+Q',click:()=>app.quit()}]},{label:'Edit',submenu:[{role:'undo'},{role:'redo'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]},{label:'View',submenu:[{role:'reload'},{role:'togglefullscreen'}]}]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'Bambi Local',submenu:[{label:'Quit',accelerator:'CommandOrControl+Q',click:()=>app.quit()}]},{label:'Edit',submenu:[{role:'undo'},{role:'redo'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]},{label:'View',submenu:[{role:'reload'},{role:'togglefullscreen'}]}]));
   await window.loadURL(origin);
  }).catch(error=>{dialog.showErrorBox('Bambi Local startup',error.message);if(owner?.exitCode!==null)stopped=true;app.quit();});
 }

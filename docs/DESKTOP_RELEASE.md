@@ -1,6 +1,6 @@
 # Desktop builds
 
-Linux and Windows x64 share `scripts/desktop-release.mjs`, the source allowlist and `config/desktop-release.json`. **Smoke** packages test the shell/player; **alpha** packages add local AI and speech. macOS/ARM packaging is not implemented.
+Linux and Windows x64 share `scripts/desktop-release.mjs`, the source allowlist and `config/desktop-release.json`. **Smoke** packages test the shell/player; **alpha** packages add local AI and speech. Apple Silicon currently supports the packaging Smoke phase; native AI/speech integration remains pending.
 
 ## Frozen source
 
@@ -45,11 +45,22 @@ Alpha freezes the locked native speech environment and bundles the pinned llama 
 
 For actual model tests, run `desktop-windows-ai-check.mjs EXE MODEL_DATA` using the bundled/build Node, then repeat with `--cpu`. Preserve full prompts and 24,576-token reference context. Check actual offloaded layers, not just detected GPU names. Physical audio and Windows 11 recipient behavior require observations.
 
+## macOS Apple Silicon
+
+On an Apple Silicon Mac (macOS 13+), use a fresh Smoke snapshot:
+
+```sh
+node scripts/desktop-release.mjs build . macos-arm64
+node scripts/desktop-release.mjs qualify . macos-arm64 dist/desktop-macos/0.1.0-smoke.N
+```
+
+Output: ZIP containing the app, matching source, notices, manifest and checksums. Extract the ZIP and copy the app to Applications. The tester has an ad-hoc signature and is not notarized. CI tests the extracted/copied final app, player PCM, Studio, settings and process cleanup. Downloaded Gatekeeper behavior, a physical Mac's audio and microphone consent, sleep/wake, Metal/CPU AI and offline speech remain separate qualification gates. No AI models ship in Smoke.
+
 ## CI and evidence
 
-**Manual desktop release** runs the Windows native workflow; Linux alpha currently uses an attended local build. Before private CI, verify account **337824705**, actual free allowance, storage and zero-spend controls. Use `upload_packages` within the recorded allowance; `transfer_packages` is the optional sequential-part receiver route.
+**Manual desktop release** selects Windows, Linux Smoke or Apple Silicon Smoke; Linux alpha currently uses an attended local build. Before private CI, verify account **337824705**, actual free allowance, storage and zero-spend controls. Use `upload_packages` within the recorded allowance; `transfer_packages` is the optional sequential-part receiver route.
 
-Compare both targets with `node scripts/desktop-release.mjs status SOURCE TARGET_OUTPUT...`. Keep runtime/source manifests, qualification records and their unchanged payloads. Source checks are bound to source/version/host. A build with missing required gates stays `built-unqualified`; test results from older packages are not reused.
+Compare built targets with `node scripts/desktop-release.mjs status SOURCE TARGET_OUTPUT...`. Keep runtime/source manifests, qualification records and their unchanged payloads. Source checks are bound to source/version/host. A build with missing required gates stays `built-unqualified`; test results from older packages are not reused.
 
 The controller rejects changed snapshots, mismatched package hashes and concurrent release work. Remove a stale lock only after its recorded process has stopped. Runtime ownership cleans only the app's processes; occupied ports and unrelated profiles are retained.
 
