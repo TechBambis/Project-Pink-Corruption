@@ -15,6 +15,11 @@ export function processRows(){
  });
 }
 export function running(pid){return processRows().some(row=>row.pid===pid&&!row.state.startsWith('Z'));}
+export function ownedProcessIds(rows,owner){
+ const owned=new Set([owner]);let changed=true;
+ while(changed){changed=false;for(const row of rows)if(owned.has(row.parent)&&!owned.has(row.pid)){owned.add(row.pid);changed=true;}}
+ return [...owned];
+}
 export function appPaths(executable){
  if(!executable.endsWith('.app/Contents/MacOS/Bambi Local Smoke'))throw Error('Select the received macOS smoke app executable.');
  const contents=executable.slice(0,executable.lastIndexOf('/MacOS/'));

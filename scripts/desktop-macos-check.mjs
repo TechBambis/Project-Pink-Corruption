@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
 import { _electron as electron } from 'playwright';
-import {processRows,running,appPaths,assertMachArm64} from './desktop-macos-support.mjs';
+import {processRows,running,ownedProcessIds,appPaths,assertMachArm64} from './desktop-macos-support.mjs';
 import assert from 'node:assert/strict';
 import {mkdirSync,mkdtempSync,readFileSync,readdirSync,writeFileSync,existsSync,lstatSync,realpathSync} from 'node:fs';
 import {resolve,dirname,join,relative} from 'node:path';
@@ -20,6 +20,9 @@ const outputRoot=resolve(process.env.BAMBI_SMOKE_OUTPUT||join(process.env.HOME,'
 const output=mkdtempSync(join(outputRoot,'macOS ü smoke ')),data=join(output,'User data ä'),emptyPath=join(output,'empty-path');mkdirSync(emptyPath);
 const environment={...process.env,PATH:emptyPath,NODE_OPTIONS:'--trace-warnings',BAMBI_CLOUD_API_KEY:'smoke-sentinel-must-not-be-inherited'};
 delete environment.ELECTRON_RUN_AS_NODE;
+// Playwright strips NODE_OPTIONS itself. Keep it absent for ordinary starts
+// too; inherited loader filtering is verified separately by portable tests.
+delete environment.NODE_OPTIONS;
 const evidence={testedAt:new Date().toISOString(),executable,output,data,launchPath:emptyPath,checks:[],errors:[],environment:{kernel:execFileSync('/usr/bin/uname',['-smr'],{encoding:'utf8'}).trim(),os:execFileSync('/usr/bin/sw_vers',[],{encoding:'utf8'}).trim(),ci:process.env.GITHUB_ACTIONS==='true'}};
 const record=(name,detail={})=>{evidence.checks.push({name,...detail});console.log('PASS',name);writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');};
 const delay=ms=>new Promise(accept=>setTimeout(accept,ms));
@@ -41,8 +44,14 @@ async function launch(port=16969){
 
  const privacyAccess=await page.evaluate(async()=>{const response=await fetch('/api/access');return response.ok?response.json():{configured:true};});
  if(!privacyAccess.configured){await page.locator('#privacy-access[open]').waitFor();await page.locator('#privacy-access [data-local-only]').click();await page.locator('#privacy-access').waitFor({state:'hidden'});}
- const onboarding=await page.evaluate(async()=>{const response=await fetch('/api/models/onboarding');return response.ok?response.json():{done:true};});
- if(!onboarding.done){await page.locator('#model-onboarding[open]').waitFor();await page.locator('#model-onboarding [data-finish]').click();await page.locator('#model-onboarding').waitFor({state:'hidden'});}
+ const setup=await page.evaluate(async()=>{
+  const [state,capabilities]=await Promise.all([fetch('/api/models/onboarding'),fetch('/api/desktop/capabilities')]);
+  if(!state.ok||!capabilities.ok)throw Error('Desktop onboarding state is unavailable.');
+  return {onboarding:await state.json(),capabilities:await capabilities.json()};
+ });
+ await page.locator('#model-onboarding').waitFor({state:'attached'});
+ if(setup.capabilities.alpha&&!setup.onboarding.done){await page.locator('#model-onboarding[open]').waitFor();await page.locator('#model-onboarding [data-finish]').click();await page.locator('#model-onboarding').waitFor({state:'hidden'});}
+ else assert.equal(await page.locator('#model-onboarding').evaluate(dialog=>dialog.open),false,'Smoke and completed profiles must not automatically open local-AI onboarding');
  const ownership=await application.evaluate(({app,BrowserWindow})=>({pid:process.pid,rendererPid:BrowserWindow.getAllWindows()[0]?.webContents.getOSProcessId(),data:app.getPath('userData'),windows:BrowserWindow.getAllWindows().map(window=>window.webContents.getLastWebPreferences())}));
  const pids=processRows();
  const supervisor=pids.find(row=>row.parent===ownership.pid&&row.command.includes('supervisor.mjs'));assert(supervisor,'Owned supervisor missing');
@@ -52,7 +61,7 @@ async function launch(port=16969){
  assert(backend.command.startsWith(join(resources,'backend/node/bin/node')),'Backend must use the bundled Node');
  const renderer=pids.find(row=>row.pid===ownership.rendererPid);assert(renderer&&!renderer.command.includes('--no-sandbox'));
  assert.equal(ownership.data,data);assert(ownership.windows.every(p=>p.sandbox&&p.contextIsolation&&!p.nodeIntegration&&p.webSecurity));
- return {application,page,ownership,supervisor,backend,startupMs:performance.now()-launchStart,pids:[supervisor.pid,backend.pid]};
+ return {application,page,ownership,supervisor,backend,startupMs:performance.now()-launchStart,pids:ownedProcessIds(pids,ownership.pid)};
 }
 let current,conflict,blocked,blockedPid;
 // A wedged automation connection must still leave a failed report and release
@@ -190,6 +199,7 @@ try{
  await blocked.evaluate(()=>global.__smokeOriginalQuit());await closeApp(blocked);await delay(2200);assert.equal(await(await fetch(api)).text(),'unrelated service');await new Promise(accept=>conflict.close(accept));record('port-conflict-does-not-reuse-or-kill-unrelated-listener',{startupError});
  current=await launch(16970);await current.page.locator('#offline-sample').click();await current.page.locator('#stage').hover();await current.page.locator('#pause').click();await current.page.waitForFunction(()=>document.querySelector('#media').currentTime>.3);await current.page.screenshot({path:join(output,'packaged-player.png')});await current.application.evaluate(({app})=>app.quit());await stopped(current.pids);await closeApp(current.application);record('explicit-alternate-port-recovery');
  for(const entry of before)assert.equal(hash(readFileSync(entry.path)),entry.sha,'Immutable resource changed: '+entry.path);record('resources-unchanged-and-private-user-data-separated');
+ assert.deepEqual(evidence.errors,[],'Unexpected packaged renderer errors');
  evidence.result='passed';evidence.limitations=['PCM verifies app output; no human listening or speaker/earbud certification.','Available runtime reference is recorded in environment.os and environment.kernel; a separate clean physical machine is not tested.','This initial runner covers packaging and sample only; local AI/speech/microphone integration remains pending. Microphone consent, native AI/speech, physical Mac installation, Gatekeeper, real audio devices, sleep/wake and Intel Macs are unqualified.'];
 }catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);if(current)await closeApp(current.application);process.exitCode=1;}
 finally{for(const application of [...applications])await closeApp(application);if(conflict?.listening)await new Promise(accept=>conflict.close(accept));writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));clearTimeout(watchdog);}
