@@ -35,6 +35,10 @@ To compare target packages, copy their public output files into separate directo
 
 ## Native workflow
 
+For a functional AI candidate, dispatch **Manual desktop release** (`desktop-release.yml`) with `phase=alpha`, a fresh `0.1.0-alpha.N` version, and `target=windows-x64`. Record the live free-tier allowance and enforced zero-spend budgets. Select both `upload_packages` and `transfer_packages` for the bounded private receiver route; keep the receiver running until it verifies every part. For Linux, use the same reviewed commit and version with the local frozen-source commands above and the pinned native freeze environment. Compare both runtime manifests' `release.applicationDigest` before handoff. These candidates keep unperformed reference gates pending.
+
+An ordinary beta/stable tag still selects the Smoke route. AI alpha tags are rejected by tag preflight; they do not silently produce an AI package. Use the explicit alpha path above and retain its exact qualified bytes for the accompanied reference test.
+
 `.github/workflows/desktop-release.yml` calls one reusable native workflow. The earlier Windows entry point uses the same workflow. Jobs remain manual, require an actual recorded allowance check and only upload packages when explicitly requested within the recorded storage allowance. Linux alpha CI is deliberately unavailable until its freeze prerequisites have a qualified native adapter. The workflow itself needs a new native execution before its generated packages can be handed to testers.
 
 ## Model ownership
