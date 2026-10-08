@@ -267,6 +267,10 @@ try{
  await page.locator('#stage').hover();await page.click('#mic');
  await page.waitForFunction(()=>document.getElementById('mic').dataset.captureState==='ready');
  await page.waitForFunction(()=>!document.getElementById('panic').hidden);
+ // A reply from the preceding microphone check can still be completing.
+ // Compare retained history only after that real issued reply has finished.
+ await page.waitForFunction(()=>window.fixtureDones.at(-1)?.requestId===window.fixtureRequests.at(-1)?.requestId);
+ await page.waitForFunction(()=>!window.bambi.audio.foregroundOutputActive('AI_VOICE')&&document.getElementById('mic').dataset.activity!=='thinking');
  // Simulate the browser suspending RAF in a hidden page. The control timer must
  // complete a session and stop audio without requiring another visual frame.
  await page.evaluate(()=>{

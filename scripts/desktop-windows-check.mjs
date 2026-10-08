@@ -55,8 +55,14 @@ async function launch(port=16969){
   const saved=await page.evaluate(async()=>await(await fetch('/api/access')).json());assert(saved.configured&&Object.values(saved.choices).every(value=>value===false));
   evidence.privacyAccess={requiredCheckedDisabled:3,optionalPreselected:5,clock:false,ipPlace:false,cloudSwitches:1,explicitDenyAllSaved:true};
  }
- const onboarding=await page.evaluate(async()=>{const response=await fetch('/api/models/onboarding');return response.ok?response.json():{done:true};});
- if(!onboarding.done){await page.locator('#model-onboarding[open]').waitFor();await page.locator('#model-onboarding [data-finish]').click();await page.locator('#model-onboarding').waitFor({state:'hidden'});}
+ const setup=await page.evaluate(async()=>{
+  const [state,capabilities]=await Promise.all([fetch('/api/models/onboarding'),fetch('/api/desktop/capabilities')]);
+  if(!state.ok||!capabilities.ok)throw Error('Desktop onboarding state is unavailable.');
+  return {onboarding:await state.json(),capabilities:await capabilities.json()};
+ });
+ await page.locator('#model-onboarding').waitFor({state:'attached'});
+ if(setup.capabilities.alpha&&!setup.onboarding.done){await page.locator('#model-onboarding[open]').waitFor();await page.locator('#model-onboarding [data-finish]').click();await page.locator('#model-onboarding').waitFor({state:'hidden'});}
+ else assert.equal(await page.locator('#model-onboarding').evaluate(dialog=>dialog.open),false,'Smoke and completed profiles must not automatically open local-AI onboarding');
 
  const bounds=await application.evaluate(({BrowserWindow})=>{const window=BrowserWindow.getAllWindows()[0];window.setSize(880,640);return window.getBounds();});
  evidence.measurements.windowBounds=bounds;
