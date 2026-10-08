@@ -1,3 +1,4 @@
 # Preserve reviewed upstream bytes and original third-party notices on every OS.
 packages/content/stable-2.0/** -text
+packages/content/upstream-originals/** -text
 docs/licenses/** -text

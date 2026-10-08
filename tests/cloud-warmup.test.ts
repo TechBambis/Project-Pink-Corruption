@@ -46,6 +46,7 @@ test('real remote preparation can finish beyond the former fixed deadline and st
  `);
  const inherited=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^BAMBI_|^OLLAMA_/.test(key)));
  const child=spawn(process.execPath,['--import','tsx','bootstrap.mjs'],{cwd:fixture,env:{...inherited,BAMBI_PORT:String(port),BAMBI_DATABASE:':memory:',BAMBI_CLOUD_URL:`http://127.0.0.1:${providerPort}`,BAMBI_CLOUD_MODEL:'test-qwen:latest',BAMBI_CLOUD_KIND:'ollama',BAMBI_CLOUD_CONTEXT:'32768',BAMBI_CLOUD_TIMEOUT_MS:'230000'},stdio:['ignore','pipe','pipe']});
+ const childClosed=once(child,'close');
  let logs='';child.stdout.on('data',data=>logs+=data);child.stderr.on('data',data=>logs+=data);
  const base=`http://127.0.0.1:${port}`;
  try{
@@ -69,8 +70,11 @@ test('real remote preparation can finish beyond the former fixed deadline and st
   for(let n=0;n<40&&requestsClosed<2;n++)await new Promise(done=>setTimeout(done,10));
   assert.equal(requestsClosed,2);
  }finally{
-  child.kill('SIGTERM');await Promise.race([once(child,'exit'),new Promise(done=>setTimeout(done,1500))]);
-  if(child.exitCode===null)child.kill('SIGKILL');
-  provider.closeAllConnections();await new Promise<void>(done=>provider.close(()=>done()));rmSync(fixture,{recursive:true,force:true});
+  child.kill('SIGTERM');await Promise.race([childClosed,new Promise(done=>setTimeout(done,1500))]);
+  if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
+  await childClosed;
+  provider.closeAllConnections();await new Promise<void>(done=>provider.close(()=>done()));
+  // Windows can release directory/junction handles shortly after child close.
+  rmSync(fixture,{recursive:true,force:true,maxRetries:10,retryDelay:100});
  }
 });
