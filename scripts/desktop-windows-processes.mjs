@@ -38,7 +38,18 @@ export async function observeRows(roots,windows=false){
  if(!roots.length||roots.some(pid=>!Number.isSafeInteger(pid)||pid<=0))throw Error('Specify owned process IDs for observation.');
  const rows=await requestObservation(roots.join(',')+(windows?' --windows':''));return windows?rows:rows.map(row=>({...row,command:''}));
 }
-export async function observeOwnedRows(owner){return ownedRows(owner,await observeRows([owner]));}
+export async function observeOwnedRows(owner,{identityTimeoutMs=2000}={}){
+ const deadline=performance.now()+identityTimeoutMs;
+ while(true){
+  try{return ownedRows(owner,await observeRows([owner]));}
+  catch(error){
+   // A Toolhelp entry can exit before its query handle is opened. Take a
+   // fresh snapshot; never discard a live row just because it is unverified.
+   if(!(error instanceof MissingProcessIdentity)||performance.now()>=deadline)throw error;
+   await new Promise(resolve=>setTimeout(resolve,50));
+  }
+ }
+}
 export async function observeAcl(path){
  if(!observerChild)return privateAcl(path);
  return await requestObservation('--acl '+Buffer.from(resolve(path),'utf8').toString('base64'));
@@ -70,9 +81,10 @@ export function processRows(roots=[]){
 export function ownedRows(owner,rows=processRows([owner])){
  const owned=new Set([owner]);let changed=true;
  while(changed){changed=false;for(const row of rows)if(owned.has(row.parent)&&!owned.has(row.pid)){assertCreation(row);owned.add(row.pid);changed=true;}}
- return rows.filter(row=>owned.has(row.pid));
+ return rows.filter(row=>owned.has(row.pid)).map(row=>{assertCreation(row);return row;});
 }
-function assertCreation(row){if(!row.created||!row.executable)throw Error('Cannot verify native process identity for PID '+row.pid);}
+class MissingProcessIdentity extends Error {}
+function assertCreation(row){if(!row.created||!row.executable)throw new MissingProcessIdentity('Cannot verify native process identity for PID '+row.pid);}
 export async function processSnapshot(owner){
  const rows=await observeOwnedRows(owner);
  // Command lines contain private service tokens. Never persist them in evidence.

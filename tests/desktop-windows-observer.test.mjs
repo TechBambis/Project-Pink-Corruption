@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {startObserver,stopObserver,observeRows,observeAcl} from '../scripts/desktop-windows-processes.mjs';
+import {startObserver,stopObserver,observeRows,observeAcl,observeOwnedRows} from '../scripts/desktop-windows-processes.mjs';
 
 test('concurrent observation requests retain their matching IPC replies and a failed request releases the queue',async()=>{
  // Exercise real child stdio, including a slow first reply. This fixture is an
@@ -23,5 +23,22 @@ test('concurrent observation requests retain their matching IPC replies and a fa
   const [failed,next]=await Promise.allSettled([observeRows([13]),observeRows([14])]);
   assert.equal(failed.status,'rejected');assert.match(String(failed.reason),/Public fixture rejection/);
   assert.equal(next.status,'fulfilled');assert.equal(next.value[0].pid,14);assert.equal(next.value[0].order,5);
+ }finally{await stopObserver();}
+});
+
+test('owned snapshots retry an exited transient row and reject a persistently unverified live row',async()=>{
+ const fixture=`import {createInterface} from 'node:readline';
+ console.log(JSON.stringify({ready:true}));let transient=0;
+ createInterface({input:process.stdin}).on('line',line=>{
+  const root=Number(line),row=(pid,parent,verified=true)=>({pid,parent,created:verified?'public-fixture-'+pid:null,executable:verified?'fixture.exe':null});
+  if(root===41){console.log(JSON.stringify(++transient===1?[row(41,1),row(42,41,false)]:[row(41,1),row(43,41)]));return;}
+  if(root===51){console.log(JSON.stringify([row(51,1),row(52,51,false)]));return;}
+  console.log(JSON.stringify([row(61,1,false)]));
+ });`;
+ try{
+  await startObserver({executable:process.execPath,args:['--input-type=module','-e',fixture]});
+  assert.deepEqual((await observeOwnedRows(41,{identityTimeoutMs:500})).map(row=>row.pid),[41,43]);
+  await assert.rejects(observeOwnedRows(51,{identityTimeoutMs:50}),/Cannot verify native process identity for PID 52/);
+  await assert.rejects(observeOwnedRows(61,{identityTimeoutMs:50}),/Cannot verify native process identity for PID 61/);
  }finally{await stopObserver();}
 });

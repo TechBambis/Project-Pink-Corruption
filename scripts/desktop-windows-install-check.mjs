@@ -39,13 +39,8 @@ try{
  const installedExecutableHash=await hashFile(executable);
  if(!receivedInstaller)assert.equal(installedExecutableHash,await hashFile(join(output,'win-unpacked',product+'.exe')));
  record('NSIS-install-in-fresh-space-and-Unicode-path',{path:installed,resourcesMatch:!receivedInstaller,receivedInstaller,installedExecutableHash,resourceAudit:receivedInstaller?'Embedded runtime/source/shell hashes below; installed inventory retained for reinstall comparison.':'Build staging inventory and executable hash.'});
- execFileSync(process.execPath,[join(root,'scripts/desktop-windows-check.mjs'),executable],{cwd:root,env:process.env,timeout:10*60*1000,stdio:'inherit'});
- record('actual-installed-application-packaging-acceptance');
- const testRoot=resolve(process.env.BAMBI_WINDOWS_TEST_OUTPUT||join(process.env.LOCALAPPDATA,'Bambi qualification'));
- const {readdirSync}=await import('node:fs');
- const runs=readdirSync(testRoot,{withFileTypes:true}).filter(entry=>entry.isDirectory());assert.equal(runs.length,1);
- const appEvidence=JSON.parse(readFileSync(join(testRoot,runs[0].name,'evidence.json'),'utf8'));assert.equal(appEvidence.result,'passed');
- evidence.applicationEnvironment=appEvidence.environment;
+ // Speech is independently testable immediately after the installed resource
+ // audit. Retain its evidence before unrelated interactive UI checks run.
  if(runtime.phase==='alpha'){
   const nativeOutput=join(scratch,'Public installed speech evidence');
   try{execFileSync(process.execPath,[join(root,'scripts/desktop-windows-runtime-slice.mjs'),'--received-runtime',join(installed,'resources/backend')],{cwd:root,env:{...process.env,BAMBI_WINDOWS_SLICE_OUTPUT:nativeOutput},timeout:8*60*1000,stdio:'inherit'});}
@@ -53,6 +48,13 @@ try{
   const nativeEvidence=JSON.parse(readFileSync(join(nativeOutput,'RUNTIME-SLICE-CHECK.json'),'utf8'));assert.equal(nativeEvidence.result,'passed');
   record('actual-installed-native-speech-and-runtime-acceptance',{checks:nativeEvidence.checks.map(check=>check.name)});
  }
+ execFileSync(process.execPath,[join(root,'scripts/desktop-windows-check.mjs'),executable],{cwd:root,env:process.env,timeout:10*60*1000,stdio:'inherit'});
+ record('actual-installed-application-packaging-acceptance');
+ const testRoot=resolve(process.env.BAMBI_WINDOWS_TEST_OUTPUT||join(process.env.LOCALAPPDATA,'Bambi qualification'));
+ const {readdirSync}=await import('node:fs');
+ const runs=readdirSync(testRoot,{withFileTypes:true}).filter(entry=>entry.isDirectory());assert.equal(runs.length,1);
+ const appEvidence=JSON.parse(readFileSync(join(testRoot,runs[0].name,'evidence.json'),'utf8'));assert.equal(appEvidence.result,'passed');
+ evidence.applicationEnvironment=appEvidence.environment;
  fixture=join(appEvidence.data,'data/bambi.sqlite');fixtureHash=await hashFile(fixture);
  nsis(uninstaller,['/S','/KEEP_APP_DATA','_?='+installed]);
  assert(!existsSync(executable)&&!existsSync(join(installed,'resources')),'Uninstaller retained executable/resources');
