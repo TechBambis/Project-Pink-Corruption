@@ -100,17 +100,18 @@ try{
  secondNative=spawn(executable,[`--bambi-user-data=${nativeData}`,'--bambi-port=16970'],{cwd:output,env:environment,stdio:'ignore'});
  const secondRoots=[secondNative.pid,nativeFirst.pid];
  evidence.secondStart={pid:secondNative.pid,observations:[]};
+ const secondStarted=performance.now();
  await new Promise((accept,reject)=>{
   const timer=setTimeout(async()=>{
    try{if(process.env.BAMBI_WINDOWS_OBSERVER){
     evidence.secondStart.observations.push({at:new Date().toISOString(),processes:(await observeRows(secondRoots)).map(({command,...row})=>row),windows:await observeRows(secondRoots,true)});
    }}catch(error){evidence.secondStart.observationFailure=String(error);}
-   reject(Error('Second instance did not exit within 15 seconds'));
-  },15000);
+   reject(Error('Second instance did not exit within 30 seconds'));
+  },30000);
   secondNative.once('error',error=>{clearTimeout(timer);reject(error);});
   secondNative.once('exit',(code,signal)=>{clearTimeout(timer);if(code===0&&!signal)accept();else reject(Error('Second instance exit '+JSON.stringify({code,signal})));});
  });
- assert((await observeRows([nativeBackend.pid])).some(r=>r.pid===nativeBackend.pid&&r.created===nativeBackend.created));record('second-start-keeps-original-owner',{secondExitCode:secondNative.exitCode,method:'Ordinary native spawn without Playwright/debug flags.'});
+ assert((await observeRows([nativeBackend.pid])).some(r=>r.pid===nativeBackend.pid&&r.created===nativeBackend.created));record('second-start-keeps-original-owner',{secondExitCode:secondNative.exitCode,secondExitMs:performance.now()-secondStarted,method:'Ordinary native spawn without Playwright/debug flags; 30-second hosted-runner bound.'});
  nativeFirst.kill('SIGKILL');await stopped(nativeRows);record('ordinary-native-owner-death-cleans-owned-tree');
  current=await launch();evidence.measurements.startupMs=current.startupMs;
  record('isolated-native-launch-with-empty-PATH',{startupMs:current.startupMs,bundledNode:current.backend.executable,rendererSandbox:true});

@@ -90,7 +90,7 @@ jobs:
           $node = Join-Path $PWD '.runtime/desktop-windows-tools/node-v24.18.1-win-x64/node.exe'
           & $node node_modules/typescript/bin/tsc --noEmit
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $node --import ./node_modules/tsx/dist/loader.mjs --test tests/desktop-windows.test.mjs tests/desktop-setup.test.ts
+          & $node --import ./node_modules/tsx/dist/loader.mjs --test tests/desktop-windows.test.mjs tests/desktop-windows-observer.test.mjs tests/desktop-setup.test.ts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Prepare persistent read-only process and ACL observer
         shell: pwsh

@@ -4,7 +4,7 @@ import {execFileSync,spawn} from 'node:child_process';
 import {createInterface} from 'node:readline';
 import {join,resolve} from 'node:path';
 
-let observerChild,observerReply;
+let observerChild,observerReply,observerQueue=Promise.resolve();
 function nextReply(timeout=20000){
  if(observerReply)throw Error('Concurrent observer requests are not supported.');
  return new Promise((accept,reject)=>{
@@ -12,9 +12,11 @@ function nextReply(timeout=20000){
   observerReply={accept:value=>{clearTimeout(timer);observerReply=null;accept(value);},reject:error=>{clearTimeout(timer);observerReply=null;reject(error);}};
  });
 }
-export async function startObserver(){
- if(!process.env.BAMBI_WINDOWS_OBSERVER)return;
- observerChild=spawn(resolve(process.env.BAMBI_WINDOWS_OBSERVER),['--server'],{windowsHide:true,stdio:['pipe','pipe','pipe']});
+export async function startObserver({executable=process.env.BAMBI_WINDOWS_OBSERVER,args=['--server']}={}){
+ if(!executable)return;
+ if(observerChild)throw Error('An observation server is already running.');
+ observerQueue=Promise.resolve();
+ observerChild=spawn(resolve(executable),args,{windowsHide:true,stdio:['pipe','pipe','pipe']});
  const ready=nextReply(30000);
  observerChild.stdin.on('error',error=>observerReply?.reject(error));observerChild.stderr.resume();
  createInterface({input:observerChild.stdout}).on('line',line=>{
@@ -24,19 +26,26 @@ export async function startObserver(){
  observerChild.once('exit',()=>observerReply?.reject(Error('Native observer exited before its reply')));
  if((await ready).ready!==true)throw Error('Native observer did not report ready');
 }
+function requestObservation(command){
+ const result=observerQueue.then(()=>{
+  if(!observerChild)throw Error('Observation server is not running.');
+  const reply=nextReply();observerChild.stdin.write(command+'\n');return reply;
+ });
+ observerQueue=result.catch(()=>{});return result;
+}
 export async function observeRows(roots,windows=false){
  if(!observerChild)return processRows(roots);
  if(!roots.length||roots.some(pid=>!Number.isSafeInteger(pid)||pid<=0))throw Error('Specify owned process IDs for observation.');
- const reply=nextReply();observerChild.stdin.write(roots.join(',')+(windows?' --windows':'')+'\n');
- const rows=await reply;return windows?rows:rows.map(row=>({...row,command:''}));
+ const rows=await requestObservation(roots.join(',')+(windows?' --windows':''));return windows?rows:rows.map(row=>({...row,command:''}));
 }
 export async function observeOwnedRows(owner){return ownedRows(owner,await observeRows([owner]));}
 export async function observeAcl(path){
  if(!observerChild)return privateAcl(path);
- const reply=nextReply();observerChild.stdin.write('--acl '+Buffer.from(resolve(path),'utf8').toString('base64')+'\n');return await reply;
+ return await requestObservation('--acl '+Buffer.from(resolve(path),'utf8').toString('base64'));
 }
 export async function stopObserver(){
  if(!observerChild)return;
+ await observerQueue;
  const child=observerChild;observerChild=null;child.stdin.end();
  await Promise.race([new Promise(resolve=>child.once('exit',resolve)),new Promise(resolve=>setTimeout(()=>{if(child.exitCode===null)child.kill('SIGKILL');resolve();},2000))]);
 }
