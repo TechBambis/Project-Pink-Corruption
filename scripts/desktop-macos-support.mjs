@@ -20,6 +20,17 @@ export function ownedProcessIds(rows,owner){
  while(changed){changed=false;for(const row of rows)if(owned.has(row.parent)&&!owned.has(row.pid)){owned.add(row.pid);changed=true;}}
  return [...owned];
 }
+// ElectronApplication.process() loses its dispatcher after the app closes.
+// Retain the owned ChildProcess at launch and use it for bounded teardown.
+export async function closeTrackedApplication(application,child,timeoutMs=4000){
+ let timer;
+ try{
+  await Promise.race([Promise.resolve().then(()=>application.close()).catch(()=>{}),new Promise(done=>{timer=setTimeout(done,timeoutMs);})]);
+ }finally{
+  clearTimeout(timer);
+  if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
+ }
+}
 export function appPaths(executable){
  if(!executable.endsWith('.app/Contents/MacOS/Bambi Local Smoke'))throw Error('Select the received macOS smoke app executable.');
  const contents=executable.slice(0,executable.lastIndexOf('/MacOS/'));

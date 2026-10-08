@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {assertMachArm64,appPaths,ownedProcessIds} from '../scripts/desktop-macos-support.mjs';
+import {assertMachArm64,appPaths,ownedProcessIds,closeTrackedApplication} from '../scripts/desktop-macos-support.mjs';
 import {readReleaseArtifact} from '../scripts/desktop-release-support.mjs';
 import {digest} from '../scripts/desktop-windows-support.mjs';
 
@@ -30,4 +30,12 @@ test('received Mac ZIP evidence maps Darwin to the shared target and is bound to
 test('Mac cleanup inventory includes renderer and native descendants while excluding sibling apps',()=>{
  const rows=[{pid:23,parent:22},{pid:12,parent:10},{pid:24,parent:1},{pid:22,parent:11},{pid:11,parent:10},{pid:10,parent:1}];
  assert.deepEqual(ownedProcessIds(rows,10).sort((a,b)=>a-b),[10,11,12,22,23]);
+});
+test('Mac automation closes using its retained child after Playwright disposes the app dispatcher',async()=>{
+ const application={process(){throw Error('Disposed dispatcher');},close(){throw Error('Already closed');}};
+ let kills=0;
+ await closeTrackedApplication(application,{exitCode:0,signalCode:null,kill(){kills++;}});
+ assert.equal(kills,0);
+ await closeTrackedApplication({close:()=>new Promise(()=>{})},{exitCode:null,signalCode:null,kill(signal){assert.equal(signal,'SIGKILL');kills++;}},10);
+ assert.equal(kills,1);
 });

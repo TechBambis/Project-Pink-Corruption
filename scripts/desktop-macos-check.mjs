@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
 import { _electron as electron } from 'playwright';
-import {processRows,running,ownedProcessIds,appPaths,assertMachArm64} from './desktop-macos-support.mjs';
+import {processRows,running,ownedProcessIds,appPaths,assertMachArm64,closeTrackedApplication} from './desktop-macos-support.mjs';
 import assert from 'node:assert/strict';
 import {mkdirSync,mkdtempSync,readFileSync,readdirSync,writeFileSync,existsSync,lstatSync,realpathSync} from 'node:fs';
 import {resolve,dirname,join,relative} from 'node:path';
@@ -27,13 +27,12 @@ const evidence={testedAt:new Date().toISOString(),executable,output,data,launchP
 const record=(name,detail={})=>{evidence.checks.push({name,...detail});console.log('PASS',name);writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');};
 const delay=ms=>new Promise(accept=>setTimeout(accept,ms));
 const alive=running;
-const applications=new Set();
-async function launchApp(options){const application=await electron.launch(options);applications.add(application);return application;}
+const applications=new Map();
+async function launchApp(options){const application=await electron.launch(options);applications.set(application,application.process());return application;}
 async function closeApp(application){
- if(!application)return;
- const child=application.process();let timer;
- try{await Promise.race([application.close().catch(()=>{}),new Promise(done=>{timer=setTimeout(done,4000);})]);}
- finally{clearTimeout(timer);if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');applications.delete(application);}
+ if(!application||!applications.has(application))return;
+ try{await closeTrackedApplication(application,applications.get(application));}
+ finally{applications.delete(application);}
 }
 
 async function stopped(pids){for(let i=0;i<60;i++){if(pids.every(pid=>!alive(pid)))return;await delay(100);}assert.fail('Owned processes survived shutdown: '+pids.filter(alive));}
@@ -70,7 +69,7 @@ const watchdog=setTimeout(()=>{
  evidence.result='failed';evidence.failure??='Received-app acceptance exceeded its six-minute deadline.';
  writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');
  console.error(evidence.failure);
- for(const application of applications){const child=application.process();if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');}
+ for(const child of applications.values())if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
  // The supervisor gets the closed Electron IPC lease and cleans its group.
  setTimeout(()=>process.exit(1),10000);
 },6*60*1000);
@@ -202,7 +201,7 @@ try{
  assert.deepEqual(evidence.errors,[],'Unexpected packaged renderer errors');
  evidence.result='passed';evidence.limitations=['PCM verifies app output; no human listening or speaker/earbud certification.','Available runtime reference is recorded in environment.os and environment.kernel; a separate clean physical machine is not tested.','This initial runner covers packaging and sample only; local AI/speech/microphone integration remains pending. Microphone consent, native AI/speech, physical Mac installation, Gatekeeper, real audio devices, sleep/wake and Intel Macs are unqualified.'];
 }catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);if(current)await closeApp(current.application);process.exitCode=1;}
-finally{for(const application of [...applications])await closeApp(application);if(conflict?.listening)await new Promise(accept=>conflict.close(accept));writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));clearTimeout(watchdog);}
+finally{for(const application of [...applications.keys()])await closeApp(application);if(conflict?.listening)await new Promise(accept=>conflict.close(accept));writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));clearTimeout(watchdog);}
 // Failed Electron startup can retain a driver transport even after its child
 // exits. Reports and owned-child cleanup above precede this failure-only bound.
 if(process.exitCode)setTimeout(()=>process.exit(process.exitCode),3000);

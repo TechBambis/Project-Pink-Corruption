@@ -17,7 +17,7 @@ jobs:
   native:
     if: inputs.quota_checked && github.actor_id == '337824705'
     runs-on: ${{ inputs.target == 'macos-arm64' && 'macos-15' || inputs.target == 'windows-x64' && 'windows-2022' || 'ubuntu-24.04' }}
-    timeout-minutes: ${{ inputs.target == 'macos-arm64' && 25 || 60 }}
+    timeout-minutes: ${{ inputs.target == 'macos-arm64' && inputs.phase == 'smoke' && 15 || inputs.target == 'macos-arm64' && 25 || 60 }}
     env:
       BAMBI_RELEASE_TARGET: ${{ inputs.target }}
       BAMBI_RELEASE_PHASE: ${{ inputs.phase }}
