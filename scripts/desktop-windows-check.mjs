@@ -170,8 +170,29 @@ try{
   const studioPeak=await pcm();await current.page.locator('#stop').click();
   await current.page.waitForFunction(()=>document.querySelector('#caption').textContent==='Preview stopped.');
   record('prepared-Studio-import-and-real-PCM-preview-without-AI',{peak:studioPeak,scene:'Soft Pink'});
-  const downloadPromise=current.page.waitForEvent('download');await current.page.locator('#export').click();
-  const exported=readFileSync(await(await downloadPromise).path()),exportedPack=JSON.parse(exported);
+  const exportedPath=join(output,'Studio exported ü.bambi.json');
+  // Electron owns downloads through its native session, outside Playwright's
+  // browser-context download routing. Choose only the disposable save path;
+  // the actual Studio button must still produce a completed native download.
+  await current.application.evaluate(({session},destination)=>{
+   globalThis.__studioDownload={state:'waiting'};
+   session.defaultSession.once('will-download',(_event,item)=>{
+    globalThis.__studioDownload={state:'progressing',filename:item.getFilename()};
+    item.setSavePath(destination);
+    item.once('done',(_event,state)=>{globalThis.__studioDownload.state=state;});
+   });
+  },exportedPath);
+  await current.page.locator('#export').click();
+  const exportDeadline=performance.now()+30000;let nativeDownload;
+  while(performance.now()<exportDeadline){
+   nativeDownload=await current.application.evaluate(()=>globalThis.__studioDownload);
+   if(nativeDownload.state==='completed')break;
+   if(['cancelled','interrupted'].includes(nativeDownload.state))throw Error('Native Studio download '+nativeDownload.state);
+   await delay(100);
+  }
+  evidence.studioExport={download:nativeDownload,status:await current.page.locator('#status').textContent(),method:'Actual Studio Export button and Electron session will-download; only the disposable save path is selected by the checker.'};
+  assert.equal(nativeDownload?.state,'completed','Studio export did not complete: '+JSON.stringify(evidence.studioExport));
+  const exported=readFileSync(exportedPath),exportedPack=JSON.parse(exported);
   assert.deepEqual(exportedPack.assets,originalPack.assets);assert.deepEqual(exportedPack.cues,originalPack.cues);
   await current.page.locator('#import').setInputFiles({name:'reopened.bambi.json',mimeType:'application/json',buffer:exported});
   await current.page.waitForFunction(()=>document.querySelector('#status')?.textContent==='Package opened. Preview when you are ready.');
