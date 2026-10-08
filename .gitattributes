@@ -1,0 +1,2 @@
+# Keep the pinned upstream archive byte-for-byte stable on Windows checkouts.
+packages/content/stable-2.0/** -text

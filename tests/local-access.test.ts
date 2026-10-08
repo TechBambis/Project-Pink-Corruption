@@ -107,6 +107,7 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
  }finally{
   const exited=once(child,'exit');child.kill('SIGTERM');
   const timer=setTimeout(()=>child.kill('SIGKILL'),2000);
-  try{if(child.exitCode===null)await exited;}finally{clearTimeout(timer);rmSync(directory,{recursive:true,force:true});}
+  try{if(child.exitCode===null)await exited;}
+  finally{clearTimeout(timer);if(child.exitCode!==null)rmSync(directory,{recursive:true,force:true});}
  }
 });

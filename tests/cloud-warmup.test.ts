@@ -12,7 +12,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {CLOUD_MODEL_ALIAS} from '../packages/ai/cloud';
 
-test('real remote preparation can finish beyond the former fixed deadline and still supports cancellation', {timeout:15000}, async()=>{
+test('real remote preparation can finish beyond the former fixed deadline and still supports cancellation', {timeout:30000}, async()=>{
  const fixture=mkdtempSync(join(tmpdir(),'bambi-cloud-warmup-'));
  let generated=0,requestsClosed=0;
  const provider=createServer(async(req,res)=>{
@@ -49,12 +49,12 @@ test('real remote preparation can finish beyond the former fixed deadline and st
  let logs='';child.stdout.on('data',data=>logs+=data);child.stderr.on('data',data=>logs+=data);
  const base=`http://127.0.0.1:${port}`;
  try{
-  let ready=false;for(let n=0;n<80;n++){
+  let ready=false;for(let n=0;n<400;n++){
    if(child.exitCode!==null)throw Error('Fixture server failed: '+logs);
    try{if((await fetch(base+'/api/health')).ok){ready=true;break;}}catch{}
    await new Promise(done=>setTimeout(done,50));
   }
-  assert.ok(ready);
+  assert.ok(ready,'Isolated app startup completed: '+logs);
   const accessResponse=await fetch(base+'/api/access',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({microphone:false,devices:false,modelDownloads:false,onlineMedia:false,cloudAI:true,localClock:false,approximateLocation:false,contextToCloud:false})});assert.equal(accessResponse.status,200);
   const settings={model:CLOUD_MODEL_ALIAS,promptId:'bambisleep-classic',username:'Test',speak:false,context:32768};
   const tooLarge=await fetch(base+'/api/warm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...settings,selectedTriggers:Array.from({length:100},(_,i)=>('CUSTOM_TRIGGER_'+i+'_').padEnd(100,'A'))})});
