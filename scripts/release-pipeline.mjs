@@ -177,13 +177,26 @@ export async function githubApi(path,environment=process.env){
  return response.json();
 }
 
+export async function findRelease(repo,tag,api=githubApi){
+ // The tag endpoint does not resolve drafts. Authenticated release listing
+ // includes them, so it also prevents replacing an existing unpublished draft.
+ let match;
+ for(let page=1;page<=100;page++){
+  const releases=await api(`${repo}/releases?per_page=100&page=${page}`);
+  if(!Array.isArray(releases))throw Error('Cannot inspect existing releases and drafts.');
+  for(const release of releases)if(release.tag_name===tag){if(match)throw Error('Multiple releases use the requested tag.');match=release;}
+  if(releases.length<100)return match;
+ }
+ throw Error('Release inventory exceeds supported inspection.');
+}
+
 export async function publish(directory,build,{api=githubApi,gh=(args)=>execFileSync('gh',args,{stdio:'inherit'})}={}){
  const entries=await verifyPublication(directory,build),repo='repos/'+build.repository;
  let ref=await api(repo+'/git/ref/tags/'+encodeURIComponent(build.tag));
  if(!ref)throw Error('Remote release tag does not exist.');
  for(let depth=0;ref.object.type==='tag'&&depth<5;depth++)ref=await api(repo+'/git/tags/'+ref.object.sha);
  if(ref?.object?.type!=='commit'||ref.object.sha!==build.commit)throw Error('Remote tag changed before publication.');
- if(await api(repo+'/releases/tags/'+encodeURIComponent(build.tag)))throw Error('A release already exists; existing assets will never be replaced.');
+ if(await findRelease(repo,build.tag,api))throw Error('A release already exists; existing assets will never be replaced.');
  const repository=await api(repo);if(!repository)throw Error('Cannot read release repository.');
  // Public publication requires signed build provenance for every attached file,
  // including the aggregate metadata/checksums, before obtaining a release URL.
@@ -191,7 +204,7 @@ export async function publish(directory,build,{api=githubApi,gh=(args)=>execFile
  const notes=join(directory,'..','release-notes.md');
  writeFileSync(notes,`Bambi Local ${build.version} — Linux x64 and Windows x64 smoke packages.\n\nCommit: ${build.commit}\nSource: https://github.com/${build.repository}/tree/${build.tag}\nBuild: ${build.runUrl}\n\nOffline sample and packaging checks passed; local AI/speech are not included.\nVerification: https://github.com/${build.repository}/blob/${build.tag}/docs/RELEASE-SECURITY.md\n`);
  gh(['release','create',build.tag,...readdirSync(directory).sort().map(n=>join(directory,n)),'--repo',build.repository,'--verify-tag','--draft','--title',`Bambi Local ${build.version} (smoke)`,'--notes-file',notes,'--generate-notes',...(build.prerelease?['--prerelease']:[])]);
- const draft=await api(repo+'/releases/tags/'+encodeURIComponent(build.tag));
+ const draft=await findRelease(repo,build.tag,api);
  const expected=[...entries,await asset(join(directory,'SHA256SUMS'))];
  if(!draft?.draft||draft.assets.length!==expected.length)throw Error('Draft upload incomplete; release remains unpublished.');
  for(const entry of expected){

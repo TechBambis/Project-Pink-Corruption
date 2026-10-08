@@ -7,7 +7,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {releaseTag,desktopVersion} from '../scripts/desktop-release-version.mjs';
-import {context,assertSafePath,inspectArchive,stageTarget,assemble,verifyPublication,publish} from '../scripts/release-pipeline.mjs';
+import {context,assertSafePath,inspectArchive,stageTarget,assemble,verifyPublication,publish,findRelease} from '../scripts/release-pipeline.mjs';
 import {archiveTool,hashFile} from '../scripts/desktop-windows-support.mjs';
 
 const build={tag:'v0.1.0-smoke.20',version:'0.1.0-smoke.20',phase:'smoke',prerelease:true,
@@ -95,17 +95,26 @@ test('target staging refuses old tar-only Linux evidence even when its generic p
  await assert.rejects(stageTarget(project,output,join(base,'stage'), 'linux-x64',build),/AppImage has not been exercised/);
 });
 
-async function publicationMock(directory,{privateRepo=true,badDigest=false,existing=false,tagChanges=false}={}){
+async function publicationMock(directory,{privateRepo=true,badDigest=false,existing=false,existingDraft=false,tagChanges=false}={}){
  const commands=[];let created=false,tagReads=0;
  const assets=[];for(const filename of readdirSync(directory))assets.push({name:filename,size:readFileSync(join(directory,filename)).length,digest:'sha256:'+await hashFile(join(directory,filename))});
  return {commands,
   api:async path=>{
    if(path.includes('/git/ref/'))return {object:{type:'commit',sha:tagChanges&&++tagReads>1?'d'.repeat(40):build.commit}};
-   if(path.includes('/releases/tags/'))return existing?{draft:false}:created?{draft:true,assets:badDigest?assets.map((a,i)=>i? a:{...a,digest:'sha256:'+'0'.repeat(64)}):assets}:undefined;
+   if(path.includes('/releases/tags/'))return undefined; // Actual draft-by-tag REST behavior.
+   if(path.includes('/releases?'))return existing||existingDraft?[{tag_name:build.tag,draft:existingDraft}]:created?[{tag_name:build.tag,draft:true,assets:badDigest?assets.map((a,i)=>i? a:{...a,digest:'sha256:'+'0'.repeat(64)}):assets}]:[];
    return {private:privateRepo};
   },gh:args=>{commands.push(args);if(args[0]==='release'&&args[1]==='create')created=true;}
  };
 }
+
+test('draft discovery paginates authenticated releases and fails closed on unreadable or ambiguous inventories',async()=>{
+ const calls=[],first=Array.from({length:100},(_,i)=>({tag_name:'v-old-'+i,draft:false})),draft={tag_name:build.tag,draft:true,id:123};
+ const found=await findRelease('repos/example/bambi',build.tag,async path=>{calls.push(path);return path.endsWith('page=1')?first:[draft];});
+ assert.deepEqual(found,draft);assert.equal(calls.length,2);assert(calls.every(path=>path.includes('/releases?per_page=100&page=')));
+ await assert.rejects(findRelease('repos/example/bambi',build.tag,async()=>undefined),/Cannot inspect/);
+ await assert.rejects(findRelease('repos/example/bambi',build.tag,async()=>[draft,draft]),/Multiple releases/);
+});
 
 test('private publication skips unsupported attestations, confirms remote digests and publishes the draft last',async t=>{
  const {base,input}=await fixture(t),directory=join(base,'publish');await assemble(input,directory,build);const mock=await publicationMock(directory);await publish(directory,build,mock);
@@ -120,7 +129,7 @@ test('public publication verifies every asset against workflow/ref/commit before
 
 test('failed provenance, existing releases, upload corruption or moved tags leave releases unpublished',async t=>{
  const {base,input}=await fixture(t),directory=join(base,'publish');await assemble(input,directory,build);
- for(const options of [{badDigest:true},{existing:true},{tagChanges:true}]){
+ for(const options of [{badDigest:true},{existing:true},{existingDraft:true},{tagChanges:true}]){
   const mock=await publicationMock(directory,options);await assert.rejects(publish(directory,build,mock));assert(!mock.commands.some(c=>c[1]==='edit'));
  }
  const mock=await publicationMock(directory,{privateRepo:false});await assert.rejects(publish(directory,build,{...mock,gh:()=>{throw Error('Attestation rejected');}}),/Attestation rejected/);assert.equal(mock.commands.length,0);
