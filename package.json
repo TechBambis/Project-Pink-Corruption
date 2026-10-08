@@ -38,7 +38,9 @@
     "desktop:windows-check": "node scripts/desktop-windows-check.mjs",
     "desktop:windows-ai-check": "node scripts/desktop-windows-ai-check.mjs",
     "desktop:release": "node scripts/desktop-release.mjs",
-    "desktop:update": "tsx scripts/desktop-update.ts"
+    "desktop:update": "tsx scripts/desktop-update.ts",
+    "pretest:settings": "npm run build",
+    "test:settings": "node --import tsx scripts/settings-browser-check.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0",

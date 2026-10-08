@@ -66,7 +66,7 @@ try{
  await page.goto(base+'/');
  await page.waitForFunction(()=>window.bambi&&[...document.getElementById('model').options].some(option=>option.value==='cloud:cydonia-24b-v4.3'));
  // Never let evolving product defaults route this isolated check to a real local model.
- const fixtureModelSave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON().model==='cloud:cydonia-24b-v4.3'&&response.ok());
+ const fixtureModelSave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON().settings.model==='cloud:cydonia-24b-v4.3'&&response.ok());
  await page.evaluate(()=>{const model=document.getElementById('model');model.value='cloud:cydonia-24b-v4.3';model.dispatchEvent(new Event('input',{bubbles:true}));});
  await fixtureModelSave;
  const output=join(root,'.runtime/navigation-preview');mkdirSync(output,{recursive:true});
@@ -112,7 +112,7 @@ try{
  await page.locator('#prompt-template').selectOption('custom');
  assert.equal(await page.locator('#persona').isDisabled(),false);
  await page.locator('#persona').fill(chatPersonality);
- const personalitySave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON().persona===chatPersonality&&response.request().postDataJSON()['guided-style']===guidedStyle&&response.ok());
+ const personalitySave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON().settings.persona===chatPersonality&&response.request().postDataJSON().settings['guided-style']===guidedStyle&&response.ok());
  await page.locator('#prompt-template').selectOption('bambisleep-classic');
  await personalitySave;
  assert.equal(await page.locator('#persona').isDisabled(),true);
@@ -132,7 +132,7 @@ try{
  await page.locator('#direction-motifs').selectOption('heart');
  await page.locator('#direction-mindwipe').uncheck();
  assert.equal(await page.locator('#session-direction').inputValue(),'custom');
- const directionSave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON()['direction-motifs']==='heart'&&response.request().postDataJSON()['direction-mindwipe']===false&&response.ok());
+ const directionSave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON().settings['direction-motifs']==='heart'&&response.request().postDataJSON().settings['direction-mindwipe']===false&&response.ok());
  await page.locator('#direction-rhythm').selectOption('slow');await directionSave;
  await page.reload();await page.waitForFunction(()=>window.bambi&&document.getElementById('direction-motifs').value==='heart');
  assert.equal(await page.locator('#guided-style').inputValue(),guidedStyle);
@@ -225,7 +225,7 @@ try{
  assert.equal(await page.locator('#spiral-speed').isDisabled(),false);
  check('Dependencies restore controls without overwriting zero values or control-owned locks; gentle motion disables animated speed.');
  assert.equal(await page.locator('#duration').inputValue(),'unlimited','Original-file mode preserves the AI duration preference');
- const finiteSave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON().duration==='300'&&response.ok());
+ const finiteSave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON().settings.duration==='300'&&response.ok());
  await page.evaluate(()=>{document.getElementById('duration').value='300';document.getElementById('duration').dispatchEvent(new Event('input',{bubbles:true}));});
  await page.evaluate(()=>window.bambi.startSession());await page.waitForFunction(()=>window.bambi.director.active);
  await page.evaluate(()=>window.bambi.clock.seek(301));await page.waitForFunction(()=>window.bambi.director.state==='FINISHED');
@@ -256,7 +256,7 @@ try{
  assert.equal(await page.locator('#session-direction').isDisabled(),false);
  check('Imported authored programs disable style edits; returning to adaptive direction restores them.');
  // Legacy profiles are represented, not migrated into a different engine or reset mix.
- await page.route('**/api/preferences',async route=>route.request().method()==='GET'?route.fulfill({json:{mode:'conversation','narration-enabled':true,'session-events':false,'voice':'af_sarah',master:'0.41',persona:'Legacy gentle style.','dialogue-version':1,'visuals-version':2}}):route.continue());
+ await page.route('**/api/settings',async route=>{const response=await route.fetch(),snapshot=await response.json();return route.fulfill({json:{...snapshot,settings:{mode:'conversation','narration-enabled':true,'session-events':false,voice:'af_sarah',master:'0.41',persona:'Legacy gentle style.','guided-style':'Legacy gentle style.'}}});});
  await page.evaluate(()=>localStorage.removeItem('bambi-profile'));
  await page.reload();await page.waitForFunction(()=>window.bambi&&document.getElementById('narration-enabled').checked);
  assert.equal(await page.locator('#guided-style').inputValue(),'Legacy gentle style.');
