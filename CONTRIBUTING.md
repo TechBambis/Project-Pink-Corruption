@@ -10,6 +10,10 @@ The maintainer provides an immutable `CLA.md` link and its SHA-256. Follow the a
 
 ## Checks
 
+See [Checks and default-branch protection](.github/BRANCH_PROTECTION.md) for
+required check names, manual CI reruns and the prepared ruleset configuration.
+The private repository's current Free plan does not enforce merge protection.
+
 ```sh
 npm ci --ignore-scripts
 npm run repo:check

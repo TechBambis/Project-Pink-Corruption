@@ -1,5 +1,9 @@
 name: Application checks
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -10,6 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         node: [22, 24]
     steps:
@@ -28,6 +33,22 @@ jobs:
       - run: npm run build
       - run: node scripts/build-extension.mjs
       - run: npm run eval:conversation
+      - name: Install browser fixture dependencies
+        if: matrix.node == 24
+        run: npx playwright install --with-deps chromium --only-shell
+      - name: Check built app in an isolated browser fixture
+        if: matrix.node == 24
+        run: npm run test:integration
+      - name: Save browser diagnostics on failure
+        if: failure() && matrix.node == 24
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-diagnostics-node-${{ matrix.node }}
+          retention-days: 1
+          path: |
+            runtime/high-impact-browser-check.json
+            runtime/session-studio-*.png
+          if-no-files-found: ignore
   secrets:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
