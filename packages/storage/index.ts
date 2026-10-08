@@ -7,12 +7,15 @@ import { mkdirSync } from 'node:fs';
 import {dirname} from 'node:path';
 import {createHash} from 'node:crypto';
 import {cleanDialogueText,visibleDialogueText} from '../ai/dialogue';
+import {migrateStoredSettings,validateSettings,profileMetadata,type Settings} from '../settings';
+import {SettingsFileSchema,type SettingsFile} from '../settings/transfer';
 type Turn={role:'user'|'assistant';content:string;interruption?:string|null};
 export type MemoryFact={id:number;key:string;value:string;sourceTurnId:number|null;created:string;supersedes:number|null};
 export type MemoryEpisode={id:number;role:Turn['role'];content:string;created:string;interruption:string|null};
 export type MemorySource={kind:'turn'|'fact';id:number;content:string};
 export type MemoryVector=Omit<MemorySource,'content'>&{hash:string;vector:Uint8Array};
 export const memoryHash=(text:string)=>createHash('sha256').update(text).digest('hex');
+function zPresets(value:unknown):SettingsFile[]{if(!Array.isArray(value))return [];return value.map(file=>SettingsFileSchema.parse(file)).slice(0,50);}
 export class Store {
  db:DatabaseSync;
  private memoryListeners=new Set<(change:'write'|'forget'|'clear')=>void>();
@@ -42,6 +45,57 @@ export class Store {
  private preferenceKey(key:string){return this.profileId==='default'?key:`${this.profileId}:${key}`;}
  get(key:string,fallback:unknown=null){const r=this.db.prepare('SELECT value FROM preferences WHERE key=?').get(this.preferenceKey(key)) as {value:string}|undefined;return r?JSON.parse(r.value):fallback;}
  set(key:string,value:unknown){this.db.prepare('INSERT OR REPLACE INTO preferences VALUES(?,?)').run(this.preferenceKey(key),JSON.stringify(value));}
+ /** Preference revision and restore point commit with the profile, never separately. */
+ settingsSnapshot(){
+  const settings=migrateStoredSettings(this.get('profile',{}) as Record<string,unknown>);
+  let profile=String(this.get('settings-profile-id',''));
+  if(!profile){profile=crypto.randomUUID();this.set('settings-profile-id',profile);}
+  const revision=Number(this.get('settings-revision',0));
+  const undo=this.get('settings-undo',null) as {revision:number}|null;
+  return {revision,profile,settings,undoRevision:undo?.revision===revision?revision:null};
+ }
+ saveSettings(expected:number,settings:Settings,restorePoint=false,operation?:{id:string;fingerprint:string}){
+  const validated=validateSettings(settings);
+  this.db.exec('BEGIN IMMEDIATE');
+  try{
+   const current=this.settingsSnapshot();
+   if(operation){
+    const last=this.get('settings-last-import',null) as {id:string;fingerprint:string;revision:number}|null;
+    if(last?.id===operation.id){this.db.exec('ROLLBACK');return {conflict:last.fingerprint!==operation.fingerprint||last.revision!==current.revision,...current};}
+   }
+   if(current.revision!==expected){this.db.exec('ROLLBACK');return {conflict:true as const,...current};}
+   if(restorePoint&&Object.keys(validated).length===Object.keys(current.settings).length&&Object.entries(validated).every(([id,value])=>current.settings[id]===value)){
+    if(operation)this.set('settings-last-import',{...operation,revision:current.revision});
+    this.db.exec('COMMIT');return {conflict:false as const,...current};
+   }
+   const revision=current.revision+1;
+   if(restorePoint)this.set('settings-undo',{revision,settings:current.settings});
+   this.set('profile',{...validated,...profileMetadata});this.set('settings-revision',revision);
+   if(operation)this.set('settings-last-import',{...operation,revision});
+   this.db.exec('COMMIT');return {conflict:false as const,...this.settingsSnapshot()};
+  }catch(error){this.db.exec('ROLLBACK');throw error;}
+ }
+ undoSettings(expected:number){
+  this.db.exec('BEGIN IMMEDIATE');
+  try{
+   const current=this.settingsSnapshot();
+   const undo=this.get('settings-undo',null) as {revision:number;settings:Settings}|null;
+   if(current.revision!==expected||undo?.revision!==expected){this.db.exec('ROLLBACK');return {conflict:true as const,...current};}
+   this.set('profile',{...validateSettings(undo.settings),...profileMetadata});this.set('settings-revision',expected+1);this.set('settings-undo',null);
+   this.db.exec('COMMIT');return {conflict:false as const,...this.settingsSnapshot()};
+  }catch(error){this.db.exec('ROLLBACK');throw error;}
+ }
+ settingsPresets(){return zPresets(this.get('settings-presets',[]));}
+ saveSettingsPreset(input:SettingsFile){
+  const file=SettingsFileSchema.parse(input);if(file.kind!=='preset')throw Error('Choose a preset');
+  this.db.exec('BEGIN IMMEDIATE');
+  try{const presets=this.settingsPresets();const index=presets.findIndex(preset=>preset.name===file.name);
+   if(index<0&&presets.length>=50)throw Error('Keep at most 50 named presets');
+   if(index<0)presets.push(file);else presets[index]=file;
+   this.set('settings-presets',presets);this.db.exec('COMMIT');return presets;
+  }catch(error){this.db.exec('ROLLBACK');throw error;}
+ }
+ deleteSettingsPreset(name:string){const presets=this.settingsPresets().filter(file=>file.name!==name);this.set('settings-presets',presets);return presets;}
  addTurn(role:string,content:string,interruption:string|null=null){const id=Number(this.db.prepare('INSERT INTO turns(role,content,interruption,profile_id,conversation_id) VALUES(?,?,?,?,?)').run(role,content,interruption,this.profileId,String(this.get('conversationId','legacy'))).lastInsertRowid);this.changed();return id;}
  private clean(turn:Turn):Turn{const interruption=turn.interruption||(turn.content.startsWith('[Response interrupted')?'interrupted':null);return {role:turn.role,content:cleanDialogueText(turn.content),...(interruption?{interruption}:{})};}
  recent(limit=8){return (this.db.prepare('SELECT role,content,interruption FROM turns WHERE profile_id=? ORDER BY id DESC LIMIT ?').all(this.profileId,limit) as Turn[]).reverse().map(turn=>this.clean(turn)).map(turn=>({...turn,content:turn.role==='assistant'?visibleDialogueText(turn.content):turn.content})).filter(turn=>turn.content.trim()).map(({role,content})=>({role,content}));}

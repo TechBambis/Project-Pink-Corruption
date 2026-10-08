@@ -213,3 +213,8 @@ test-results/
 !/scripts/desktop-release-version.mjs
 !/scripts/release-pipeline.mjs
 !/docs/RELEASE-SECURITY.md
+
+# Isolated settings persistence and transfer browser checks.
+!/scripts/settings-browser-check.mjs
+
+!/docs/SETTINGS_BACKUP.md

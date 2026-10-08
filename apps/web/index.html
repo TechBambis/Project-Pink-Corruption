@@ -97,6 +97,7 @@
               <button id="settings-search-open" type="button" class="search-open nav-search" aria-haspopup="dialog" aria-controls="settings-search" aria-label="Find a setting"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"></circle><path d="m15 15 6 6"></path></svg><span>Search</span></button>
             </nav>
           </div>
+          <a id="settings-save-summary" class="hint" href="#settings-transfer" data-target="settings-transfer" role="status" aria-live="polite">Loading saved settings…</a>
           <div id="settings-content">
             <section id="view-session" class="workspace-view" data-view="session" aria-labelledby="heading-session">
               <div class="view-heading">
@@ -638,6 +639,31 @@ Open your official session in its own tab, then start the local clock alongside 
                 <h1 id="heading-extras" tabindex="-1">Extras</h1>
                 <p>Sources, memories and a few extra little tools.</p>
               </div>
+              <section id="settings-transfer" class="settings-group" data-section="Settings, backups &amp; presets">
+                <h2>Settings &amp; presets</h2>
+                <p class="hint">Save your settings to a file or share a named recipe for voice, visuals and session flow.</p>
+                <p id="settings-save-status" role="status" aria-live="polite">Loading saved settings…</p>
+                <div class="content-actions">
+                  <button id="settings-retry" type="button" class="quiet" hidden>Retry saving</button>
+                  <button id="settings-keep-draft" type="button" class="quiet" hidden>Save my changes</button>
+                  <button id="settings-use-saved" type="button" class="quiet" hidden>Use saved values</button>
+                </div>
+                <div class="content-actions">
+                  <button id="settings-export" type="button" class="quiet">Export settings</button>
+                  <button id="settings-import" type="button" class="quiet">Import settings or preset</button>
+                  <input id="settings-import-file" type="file" accept=".json,application/json" hidden>
+                  <button id="settings-undo" type="button" class="quiet" disabled>Undo last import</button>
+                </div>
+                <p class="hint">Personal settings files can include your names and custom text. Chats, memories, media, models, credentials and access permissions use their own storage.</p>
+                <label>Saved preset <select id="settings-presets"><option value="">No saved presets</option></select></label>
+                <div class="content-actions">
+                  <button id="preset-save" type="button" class="quiet">Save named preset</button>
+                  <button id="preset-apply" type="button" class="quiet" disabled>Review &amp; apply preset</button>
+                  <button id="preset-share" type="button" class="quiet">Share current preset</button>
+                  <button id="preset-delete" type="button" class="quiet" disabled>Delete selected preset</button>
+                </div>
+                <p id="settings-transfer-status" class="hint" role="status" aria-live="polite"></p>
+              </section>
               <section id="source-tools" class="settings-group" data-section="Content &amp; sources">
                 <h2>Content & sources</h2>
                 <div class="content-actions">
@@ -714,6 +740,19 @@ Open your official session in its own tab, then start the local clock alongside 
       </div>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
+    <dialog id="settings-transfer-dialog" aria-labelledby="settings-transfer-title">
+      <div class="dialog-heading"><h2 id="settings-transfer-title">Review settings</h2><button id="settings-transfer-close" type="button" class="quiet" aria-label="Close settings review">✕</button></div>
+      <p id="settings-transfer-note" class="hint"></p>
+      <div id="settings-file-metadata">
+        <label>Name <input id="settings-file-name" maxlength="80" value="My settings"></label>
+        <label>Description <textarea id="settings-file-description" maxlength="500" rows="2"></textarea></label>
+      </div>
+      <fieldset id="settings-transfer-sections"><legend>Choose sections</legend><div id="settings-section-choices"></div></fieldset>
+      <p id="settings-requirements" class="hint"></p>
+      <div id="settings-transfer-preview" tabindex="0" aria-label="Settings file contents"></div>
+      <p id="settings-review-error" role="alert"></p>
+      <div class="content-actions"><button id="settings-transfer-confirm" type="button">Apply selected settings</button><button id="settings-transfer-cancel" type="button" class="quiet">Cancel</button></div>
+    </dialog>
     <dialog id="settings-search" aria-labelledby="search-title">
       <div class="search-heading">
         <h2 id="search-title">Find a setting</h2>

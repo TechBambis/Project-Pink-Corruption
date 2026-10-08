@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
+import {validateSettings,migrateStoredSettings,profileMetadata} from '../../packages/settings';
+import {ImportSettingsSchema,SettingsFileSchema,selectedFileSettings} from '../../packages/settings/transfer';
+
 import {desktopSmoke,desktopAlpha,desktop,resourcePath} from '../../packages/runtime/paths';
 import {desktopSetup,alphaModels,DesktopSetup} from '../../packages/runtime/desktop-setup';
 import {desktopServices} from '../../packages/runtime/desktop-services';
@@ -82,15 +85,18 @@ const inference=new InferenceResources(),traces=new ReplyTraces();
 const semanticMemory=new SemanticMemory(store,new LocalEmbeddings(resolve('.runtime/memory-models')),{onError:error=>store.metric('memory.retrieval-error',{error:String(error)})});void semanticMemory.index();
 const devices=new DeviceController(undefined,undefined,undefined,true,()=>access.allowed('devices')),bleBridge=new LocalBLEBridge();
 const savedProfile=store.get('profile',{}) as Record<string,unknown>;
-if(!savedProfile['prompt-template']){
- store.set('profile',{...savedProfile,'prompt-template':'bambisleep-classic','bambi-name':'Bambi','trigger-selection':JSON.stringify(defaultTriggers),'response-length':'2048',scene:'Spiral Focus'});
+const startupSettings=migrateStoredSettings(savedProfile);
+if(!startupSettings['prompt-template']){
+ Object.assign(startupSettings,{'prompt-template':'bambisleep-classic','bambi-name':startupSettings['bambi-name']??'Bambi','trigger-selection':startupSettings['trigger-selection']??JSON.stringify(defaultTriggers),'response-length':startupSettings['response-length']??'2048',scene:startupSettings.scene??'Spiral Focus'});
  store.beginConversation();
 }
-if(typeof savedProfile['narration-enabled']!=='boolean')store.set('profile',{...(store.get('profile',{}) as Record<string,unknown>),'narration-enabled':!desktopSmoke,'session-events':savedProfile['session-events']??!desktopSmoke,'conversation-style':savedProfile['conversation-style']??'reactive',mode:savedProfile.mode??(desktopSmoke?'local':'conversation'),'ai-mode':savedProfile['ai-mode']??(desktopSmoke?'off':'voice')});
+if(typeof startupSettings['narration-enabled']!=='boolean')Object.assign(startupSettings,{'narration-enabled':!desktopSmoke,'session-events':startupSettings['session-events']??!desktopSmoke,'conversation-style':startupSettings['conversation-style']??'reactive',mode:startupSettings.mode??(desktopSmoke?'local':'conversation'),'ai-mode':startupSettings['ai-mode']??(desktopSmoke?'off':'voice')});
+if(!startupSettings.speed)startupSettings.speed='0.78';
+if(!startupSettings.model)startupSettings.model=cloud&&process.env.BAMBI_CLOUD_DEFAULT==='true'?CLOUD_MODEL_ALIAS:communityQwen;
+// Startup migrations preserve valid explicit choices and participate in the same revision contract.
+if(JSON.stringify(savedProfile)!==JSON.stringify({...startupSettings,...profileMetadata}))store.saveSettings(store.settingsSnapshot().revision,validateSettings(startupSettings));
 const audioPresets=Object.fromEntries(['bambi_local_clean','bambi_classic','bambi_classic_deep','bambi_voice_test'].map(id=>[id,JSON.parse(readFileSync(resourcePath('presets/audio',id+'.json'),'utf8'))]));
 
-if(savedProfile['sampling-version']!==2){store.set('profile',{...(store.get('profile',{}) as Record<string,unknown>),'sampling-version':2,speed:'0.78',model:communityQwen});}
-if(cloud&&process.env.BAMBI_CLOUD_DEFAULT==='true'&&!savedProfile.model)store.set('profile',{...(store.get('profile',{}) as Record<string,unknown>),model:CLOUD_MODEL_ALIAS});
 const streamingSpeech=new StreamingSpeechService();
 const speechSockets=new WebSocketServer({noServer:true,maxPayload:16384});
 speechSockets.on('connection',socket=>{if(!access.allowed('microphone')){socket.close(1008,'Microphone access is disabled.');return;}streamingSpeech.attach(socket);});
@@ -229,11 +235,11 @@ app.post('/api/models/select',async(req,res)=>{
  if(!desktop){
   const current=await health() as {models?:string[]};
   const candidate=modelInventory({models:(current.models??[]).map(name=>({name}))}).find(model=>model.id===parsed.data.model);
-  if(candidate?.installed&&candidate.promptCompatible!==false){store.set('profile',{...(store.get('profile',{}) as Record<string,unknown>),model:candidate.id});healthTime=0;res.json({ok:true,model:candidate.id});return;}
+  if(candidate?.installed&&candidate.promptCompatible!==false){const snapshot=store.settingsSnapshot();store.saveSettings(snapshot.revision,{...snapshot.settings,model:candidate.id});healthTime=0;res.json({ok:true,model:candidate.id});return;}
  }
  const model=localModelCatalog.find(m=>m.alias===parsed.data.model);
  if(model?.qualification==='experimental'&&!parsed.data.experimental){res.status(400).json({error:'Confirm the experimental model before selecting it.'});return;}
- try{await modelSetup.select(parsed.data.model);store.set('profile',{...(store.get('profile',{}) as Record<string,unknown>),model:modelSetup.model});healthTime=0;res.json({ok:true,model:modelSetup.model});}
+ try{await modelSetup.select(parsed.data.model);const snapshot=store.settingsSnapshot();store.saveSettings(snapshot.revision,{...snapshot.settings,model:modelSetup.model});healthTime=0;res.json({ok:true,model:modelSetup.model});}
  catch(error){res.status(modelSetup.busy?409:400).json({error:String(error)});}
 });
 app.post('/api/models/setup/install',(_req,res)=>{
@@ -247,7 +253,7 @@ app.post('/api/models/setup/cancel',(_req,res)=>{modelSetup?.cancel();res.json({
 app.get('/api/devices/status',(_req,res)=>res.json({...devices.status,bleSetup:bleBridge.supported,bridgeProcess:bleBridge.status}));
 app.get('/api/devices/scan',async(_req,res)=>{try{res.json({devices:await bleBridge.scan()});}catch(error){res.status(503).json({error:String(error)});}});
 app.post('/api/devices/connect',async(req,res)=>{devices.stop();try{res.json(await bleBridge.connect(req.body));}catch(error){res.status(503).json({error:String(error)});}});
-app.post('/api/devices/disconnect',async(_req,res)=>{devices.stop();store.set('profile',{...(store.get('profile',{}) as Record<string,unknown>),'device-auto-connect':false});await bleBridge.disconnect();res.json({ok:true});});
+app.post('/api/devices/disconnect',async(_req,res)=>{devices.stop();const snapshot=store.settingsSnapshot();store.saveSettings(snapshot.revision,{...snapshot.settings,'device-auto-connect':false});await bleBridge.disconnect();res.json({ok:true});});
 for(const name of ['web','ollama','kokoro','whisper','database','audio'])app.get('/health/'+name,async(_req,res)=>{const h=await health() as Record<string,unknown>;res.status(h[name]?200:503).json({service:name,status:h[name]});});
 
 app.post('/api/warm',async(req,res)=>{
@@ -339,8 +345,42 @@ app.get('/api/triggers/json',(_req,res)=>res.json(triggerData));
 app.use('/content/stable-2.0/public/docs',express.static(resolve(contentRoot,'public/docs'),{index:false,dotfiles:'deny'}));
 app.use('/content/stable-2.0',(_req,res)=>res.status(404).end());
 app.use('/assets/sounds',express.static(resourcePath('assets/sounds'),{dotfiles:'deny'}));
-app.get('/api/preferences',(_req,res)=>res.json(store.get('profile',{})));
-app.put('/api/preferences',(req,res)=>{const parsed=z.record(z.union([z.string().max(8000),z.number().finite(),z.boolean()])).safeParse(req.body);if(!parsed.success){res.status(400).json({error:'Invalid preferences'});return;}store.set('profile',{...parsed.data,'sampling-version':2});healthTime=0;res.json({ok:true});});
+app.get('/api/preferences',(_req,res)=>{
+ const snapshot=store.settingsSnapshot();res.setHeader('X-Settings-Revision',snapshot.revision);res.setHeader('X-Settings-Profile',snapshot.profile);
+ res.json({...snapshot.settings,...profileMetadata});
+});
+app.get('/api/settings',(_req,res)=>res.json(store.settingsSnapshot()));
+app.put('/api/preferences',(req,res)=>{
+ const envelope=z.object({revision:z.number().int().nonnegative(),settings:z.unknown()}).strict().safeParse(req.body);
+ if(!envelope.success){res.status(400).json({error:'A settings revision and validated settings are required'});return;}
+ let settings;try{settings=validateSettings(envelope.data.settings);}catch{res.status(400).json({error:'Invalid settings; no changes saved'});return;}
+ try{const result=store.saveSettings(envelope.data.revision,settings);healthTime=0;res.status(result.conflict?409:200).json(result);}
+ catch{res.status(500).json({error:'Could not write settings to private storage; retry saving'});}
+});
+app.post('/api/settings/import',(req,res)=>{
+ const parsed=ImportSettingsSchema.safeParse(req.body);if(!parsed.success){res.status(400).json({error:'Invalid settings file or selected sections'});return;}
+ const {revision,requestId,file,sections}=parsed.data;
+ const current=store.settingsSnapshot();
+ if(current.revision===revision)panic();
+ const imported=selectedFileSettings(file,sections);if(sections.includes('machine')&&Object.keys(file.sections.machine??{}).length)imported['device-auto-connect']=false;
+ const result=store.saveSettings(revision,{...current.settings,...imported},true,{id:requestId,fingerprint:JSON.stringify({file,sections})});healthTime=0;
+ res.status(result.conflict?409:200).json(result);
+});
+app.post('/api/settings/undo',(req,res)=>{
+ const parsed=z.object({revision:z.number().int().nonnegative()}).strict().safeParse(req.body);
+ if(!parsed.success){res.status(400).json({error:'Invalid settings revision'});return;}
+ const snapshot=store.settingsSnapshot();if(snapshot.revision===parsed.data.revision&&snapshot.undoRevision===parsed.data.revision)panic();
+ const result=store.undoSettings(parsed.data.revision);healthTime=0;res.status(result.conflict?409:200).json(result);
+});
+app.get('/api/settings/presets',(_req,res)=>res.json(store.settingsPresets()));
+app.post('/api/settings/presets',(req,res)=>{
+ const parsed=SettingsFileSchema.safeParse(req.body);if(!parsed.success||parsed.data.kind!=='preset'){res.status(400).json({error:'Invalid portable preset'});return;}
+ try{res.json(store.saveSettingsPreset(parsed.data));}catch{res.status(400).json({error:'Could not save preset; keep at most 50 names'});}
+});
+app.delete('/api/settings/presets',(req,res)=>{
+ const parsed=z.object({name:z.string().min(1).max(80)}).strict().safeParse(req.body);if(!parsed.success){res.status(400).json({error:'Invalid preset name'});return;}
+ res.json(store.deleteSettingsPreset(parsed.data.name));
+});
 
 let transcribing=false;
 const speechVocabulary=buildSpeechVocabulary();

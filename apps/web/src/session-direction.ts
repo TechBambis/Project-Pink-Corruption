@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import {preferenceIds,booleanPreferenceIds} from '../../../packages/settings';
 import { directionMechanisms, directionPreset, normalizeDirection, sessionDirections, type SessionDirection } from '../../../packages/session-director/direction';
 
-export const directionPreferenceIds = ['session-direction', 'direction-contrast', 'direction-repetition', 'direction-rhythm', 'direction-motifs', 'direction-theme', ...directionMechanisms.map(key => 'direction-' + key)];
-export const directionBooleanIds = directionMechanisms.map(key => 'direction-' + key);
+export const directionPreferenceIds=preferenceIds.filter(id=>id==='session-direction'||id.startsWith('direction-'));
+export const directionBooleanIds=booleanPreferenceIds.filter(id=>id.startsWith('direction-'));
 const field = (id: string) => document.getElementById(id) as HTMLInputElement;
 export function initDirectionControls() {
   const select = document.getElementById('session-direction') as HTMLSelectElement;

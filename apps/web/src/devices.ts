@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
+import {preferenceIds,booleanPreferenceIds} from '../../../packages/settings';
 import type {AudioEngine} from '../../../packages/audio';
 import {DeviceSettingsSchema,type DeviceSettings} from '../../../packages/devices/commands';
 import {devicePlaybackPlan} from '../../../packages/devices/playback';
 import {requireAccess} from './privacy-state';
 
-export const devicePreferenceIds=['device-bridge','device-address','device-write-char','device-auto-connect','device-vib-channel','device-rot-channel','device-vib-max','device-rot-max','device-phase-defaults','device-random-rotation','device-speech-accents','device-accent-intensity','device-accent-duration','device-vib-lead','device-rot-lead','device-transition'];
-export const deviceBooleanPreferenceIds=['device-auto-connect','device-phase-defaults','device-random-rotation','device-speech-accents'];
+export const devicePreferenceIds=preferenceIds.filter(id=>id.startsWith('device-'));
+export const deviceBooleanPreferenceIds=booleanPreferenceIds.filter(id=>id.startsWith('device-'));
 export function initDeviceControls(send:(message:unknown)=>void,audio:()=>AudioEngine|null,session:()=>{running:boolean;paused:boolean;elapsed:number;duration:number},engineEvents:()=>boolean=()=>false){
  const element=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
  const value=(id:string)=>element<HTMLInputElement>(id).value;

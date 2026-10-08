@@ -283,7 +283,7 @@ try{
   await current.page.keyboard.press('Escape');await current.page.keyboard.press('Escape');
   current.rows=await observeOwnedRows(current.owner.pid);
  }
- await current.page.evaluate(async()=>{const profile=await(await fetch('/api/preferences')).json();await fetch('/api/preferences',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({...profile,'bambi-name':'Windows persistence ü'})});});
+ await current.page.evaluate(async()=>{const snapshot=await(await fetch('/api/settings')).json();const saved=await fetch('/api/preferences',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({revision:snapshot.revision,settings:{...snapshot.settings,'bambi-name':'Windows persistence ü'}})});if(!saved.ok)throw Error('Preference save was not acknowledged');});
  await current.application.evaluate(({app})=>{setImmediate(()=>app.quit());});await stopped(current.rows);await current.application.close().catch(()=>{});record('ordinary-Quit-cleans-owned-tree');
  current=await launch();assert.equal(await current.page.evaluate(async()=>(await(await fetch('/api/preferences')).json())['bambi-name']),'Windows persistence ü');record('reopen-retains-preferences');
  const electronOwner=current.rows.find(row=>row.pid===current.owner.pid);
