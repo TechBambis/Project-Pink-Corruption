@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 const {app,BrowserWindow,dialog,Menu,session,ipcMain,shell}=require('electron');
 const {spawn,spawnSync}=require('node:child_process');
-const {mkdirSync,openSync,closeSync}=require('node:fs');
-const {resolve,join}=require('node:path');
+const {mkdirSync,openSync,closeSync,lstatSync,readFileSync}=require('node:fs');
+const {resolve,join,dirname}=require('node:path');
 const {randomBytes}=require('node:crypto');
 const {runtimeEnvironment}=require('./runtime-environment.cjs');
 const {permissionHandlers}=require('./permission-policy.cjs');
@@ -16,6 +16,17 @@ app.setName(alpha?'Bambi Local':'Bambi Local Smoke');
 const option=name=>process.argv.find(arg=>arg.startsWith(name+'='))?.slice(name.length+1);
 process.umask(0o077);
 const data=resolve(option('--bambi-user-data')||join(windows&&process.env.LOCALAPPDATA||app.getPath('appData'),alpha?'bambi-local-alpha':'bambi-local-smoke'));
+let profileLock=false;
+if(windows){
+ // Only marked local directories can take the early ownership path. The owner
+ // still validates native ACLs before any private runtime or browser setup.
+ const marked=(()=>{try{
+  for(let path=data;;path=dirname(path)){if(lstatSync(path).isSymbolicLink())return false;if(dirname(path)===path)break;}
+  const marker=join(data,'.bambi-desktop-profile'),entry=lstatSync(marker),expected='Bambi Local private desktop profile v1\n';
+  return lstatSync(data).isDirectory()&&entry.isFile()&&entry.size===expected.length&&readFileSync(marker,'utf8')===expected;
+ }catch{return false;}})();
+ if(marked){app.setPath('userData',data);profileLock=app.requestSingleInstanceLock();if(!profileLock){app.exit(0);return;}}
+}
 if(windows){
  const secure=spawnSync(join(process.resourcesPath,'backend','native','ownership','bambi-job.exe'),['--secure-data',data],{windowsHide:true,timeout:5000,encoding:'utf8',env:{SystemRoot:process.env.SystemRoot||process.env.WINDIR}});
  if(secure.error||secure.status!==0){dialog.showErrorBox('Bambi Local user data',secure.error?.message||secure.stderr?.trim()||'The private Windows user-data directory could not be prepared.');app.exit(64);return;}
@@ -30,7 +41,7 @@ const accelerator=option('--bambi-accelerator')||'auto';
 const env=runtimeEnvironment(process.env,{resources,data,port,alpha,accelerator,tokens:{instance:randomBytes(32).toString('hex'),llama:randomBytes(32).toString('hex'),speech:randomBytes(32).toString('hex')}});
 for(const path of [env.TMPDIR,join(data,'logs'),join(data,'data')])mkdirSync(path,{recursive:true,mode:0o700});
 // A duplicate owns no services; Windows must exit before app readiness.
-if(!app.requestSingleInstanceLock()){if(windows)app.exit(0);else app.quit();}
+if(!profileLock&&!app.requestSingleInstanceLock()){if(windows)app.exit(0);else app.quit();}
 else {
  app.on('second-instance',()=>{if(window){if(window.isMinimized())window.restore();window.show();window.focus();}});
  app.on('before-quit',event=>{
