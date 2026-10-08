@@ -97,6 +97,8 @@ id_ed25519*
 !/scripts/panic-stop.sh
 !/scripts/lifecycle.py
 !/scripts/llama-runtime.py
+!/scripts/accelerator-plan.mjs
+!/scripts/accelerator_bridge.py
 !/scripts/runtime_process.py
 !/scripts/extract-vulkan-deps.py
 !/scripts/prepare-vad.mjs

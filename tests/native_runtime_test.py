@@ -21,6 +21,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import runtime_process as ownership
+from accelerator_bridge import runtime_policy
 
 
 class NativeRuntimeTests(unittest.TestCase):
@@ -67,7 +68,7 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
             child.wait(timeout=5)
         self.directory.cleanup()
 
-    def launch(self, foreign=False, cwd=None, weight=None, ignore_term=False, cache_mib=None):
+    def launch(self, foreign=False, cwd=None, weight=None, ignore_term=False, cache_mib=None, mode='auto'):
         with socket.socket() as reservation:
             reservation.bind(('127.0.0.1', 0))
             port = reservation.getsockname()[1]
@@ -75,7 +76,7 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
                      '-m', str(weight or self.root / 'models/community/fixture.gguf'), '--alias', self.alias,
                      '--host', '127.0.0.1', '--port', '8080', '--ctx-size', '8192', '--parallel', '1',
                      '--ctx-checkpoints', '16', '--checkpoint-min-step', '512', '--cache-ram', str(ownership.prompt_cache_mib(self.alias) if cache_mib is None else cache_mib),
-                     '--reasoning', 'off', '--gpu-layers', 'all', '--flash-attn', 'on', '--jinja', '--no-webui',
+                     '--reasoning', 'off', '--device', 'none' if mode == 'cpu' else 'Vulkan0', '--gpu-layers', '0' if mode == 'cpu' else 'auto', '--fit', 'off' if mode == 'cpu' else 'on', '--fit-ctx', '8192', '--fit-target', '1024', '--flash-attn', 'on', '--jinja', '--no-webui',
                      '--cache-type-k', 'f16', '--cache-type-v', 'f16', '--test-port', str(port)]
         if ignore_term:
             arguments.append('--test-ignore-term')
@@ -207,14 +208,14 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
         ownership.stop_llama(self.root, entry, self.pins, self.profile)
         child.wait(timeout=5)
 
-    def cold_start(self, module, *, scoped=False, failure=None, before_socket=False):
+    def cold_start(self, module, *, scoped=False, failure=None, before_socket=False, plan=None):
         """Use an isolated child instead of GPU inference, including scope separation."""
         spawned = []
         units = []
         def spawn(command, **_kwargs):
             if '--unit' in command:
                 units.append(command[command.index('--unit') + 1])
-            server, _ = self.launch()
+            server, _ = self.launch(mode='cpu' if '--gpu-layers' in command and command[command.index('--gpu-layers') + 1] == '0' else 'auto')
             launcher = server
             if scoped:
                 launcher = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'],
@@ -223,7 +224,7 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
             spawned.extend([server, launcher])
             return launcher
         def recovered(*_args):
-            return ownership.inspect_llama(self.root, spawned[0].pid, self.pins, self.profile) if spawned and not before_socket else None
+            return ownership.inspect_llama(self.root, spawned[-2].pid, self.pins, self.profile) if spawned and not before_socket else None
         def stop_scope(command, **_kwargs):
             self.assertEqual(command, ['systemctl', '--user', 'kill', '--kill-whom=all', '--signal=SIGKILL', units[0] + '.scope'])
             entry = ownership.inspect_llama(self.root, spawned[0].pid, self.pins, self.profile)
@@ -236,10 +237,11 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
              patch.object(module.socket, 'socket') as probe, \
              patch.object(module, 'Path', side_effect=lambda path: memory_info if path == '/proc/meminfo' else native_path(path)), \
              patch.object(module.shutil, 'which', return_value='/usr/bin/systemd-run'), \
-             patch.object(module, 'request', return_value={'models': []}), \
+             patch.object(module, 'request', side_effect=lambda url, data=None: {'data': [{'id': self.alias}]} if url.endswith('/v1/models') else {'models': []}), \
              patch.object(module.subprocess, 'Popen', side_effect=spawn), \
              patch.object(module.subprocess, 'run', side_effect=stop_scope), \
-             patch.object(module, 'ready', side_effect=failure, return_value=True), \
+             patch.object(module, 'verify_inference', side_effect=failure, return_value=1), \
+             patch.object(module, 'runtime_policy', side_effect=lambda root, action, **payload: (plan or {'attempts': [{'device': None, 'environment': {}, 'args': ['--device', 'none', '--gpu-layers', '0', '--fit', 'off', '--fit-ctx', '8192', '--fit-target', '1024']}]}) if action == 'plan' else {'evidence': {'offloadedLayers': 20, 'totalLayers': 33}, 'reason': 'gpu-memory', 'key': 'fixture-device-key'}), \
              patch.object(sys, 'argv', ['runner', 'start', '--model', self.alias, '--context', '8192']), redirect_stdout(io.StringIO()):
             probe.return_value.__enter__.return_value.connect_ex.return_value = 1
             module.main()
@@ -283,6 +285,97 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
         self.assertIsNone(foreign.poll())
         self.assertTrue(all(child.poll() is not None for child in self.children if child is not foreign))
         self.assertNotIn('llama', json.loads((self.root / 'runtime/owned-processes.json').read_text()))
+
+    def test_gpu_startup_failure_cleans_the_first_worker_then_prepares_cpu(self):
+        module = self.runner()
+        device = {'id': 'CUDA0', 'backend': 'cuda', 'name': 'Fixture GPU', 'freeMiB': 7000, 'totalMiB': 8192}
+        plan = {'devices': [device], 'attempts': [
+            {'device': device, 'environment': {}, 'args': ['--device', 'CUDA0', '--gpu-layers', 'auto', '--fit', 'on', '--fit-ctx', '8192', '--fit-target', '1024']},
+            {'device': None, 'environment': {}, 'args': ['--device', 'none', '--gpu-layers', '0', '--fit', 'off', '--fit-ctx', '8192', '--fit-target', '1024']} ]}
+        with patch.object(module, 'subprocess', wraps=subprocess):
+            self.cold_start(module, failure=[module.RuntimeFailure('Fixture GPU startup failed', 'exit'), 1], plan=plan)
+        state = json.loads((self.root / 'runtime/owned-processes.json').read_text())
+        self.assertIsNotNone(self.children[0].poll())
+        self.assertIsNone(self.children[-1].poll())
+        self.assertEqual(state['llama']['requested'], 'auto')
+        self.assertEqual(state['llama']['acceleration']['backend'], 'cpu')
+        self.assertEqual(state['llama']['acceleration']['offloadedLayers'], 0)
+        self.assertEqual(state['llama']['acceleration']['attempts'], 2)
+        self.assertEqual(state['llama']['acceleration']['fallbackReason'], 'gpu-memory')
+        self.assertEqual(state['accelerator']['blocked'], ['fixture-device-key'])
+
+    def test_changed_full_context_never_starts_a_cpu_retry(self):
+        module = self.runner()
+        device = {'id': 'CUDA0', 'backend': 'cuda'}
+        plan = {'attempts': [{'device': device, 'environment': {}, 'args': []}, {'device': None, 'environment': {}, 'args': []}]}
+        with patch.object(module, 'subprocess', wraps=subprocess):
+            with self.assertRaisesRegex(module.RuntimeFailure, 'changed context'):
+                self.cold_start(module, failure=module.RuntimeFailure('changed context', 'invariant'), plan=plan)
+        self.assertEqual(len(self.children), 1)
+        self.assertIsNotNone(self.children[0].poll())
+        self.assertNotIn('llama', json.loads((self.root / 'runtime/owned-processes.json').read_text()))
+
+    def test_public_inference_requires_full_context_and_valid_output(self):
+        module = self.runner()
+        with patch.object(module, 'request', return_value={'default_generation_settings': {'n_ctx': 4096}}) as request:
+            with self.assertRaises(module.RuntimeFailure) as failed:
+                module.verify_inference(8192)
+            self.assertEqual(failed.exception.kind, 'invariant')
+            self.assertEqual(request.call_count, 1)
+        for result in [{'content': 'test', 'tokens_predicted': True}, {'content': 'test', 'tokens_predicted': 0}, {'tokens_predicted': 1}]:
+            with patch.object(module, 'request', side_effect=[{'default_generation_settings': {'n_ctx': 8192}}, result]):
+                with self.assertRaises(module.RuntimeFailure) as failed:
+                    module.verify_inference(8192)
+                self.assertEqual(failed.exception.kind, 'inference')
+        with patch.object(module, 'request', side_effect=[{'default_generation_settings': {'n_ctx': 8192}}, {'content': 'test', 'tokens_predicted': 1}]) as request:
+            self.assertGreaterEqual(module.verify_inference(8192), 0)
+            body = request.call_args.args[1]
+            self.assertEqual(body['n_predict'], 1)
+            self.assertFalse(body['cache_prompt'])
+
+    def test_python_bridge_inventories_devices_using_the_shared_javascript_policy(self):
+        root = Path(__file__).resolve().parents[1]
+        probe = self.root / 'probe.py'
+        probe.write_text("print('CUDA0: GPU (8192 MiB, 7000 MiB free)\\nVulkan0: GPU (8192 MiB, 7000 MiB free)')")
+        plan = runtime_policy(root, 'plan', options={
+            'command': {'executable': sys.executable, 'prefix': [str(probe)]},
+            'library': str(self.binary.parent), 'platform': 'linux',
+            'context': 24576, 'environment': {'GGML_VK_VISIBLE_DEVICES': '-1'}})
+        self.assertEqual([item['device']['backend'] if item['device'] else 'cpu' for item in plan['attempts']], ['cuda', 'vulkan', 'cpu'])
+        for item in plan['attempts']:
+            self.assertNotIn('GGML_VK_VISIBLE_DEVICES', item['environment'])
+            self.assertEqual(item['args'][item['args'].index('--fit-ctx') + 1], '24576')
+        result = runtime_policy(root, 'result', log='cudaErrorMemoryAllocation: failed to load model', failure='exit', device=plan['attempts'][0]['device'])
+        self.assertEqual(result['reason'], 'gpu-memory')
+        retry = runtime_policy(root, 'plan', options={
+            'command': {'executable': 'unused'}, 'devices': plan['devices'],
+            'library': str(self.binary.parent), 'platform': 'linux',
+            'context': 24576, 'environment': {}, 'blocked': [result['key']]})
+        self.assertEqual([item['device']['backend'] if item['device'] else 'cpu' for item in retry['attempts']], ['vulkan', 'cpu'])
+
+    def test_cancelling_the_python_bridge_reaps_its_hung_device_probe(self):
+        root = Path(__file__).resolve().parents[1]
+        probe = self.root / 'hung_probe.py'
+        record = self.root / 'probe_pid'
+        probe.write_text("import os,signal,time\nfrom pathlib import Path\nPath(os.environ['FIXTURE_PID']).write_text(str(os.getpid()))\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\ntime.sleep(60)\n")
+        source = """import signal,sys
+from pathlib import Path
+from accelerator_bridge import runtime_policy
+def cancel(*_):raise KeyboardInterrupt
+signal.signal(signal.SIGTERM,cancel)
+runtime_policy(Path(sys.argv[1]), 'plan', options={'command': {'executable': sys.executable, 'prefix': [sys.argv[2]]}, 'library': sys.argv[3], 'platform': 'linux', 'context': 24576, 'environment': {'FIXTURE_PID': sys.argv[4]}})
+"""
+        child = subprocess.Popen([sys.executable, '-c', source, str(root), str(probe), str(self.binary.parent), str(record)],
+                                 cwd=root / 'scripts', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.children.append(child)
+        deadline = time.monotonic() + 5
+        while not record.exists() and child.poll() is None and time.monotonic() < deadline:
+            time.sleep(.01)
+        self.assertTrue(record.exists(), 'Owned device probe did not start')
+        pid = int(record.read_text())
+        child.terminate()
+        child.wait(timeout=5)
+        self.assertIsNone(ownership.identity(pid), 'Cancelled probe must not remain running')
 
     def test_registry_writes_are_atomic_for_concurrent_readers(self):
         path = self.root / 'runtime/owned-processes.json'

@@ -16,13 +16,15 @@ const root=fileURLToPath(new URL('../',import.meta.url)),realStreaming=process.e
 const streamingFixture=join(root,'.runtime/streaming-speech/test.wav');
 if(realStreaming&&!existsSync(streamingFixture))throw Error('Streaming integration needs the public test WAV at .runtime/streaming-speech/test.wav. See docs/STREAMING_SPEECH.md.');
 const wav=Buffer.alloc(44+32000);wav.write('RIFF',0);wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(16000,24);wav.writeUInt32LE(32000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(32000,40);
+// Allow a realistic display window for each word on the two-core CI runner.
+const captionSeconds=2,captionWav=Buffer.alloc(44+32000*captionSeconds);wav.copy(captionWav,0,0,44);captionWav.writeUInt32LE(captionWav.length-8,4);captionWav.writeUInt32LE(captionWav.length-44,40);
 const inferenceRequests=[];
 const stub=createServer(async(req,res)=>{
  const parts=[];for await(const part of req)parts.push(part);const body=JSON.parse(Buffer.concat(parts).toString()||'{}');
  if(req.url==='/v1/models'){res.end(JSON.stringify({data:[{id:'Cydonia-24B-v4.3'}]}));return;}
  if(req.url==='/v1/audio/voices'){res.end(JSON.stringify({voices:['af_heart']}));return;}
  if(req.url==='/lab/render'){res.setHeader('Content-Type','audio/wav');res.end(wav);return;}
- if(req.url==='/dev/captioned_speech'){res.setHeader('Content-Type','application/x-ndjson');res.end(JSON.stringify({audio:wav.toString('base64'),audio_format:'wav',text:body.input,spoken_seconds:1,timestamps:body.input.split(' ').map((word,i,all)=>({word,start_time:i/all.length,end_time:(i+1)/all.length}))})+'\n');return;}
+ if(req.url==='/dev/captioned_speech'){res.setHeader('Content-Type','application/x-ndjson');res.end(JSON.stringify({audio:captionWav.toString('base64'),audio_format:'wav',text:body.input,spoken_seconds:captionSeconds,timestamps:body.input.split(' ').map((word,i,all)=>({word,start_time:captionSeconds*i/all.length,end_time:captionSeconds*(i+1)/all.length}))})+'\n');return;}
  if(req.url==='/apply-template'){res.end(JSON.stringify({prompt:JSON.stringify(body.messages)}));return;}
  if(req.url==='/tokenize'){res.end(JSON.stringify({tokens:Array(Math.ceil(body.content.length/4)).fill(1)}));return;}
  if(!body.stream){res.end(JSON.stringify({choices:[{message:{content:'{"action":"adapt"}'}}]}));return;}
@@ -129,11 +131,19 @@ try{
  await page.waitForFunction(()=>document.getElementById('word').textContent===''&&document.getElementById('mic').dataset.activity==='idle');
  await page.evaluate(()=>{
   document.getElementById('subtitles').checked=true;document.getElementById('subtitles').dispatchEvent(new Event('input',{bubbles:true}));
-  window.fixtureDisplayTrace=[];window.fixtureDisplayTimer=setInterval(()=>{const word=document.getElementById('word').textContent,reply=document.getElementById('composer-reply').textContent;if(word)window.fixtureDisplayTrace.push({word,reply});},16);
+  window.fixtureDisplayTrace=[];
+  // Observe actual DOM presentation after each frame, rather than sampling it
+  // with an independent timer which can miss a short word under CPU pressure.
+  window.fixtureDisplayObserver=new MutationObserver(()=>{const word=document.getElementById('word').textContent,reply=document.getElementById('composer-reply').textContent;if(word&&word!==window.fixtureDisplayTrace.at(-1)?.word)window.fixtureDisplayTrace.push({word,reply});});
+  window.fixtureDisplayObserver.observe(document.getElementById('word'),{childList:true,characterData:true,subtree:true});
  });
  await page.evaluate(()=>window.bambi.ask('Use a single sentence about my color.'));
- await page.waitForFunction(()=>window.fixtureDisplayTrace.some(item=>item.word==='green.'));
- const revealTrace=await page.evaluate(()=>{clearInterval(window.fixtureDisplayTimer);return window.fixtureDisplayTrace;});
+ try{await page.waitForFunction(()=>window.fixtureDisplayTrace.some(item=>item.word==='green.'));}catch(error){
+  const display=await page.evaluate(()=>({trace:window.fixtureDisplayTrace,requests:window.fixtureRequests.map(({requestId})=>requestId),begins:window.fixtureBegins.map(({id})=>id),dones:window.fixtureDones.map(({id})=>id),activity:document.getElementById('mic').dataset.activity,word:document.getElementById('word').textContent,reply:document.getElementById('composer-reply').textContent,audioState:window.bambi.audio?.context.state,playbackTime:window.bambi.playbackClock.time,clockRunning:window.bambi.playbackClock.running,visibility:document.visibilityState}));
+  writeFileSync('runtime/voice-display-diagnostics.json',JSON.stringify(display,null,2));console.error('Fixture voice display diagnostics: '+JSON.stringify(display));throw error;
+ }
+ const revealTrace=await page.evaluate(()=>{window.fixtureDisplayObserver.disconnect();return window.fixtureDisplayTrace;});
+ assert.deepEqual(revealTrace.map(item=>item.word),['The','color','is','green.'],'Every spoken word reaches the display in order');
  assert.ok(revealTrace.some(item=>item.word==='The'&&item.reply==='The'),'Reply begins with the caption first word, without showing the queued sentence: '+JSON.stringify(revealTrace));
  assert.ok(revealTrace.every(item=>item.reply.trim().split(/\s+/).at(-1)===item.word),'The latest reply word matches the caption on the same display frame');
  // Hover controls follow pointer activity, independently of AI voice playback.

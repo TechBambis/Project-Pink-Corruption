@@ -66,8 +66,13 @@ try{
  savedAccess=await(await fetch(base+'/api/access')).json();assert.equal(savedAccess.place,null);assert.equal(savedAccess.choices.contextToCloud,false);assert.equal(savedAccess.choices.cloudAI,false);assert.equal((await fetch(base+'/api/access/location',{method:'POST'})).status,403);assert.equal(readFileSync(locationCalls,'utf8'),'1');
  assert.equal((await fetch(base+'/api/models/setup/install',{method:'POST'})).status,403);
  let deviceRequests=0;await page.route('**/api/devices/scan',route=>{deviceRequests++;return route.fulfill({json:{devices:[]}});});
+ await page.route('**/api/devices/connect',route=>{deviceRequests++;return route.fulfill({json:{ok:true}});});
  await page.locator('[data-nav=devices]').click();await page.locator('#device-scan').click();await privacy.waitFor({state:'visible'});
  assert.equal(deviceRequests,0);assert(!(await privacy.locator('[name=devices]').isChecked()));assert.equal(await privacy.locator('[data-required]:checked:disabled').count(),3);
+ await privacy.getByRole('button',{name:'Cancel',exact:true}).click();await privacy.waitFor({state:'hidden'});
+ await page.locator('#device-connect').click();await privacy.waitFor({state:'visible'});assert.equal(deviceRequests,0);
+ await privacy.getByRole('button',{name:'Cancel',exact:true}).click();await privacy.waitFor({state:'hidden'});
+ await page.locator('#device-enabled').check();await privacy.waitFor({state:'visible'});assert(!(await page.locator('#device-enabled').isChecked()));assert.equal(deviceRequests,0);
  await privacy.getByRole('button',{name:'Cancel',exact:true}).click();await privacy.waitFor({state:'hidden'});
  await page.locator('#device-scan').click();await privacy.waitFor({state:'visible'});await privacy.getByRole('button',{name:'Keep optional access off',exact:true}).click();await privacy.waitFor({state:'hidden'});
  assert(Object.values((await(await fetch(base+'/api/access')).json()).choices).every(value=>value===false));assert.equal(deviceRequests,0);

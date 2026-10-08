@@ -1,5 +1,5 @@
-# Isolated authorized build branch only; the default-branch CLA workflow is unchanged.
-name: Manual Windows alpha build entry point
+# Private build branch dispatch wrapper; the default-branch CLA workflow is unchanged.
+name: Manual desktop release
 on:
   workflow_dispatch:
     inputs:

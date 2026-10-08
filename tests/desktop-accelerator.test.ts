@@ -21,12 +21,13 @@ const note=value=>appendFileSync(process.env.FIXTURE_EVENTS,JSON.stringify({...v
 note({args});
 if(args.includes('--list-devices')){
  if(scenario==='slow-probe'){process.on('SIGTERM',()=>{});setInterval(()=>{},1000);}
- else{console.log('Available devices:\n  Vulkan0: Display GPU (4096 MiB, 256 MiB free)\n  Vulkan1: Compute GPU (8192 MiB, 7168 MiB free)');process.exit(0);}
+ else{console.log(process.env.FIXTURE_INVENTORY||'Available devices:\n  Vulkan0: Display GPU (4096 MiB, 256 MiB free)\n  Vulkan1: Compute GPU (8192 MiB, 7168 MiB free)');process.exit(0);}
 }else if(args[0]==='kokoro'){
  const server=createServer((_req,res)=>res.end(JSON.stringify({app:'bambi-local',service:'kokoro',protocol:1,pid:process.pid,instance:process.env.BAMBI_INSTANCE_TOKEN,modelSha256:process.env.FIXTURE_SPEECH_HASH})));
  server.listen(Number(process.env.BAMBI_TTS_PORT),'127.0.0.1');
 }else{
  const cpu=option('--gpu-layers')==='0';
+ if(scenario==='cuda-oom'&&option('--device').startsWith('CUDA')){console.error('cudaErrorMemoryAllocation: failed to load model');process.exit(1);}
  if(scenario==='bad-model'){console.error('invalid magic: failed to load model');process.exit(1);}
  if(scenario==='oom'&&!cpu){console.error('VK_ERROR_OUT_OF_DEVICE_MEMORY: failed to load model');process.exit(1);}
  if(scenario==='slow-load'){setInterval(()=>{},1000);}
@@ -44,11 +45,11 @@ if(args.includes('--list-devices')){
 }
 `;
 async function freePort(){const server=createServer();await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const port=(server.address() as {port:number}).port;await new Promise<void>(r=>server.close(()=>r()));return port;}
-async function fixture(t:TestContext,scenario='',mode='auto'){
+async function fixture(t:TestContext,scenario='',mode='auto',platform:NodeJS.Platform='linux',inventory?:string){
  const root=await mkdtemp(join(tmpdir(),'Bambi accelerator ü ')),script=join(root,'child.mjs'),events=join(root,'events.jsonl');
  await mkdir(join(root,'logs'));await writeFile(script,childSource);await writeFile(events,'');
  const llmPort=await freePort(),speechPort=await freePort();
- const services=new DesktopServices({environment:{...process.env,FIXTURE_SCENARIO:scenario,FIXTURE_EVENTS:events,FIXTURE_SPEECH_HASH:alphaModels.assets[1].sha256,BAMBI_DESKTOP_ACCELERATOR:mode,BAMBI_MODELS_ROOT:root,BAMBI_LLM_PORT:String(llmPort),BAMBI_LLM_URL:'http://127.0.0.1:'+llmPort,BAMBI_LLM_TOKEN:'fixture-llama',BAMBI_TTS_PORT:String(speechPort),BAMBI_TTS_URL:'http://127.0.0.1:'+speechPort,BAMBI_TTS_TOKEN:'fixture-speech',BAMBI_INSTANCE_TOKEN:'fixture-instance'},llama:{executable:process.execPath,prefix:[script]},speech:{executable:process.execPath,prefix:[script]},platform:'linux',libraryDirectory:root,logsDirectory:join(root,'logs'),startupTimeoutMs:8000,probeTimeoutMs:scenario==='slow-probe'?1000:3000});
+ const services=new DesktopServices({environment:{...process.env,FIXTURE_SCENARIO:scenario,FIXTURE_INVENTORY:inventory,FIXTURE_EVENTS:events,FIXTURE_SPEECH_HASH:alphaModels.assets[1].sha256,BAMBI_DESKTOP_ACCELERATOR:mode,BAMBI_MODELS_ROOT:root,BAMBI_LLM_PORT:String(llmPort),BAMBI_LLM_URL:'http://127.0.0.1:'+llmPort,BAMBI_LLM_TOKEN:'fixture-llama',BAMBI_TTS_PORT:String(speechPort),BAMBI_TTS_URL:'http://127.0.0.1:'+speechPort,BAMBI_TTS_TOKEN:'fixture-speech',BAMBI_INSTANCE_TOKEN:'fixture-instance'},llama:{executable:process.execPath,prefix:[script]},speech:{executable:process.execPath,prefix:[script]},platform,libraryDirectory:root,logsDirectory:join(root,'logs'),startupTimeoutMs:8000,probeTimeoutMs:scenario==='slow-probe'?1000:3000});
  t.after(async()=>{await services.stop();await rm(root,{recursive:true,force:true});});
  return {services,llmPort,events:async()=> (await readFile(events,'utf8')).trim().split('\n').filter(Boolean).map(row=>JSON.parse(row))};
 }
@@ -147,4 +148,32 @@ test('stop during a GPU probe cancels owned work and serializes a later preparat
  const stoppedProbe=(await events()).find(row=>row.args?.includes('--list-devices'));assert.throws(()=>process.kill(stoppedProbe.pid,0));
  assert.equal(services.modelReady,true);assert.equal(services.speechReady,true);
  assert.equal((await events()).filter(row=>row.args?.includes('--gpu-layers')).length,1);
+});
+
+
+test('a failing CUDA device falls back to Vulkan and stays quarantined without blocking healthy acceleration',async t=>{
+ const {services,events}=await fixture(t,'cuda-oom','auto','win32','CUDA0: NVIDIA (8192 MiB, 7000 MiB free)\nVulkan0: NVIDIA (8192 MiB, 7000 MiB free)');
+ await services.prepare(alphaModels.alias,24576);
+ assert.equal(services.capabilities.backend,'vulkan');assert.equal(services.capabilities.attempts,2);
+ assert.deepEqual(services.capabilities.failures,[{backend:'cuda',device:'CUDA0',reason:'gpu-memory'}]);
+ assert.equal(typeof services.capabilities.inferenceMs,'number');
+ const launches=(await events()).filter(row=>row.args?.includes('--gpu-layers'));
+ assert.deepEqual(launches.map(row=>row.args[row.args.indexOf('--device')+1]),['CUDA0','Vulkan0']);
+ for(const launch of launches){assert.equal(launch.args[launch.args.indexOf('--ctx-size')+1],'24576');assert.equal(launch.args[launch.args.indexOf('--fit-ctx')+1],'24576');}
+ assert.throws(()=>process.kill(launches[0].pid,0));
+ await services.stop();await services.prepare(alphaModels.alias,24576);
+ assert.equal(services.capabilities.backend,'vulkan');assert.equal(services.capabilities.attempts,1);
+ assert.equal((await events()).filter(row=>row.args?.includes('--list-devices')).length,1);
+});
+
+test('Metal and integrated devices with unknown memory are tested instead of rejected',async t=>{
+ for(const [platform,inventory,backend,id] of [
+  ['darwin','Metal: Apple GPU (0 MiB, 0 MiB free)','metal','Metal'],
+  ['linux','Vulkan0: Integrated GPU (0 MiB, 0 MiB free)','vulkan','Vulkan0'],
+ ] as const){
+  const {services}=await fixture(t,'','auto',platform,inventory);
+  await services.prepare(alphaModels.alias,24576);
+  assert.equal(services.capabilities.backend,backend);assert.equal(services.capabilities.device,id);
+  assert.equal(services.capabilities.devices?.[0].freeMiB,null);assert.equal(services.capabilities.inferenceVerified,true);
+ }
 });

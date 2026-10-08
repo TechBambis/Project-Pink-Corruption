@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 export const desktopMemoryReserveMiB=1024;
+/** Leave CPU capacity for speech, capture and the renderer on small PCs. */
+export function inferenceThreads(available){
+ if(!Number.isSafeInteger(available)||available<1)throw Error('Invalid available CPU count.');
+ return Math.max(1,Math.min(6,available-2));
+}
 export function acceleratorMode(value){
  if(value===undefined||value==='auto')return 'auto';
  if(value==='cpu')return 'cpu';

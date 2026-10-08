@@ -38,6 +38,7 @@ jobs:
           name: browser-diagnostics-node-${{ matrix.node }}
           path: |
             runtime/high-impact-browser-check.json
+            runtime/voice-display-diagnostics.json
             runtime/session-studio-*.png
           if-no-files-found: ignore
   secrets:

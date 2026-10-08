@@ -98,7 +98,7 @@ export class DesktopServices {
     const plan=await acceleratorPlan({command:this.llamaCommand,library:this.library,platform:this.platform,environment:this.env,mode:requested,context,blocked:[...this.blockedDevices.keys()],devices:this.inventory,probeTimeoutMs:this.options.probeTimeoutMs,signal});
     if(requested==='auto')this.inventory=plan.devices;
     this.report.fallbackReason=plan.fallbackReason;
-    if(plan.attempts.length===1&&this.blockedDevices.size)this.report.fallbackReason=[...this.blockedDevices.values()].at(-1);
+    if(requested==='auto'&&plan.attempts.length===1&&this.blockedDevices.size)this.report.fallbackReason=[...this.blockedDevices.values()].at(-1);
     this.report.failures=[];
     for(const attempt of plan.attempts){
      signal.throwIfAborted();const device=attempt.device,cpu=device===null;
@@ -108,7 +108,7 @@ export class DesktopServices {
      const args=[
       '-m',resolve(this.env.BAMBI_MODELS_ROOT!,modelAsset(model).path),'--alias',model,
       '--host','127.0.0.1','--port',this.env.BAMBI_LLM_PORT!,'--api-key',this.env.BAMBI_LLM_TOKEN!,
-      '--ctx-size',String(context),'--parallel','1','--threads','6','--threads-batch','6','--batch-size','512','--ubatch-size','128',
+      '--ctx-size',String(context),'--parallel','1','--batch-size','512','--ubatch-size','128',
       '--poll','0','--poll-batch','0','--ctx-checkpoints','16','--checkpoint-min-step','512','--cache-ram','2048',
       ...attempt.args,
       '--flash-attn','on','--jinja','--reasoning','off','--no-webui','--n-predict','8192','--cache-type-k','f16','--cache-type-v','f16',

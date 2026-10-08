@@ -8,11 +8,13 @@ import { BAMBISLEEP_SAMPLING } from '../../config/sampling';
 import {desktopAlpha} from '../runtime/paths';
 import {desktopSetup,alphaModels} from '../runtime/desktop-setup';
 import {desktopServices} from '../runtime/desktop-services';
+import {randomUUID} from 'node:crypto';
+const runtimeSession=randomUUID();
 const run = promisify(execFile);
 async function command(args: string[], timeout: number, signal?: AbortSignal) {
   signal?.throwIfAborted();
   try {
-    await run('/usr/bin/python3', ['scripts/llama-runtime.py', ...args], { timeout, signal });
+    await run('/usr/bin/python3', ['scripts/llama-runtime.py', ...args], { timeout, signal, env:{...process.env,BAMBI_RUNTIME_NODE:process.execPath,BAMBI_RUNTIME_SESSION:runtimeSession} });
   } catch (error) {
     if (signal?.aborted) throw signal.reason;
     const failure=error as {stderr?:string;killed?:boolean};
@@ -26,7 +28,8 @@ async function command(args: string[], timeout: number, signal?: AbortSignal) {
 }
 export async function prepareNativeModel(model: string, context: number = BAMBISLEEP_SAMPLING.context, signal?: AbortSignal) {
   if(desktopAlpha){if(model!==desktopSetup!.model||context!==desktopSetup!.context)throw Error('Select and verify this model in Local AI setup first.');await desktopSetup!.prepare(signal);return;}
-  await command(['start', '--model', model, '--context', String(context)],120000,signal);
+  // Allow three bounded GPU attempts and CPU preparation, including cleanup.
+  await command(['start', '--model', model, '--context', String(context)],660000,signal);
 }
 export async function stopNativeModel(signal?: AbortSignal) {
   if(desktopAlpha){await desktopServices.stop();return;}

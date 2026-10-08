@@ -31,6 +31,9 @@ def server_fingerprint():
  h=hashlib.sha256()
  for directory in ['apps/server','packages','config']:
   for path in sorted((root/directory).rglob('*.ts')):h.update(path.read_bytes())
+ for path in sorted((root/'packages/runtime').glob('*.mjs')):h.update(path.read_bytes())
+ for name in ['accelerator-plan.mjs','accelerator_bridge.py','llama-runtime.py','runtime_process.py']:
+  h.update((root/'scripts'/name).read_bytes())
  for path in sorted((root/'presets/audio').glob('*.json')):h.update(path.read_bytes())
  h.update((root/'packages/content/session-phases-neutral.json').read_bytes())
  h.update((root/'packages/content/script-direction.json').read_bytes())

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 
 test('native ownership, recovery and process registry use isolated OS processes', {skip:process.platform!=='linux'},()=>{
- const result=spawnSync('/usr/bin/python3',['tests/native_runtime_test.py'],{encoding:'utf8',timeout:25000});
+ const result=spawnSync('/usr/bin/python3',['tests/native_runtime_test.py'],{encoding:'utf8',timeout:25000,env:{...process.env,BAMBI_RUNTIME_NODE:process.execPath}});
  assert.equal(result.status,0,result.stdout+'\n'+result.stderr);
 });
 

@@ -3,7 +3,8 @@
 import {existsSync,realpathSync} from 'node:fs';
 import {resolve,dirname} from 'node:path';
 import {execFile} from 'node:child_process';
-import {acceleratorMode,acceleratorDevices,acceleratorCandidates,acceleratorArguments} from './accelerator-policy.mjs';
+import {availableParallelism} from 'node:os';
+import {acceleratorMode,acceleratorDevices,acceleratorCandidates,acceleratorArguments,inferenceThreads} from './accelerator-policy.mjs';
 
 /** Only known in-package directories; never use a caller's loader overrides. */
 export function backendLibraries(library,platform){
@@ -42,17 +43,18 @@ function enumerate(command,env,timeout,signal){
   signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();
  });
 }
-export async function acceleratorPlan({command,library,platform,environment,mode,context,blocked=[],devices:cachedDevices,probeTimeoutMs=8000,signal=new AbortController().signal}){
+export async function acceleratorPlan({command,library,platform,environment,mode,context,blocked=[],devices:cachedDevices,cpuThreads=availableParallelism(),probeTimeoutMs=8000,signal=new AbortController().signal}){
  const requested=acceleratorMode(mode),devices=[...(cachedDevices??[])],probeFailures=[];
  const cpuEnvironment=acceleratorEnvironment(environment,{library,platform});
  if(requested==='auto'&&!cachedDevices){
   const deadline=Date.now()+probeTimeoutMs;
   // Probe optional libraries individually: a broken vendor plugin cannot hide
   // another working backend. The entire inventory has one bounded deadline.
-  for(const backendPath of [...backendLibraries(library,platform),undefined]){
+  const paths=[...backendLibraries(library,platform),undefined];
+  for(const backendPath of paths){
    signal.throwIfAborted();const remaining=deadline-Date.now();if(remaining<=0){probeFailures.push('deadline');break;}
    try{
-    const output=await enumerate(command,acceleratorEnvironment(environment,{library,platform,backendPath}),remaining,signal);
+    const output=await enumerate(command,acceleratorEnvironment(environment,{library,platform,backendPath}),Math.min(remaining,Math.max(500,Math.floor(probeTimeoutMs/paths.length))),signal);
     for(const device of acceleratorDevices(output)){
      // Root/compiled-in devices may also appear in a plugin probe; re-enumerate
      // those without that plugin before using them as an independent fallback.
@@ -65,7 +67,9 @@ export async function acceleratorPlan({command,library,platform,environment,mode
  }
  signal.throwIfAborted();
  const candidates=requested==='cpu'?[]:acceleratorCandidates(devices,platform,blocked);
+ const threads=String(inferenceThreads(cpuThreads)),threadArguments=['--threads',threads,'--threads-batch',threads];
  const attempts=[...candidates.map(device=>({device,args:acceleratorArguments(device,context),environment:acceleratorEnvironment(environment,{library,platform,backendPath:device.backendPath})})),
   {device:null,args:acceleratorArguments(null,context),environment:cpuEnvironment}];
+ for(const attempt of attempts)attempt.args.push(...threadArguments);
  return {requested,devices,attempts,probeFailures,fallbackReason:requested==='cpu'||candidates.length?undefined:devices.length?'no-gpu-headroom':probeFailures.length?'gpu-probe-unavailable':'no-supported-gpu'};
 }

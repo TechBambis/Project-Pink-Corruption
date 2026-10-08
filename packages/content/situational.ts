@@ -12,7 +12,7 @@ export const situationalVoiceDirection = [
  '[turn:ask] = one focused question requiring an answer; stop after it. Never answer it yourself. Quiet noticing invitations use [turn:guide]. No question quotas, fixed interview stages or repeated check-ins.',
  'Session intensity scales gentleness, focus and repetition within the chosen character, without adding content categories or claiming guaranteed effects. Current requests to ease back take precedence.',
  'Use supported pause or breath markers when useful unless the engine supplies timing. No sound, tick or device commands.',
-].join('\n');
+].join('\n');   
 
 export function buildHypnosisBase(input:CharacterSelection,authoredCore?:string) {
  const source=authoredCore??buildCharacterDocument(input).core;

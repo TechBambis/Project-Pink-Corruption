@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Separate commercial permissions: see LICENSING.md.
 
-"""Owned llama.cpp Vulkan runner; reuses verified local GGUFs without copying weights."""
+"""Owned llama.cpp runner with shared acceleration policy; reuses verified local GGUFs without copying weights."""
 import argparse
 import fcntl
 import json
@@ -16,17 +16,18 @@ import socket
 import subprocess
 import time
 import urllib.request
+from accelerator_bridge import runtime_policy
 from runtime_process import identity, inspect_llama, recover_llama, registry, save_state, stop_llama, prompt_cache_mib, model_contexts, context_cache_type, RUNTIME_PROFILE
 
 ROOT = Path(__file__).resolve().parent.parent
 os.chdir(ROOT)
 RUNTIME = ROOT / 'runtime'
 RUNTIME.mkdir(exist_ok=True)
-def request(path, data=None):
+def request(path, data=None, timeout=2):
     try:
         payload = json.dumps(data).encode() if data is not None else None
         req = urllib.request.Request(path, data=payload, headers={'Content-Type': 'application/json'})
-        with urllib.request.urlopen(req, timeout=2) as response:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
             return json.load(response)
     except Exception:
         return None
@@ -39,6 +40,32 @@ def ready(entry):
     return any(item.get('id') == entry['model'] for item in models.get('data', [])) and props.get('default_generation_settings', {}).get('n_ctx') == entry['context']
 
 
+class RuntimeFailure(RuntimeError):
+    def __init__(self, message, kind):
+        super().__init__(message)
+        self.kind = kind
+
+
+def verify_inference(context):
+    props = request('http://127.0.0.1:8080/props')
+    if not props or props.get('default_generation_settings', {}).get('n_ctx') != context:
+        raise RuntimeFailure('Local AI changed the selected full context. Preparation stopped.', 'invariant')
+    started = time.perf_counter()
+    result = request('http://127.0.0.1:8080/completion', {
+        'prompt': 'A public runtime test.', 'n_predict': 1, 'stream': False,
+        'temperature': 0, 'cache_prompt': False}, timeout=30)
+    if not result or not isinstance(result.get('content'), str) or type(result.get('tokens_predicted')) is not int or result['tokens_predicted'] < 1:
+        raise RuntimeFailure('Local AI failed its inference check. See runtime/llama.log.', 'inference')
+    return round((time.perf_counter() - started) * 1000)
+
+
+def current_log(start):
+    with (RUNTIME / 'llama.log').open('rb') as stream:
+        stream.seek(0, 2)
+        stream.seek(max(start, stream.tell() - 65536))
+        return stream.read().decode('utf-8', errors='replace')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('command', choices=['start', 'stop'])
@@ -46,6 +73,9 @@ def main():
     parser.add_argument('--context', type=int, default=16384)
     parser.add_argument('--cpu-moe', type=int, default=30)
     args = parser.parse_args()
+    mode = os.environ.get('BAMBI_ACCELERATOR', 'auto')
+    if args.command == 'start' and mode not in ['auto', 'cpu']:
+        raise RuntimeError('Choose Automatic or CPU acceleration.')
 
     pins = registry(ROOT)
     model = None
@@ -82,7 +112,7 @@ def main():
         elif verified:
             entry = {**entry, **verified}
         alive = bool(recovered or verified)
-        if alive and args.command == 'start' and entry.get('runtimeProfile') == RUNTIME_PROFILE and entry.get('model') == args.model and entry.get('context') == args.context and ('35b' not in args.model or entry.get('cpuMoeLayers') == args.cpu_moe) and ready(entry):
+        if alive and args.command == 'start' and entry.get('runtimeProfile') == RUNTIME_PROFILE and entry.get('model') == args.model and entry.get('context') == args.context and ('35b' not in args.model or entry.get('cpuMoeLayers') == args.cpu_moe) and entry.get('requested', 'auto') == mode and ready(entry):
             print('Owned llama.cpp ready', flush=True)
             raise SystemExit(0)
         if args.command == 'start' and '35b' in args.model:
@@ -92,6 +122,7 @@ def main():
                 raise RuntimeError('35B requires at least 4.5 GiB available RAM and a user memory scope')
         if alive:
             stop_llama(ROOT, entry, pins, RUNTIME_PROFILE)
+        previous_acceleration = entry.get('acceleration', {}) if isinstance(entry, dict) else {}
         state.pop('llama', None)
         save_state(statepath, state)
         if args.command == 'stop':
@@ -106,89 +137,137 @@ def main():
             request('http://127.0.0.1:11434/api/generate', {'model': resident['name'], 'keep_alive': 0})
         binary = ROOT / '.runtime/lib/ollama/llama-server'
         library = binary.parent
-        env = {**os.environ, 'GGML_BACKEND_PATH': str(library / 'vulkan/libggml-vulkan.so'),
-               'LD_LIBRARY_PATH': str(library) + ':' + str(library / 'vulkan'),
-               'GGML_VK_VISIBLE_DEVICES': '0', 'VK_LOADER_LAYERS_DISABLE': '~implicit~',
-               'DISABLE_LSFG': '1', 'DISABLE_LSFGVK': '1'}
+        session = os.environ.get('BAMBI_RUNTIME_SESSION', f'standalone:{os.getppid()}:{identity(os.getppid())}')
+        accelerator = state.get('accelerator', {})
+        same_session = accelerator.get('session') == session
+        if not same_session:
+            accelerator = {'session': session, 'blocked': []}
+        previous = previous_acceleration
+        if not alive and previous.get('inferenceVerified') and previous.get('deviceKey') and same_session:
+            if previous['deviceKey'] not in accelerator['blocked']:
+                accelerator['blocked'].append(previous['deviceKey'])
+            accelerator['lastFailure'] = 'gpu-runtime-stopped'
+        state['accelerator'] = accelerator
+        save_state(statepath, state)
+        plan = runtime_policy(ROOT, 'plan', options={
+            'command': {'executable': str(binary)}, 'library': str(library),
+            'platform': 'linux', 'environment': dict(os.environ), 'mode': mode,
+            'context': args.context, 'blocked': accelerator['blocked'],
+            **({'devices': accelerator['devices']} if 'devices' in accelerator else {})})
+        if mode == 'auto':
+            accelerator['devices'] = plan.get('devices', [])
+        state['accelerator'] = accelerator
+        save_state(statepath, state)
+        fallback_reason = plan.get('fallbackReason')
+        if mode == 'auto' and len(plan['attempts']) == 1 and accelerator['blocked']:
+            fallback_reason = accelerator.get('lastFailure', fallback_reason)
+        failures = []
         sampling = model.get('runtime', {}).get('sampling', {})
         command = [str(binary), '-m', str(weight), '--alias', args.model,
             '--host', '127.0.0.1', '--port', '8080', '--ctx-size', str(args.context),
-            '--parallel', '1', '--threads', '6', '--threads-batch', '6', '--batch-size', '512', '--ubatch-size', str(model.get('runtime', {}).get('ubatch_size', 128)),
+            '--parallel', '1', '--batch-size', '512', '--ubatch-size', str(model.get('runtime', {}).get('ubatch_size', 128)),
             '--poll', '0', '--poll-batch', '0',
             '--ctx-checkpoints', '16', '--checkpoint-min-step', '512', '--cache-ram', str(prompt_cache_mib(args.model)),
-            '--gpu-layers', 'all', '--flash-attn', 'on', '--jinja', '--reasoning', 'off',
+            '--flash-attn', 'on', '--jinja', '--reasoning', 'off',
             '--no-webui',
             '--temp', str(sampling.get('temperature', 1)), '--top-p', str(sampling.get('top_p', .95)), '--top-k', str(sampling.get('top_k', 50)), '--min-p', str(sampling.get('min_p', .05)),
             '--repeat-penalty', '1', '--presence-penalty', '0', '--frequency-penalty', '0',
             '--dry-multiplier', str(sampling.get('dry_multiplier', .8)), '--dry-base', '1.75', '--dry-allowed-length', '2',
             '--xtc-probability', str(sampling.get('xtc_probability', .4)), '--xtc-threshold', '.1', '--n-predict', '8192']
-        unit = None
         if '35b' in args.model:
             command += ['--n-cpu-moe', str(args.cpu_moe)]
-            unit = 'bambi-local-llama-' + str(time.time_ns())
-            command = ['systemd-run', '--user', '--quiet', '--scope', '--unit', unit,
-                '--property=MemoryMax=' + str(memory_limit), '--property=MemorySwapMax=0', *command]
         cache = context_cache_type(model, args.context)
         command += ['--cache-type-k', cache, '--cache-type-v', cache]
-        log = (RUNTIME / 'llama.log').open('ab', buffering=0)
-        load_start = time.perf_counter()
-        process = None
-        prepared = False
-        try:
-            process = subprocess.Popen(command, cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
-                stdout=log, stderr=log, start_new_session=True)
-            state['llama'] = {'root': str(ROOT), 'pid': process.pid, 'starttime': identity(process.pid),
-                'command': command, 'model': args.model, 'context': args.context,
-                'memoryLimitBytes': memory_limit, 'scope': unit, 'cpuMoeLayers': args.cpu_moe if unit else 0,
-                'cacheType': cache, 'runtimeProfile': RUNTIME_PROFILE}
-            save_state(statepath, state)
-            until = time.monotonic() + 110
-            while time.monotonic() < until and process.poll() is None:
-                if ready(state['llama']):
-                    actual = recover_llama(ROOT, pins, RUNTIME_PROFILE)
-                    if actual:
-                        state['llama'].update(actual)
-                    state['llama']['loadSeconds'] = time.perf_counter() - load_start
-                    save_state(statepath, state)
-                    prepared = True
-                    print(json.dumps({'ready': True, **state['llama']}), flush=True)
-                    return
-                time.sleep(.3)
-            raise RuntimeError('The local model did not become ready within 110 seconds. See runtime/llama.log and retry preparation.')
-        finally:
+        for attempt_number, attempt in enumerate(plan['attempts'], 1):
+            device = attempt['device']
+            env = attempt['environment']
+            launch_command = [*command, *attempt['args']]
+            unit = None
+            if '35b' in args.model:
+                unit = 'bambi-local-llama-' + str(time.time_ns())
+                launch_command = ['systemd-run', '--user', '--quiet', '--scope', '--unit', unit,
+                    '--property=MemoryMax=' + str(memory_limit), '--property=MemorySwapMax=0', *launch_command]
+            log = (RUNTIME / 'llama.log').open('ab', buffering=0)
+            log_start = log.tell()
+            load_start = time.perf_counter()
+            process = None
+            prepared = False
             try:
-                if process is not None and not prepared:
-                    current = inspect_llama(ROOT, process.pid, pins, RUNTIME_PROFILE)
-                    # systemd-run can put the actual server in a separate scope;
-                    # its PID and process group differ from the launcher's.
-                    if current is None:
-                        current = recover_llama(ROOT, pins, RUNTIME_PROFILE)
-                        if current and (current['model'] != args.model or current['context'] != args.context):
-                            current = None
-                    if current:
-                        stop_llama(ROOT, current, pins, RUNTIME_PROFILE)
-                    if process.poll() is None:
-                        # The launcher was created by this invocation and is still its child.
-                        try:
-                            os.killpg(process.pid, signal.SIGTERM)
-                            process.wait(timeout=5)
-                        except subprocess.TimeoutExpired:
-                            os.killpg(process.pid, signal.SIGKILL)
-                            process.wait(timeout=5)
-                        except ProcessLookupError:
-                            pass
-                    if unit:
-                        # The scoped server may still be loading weights before it
-                        # opens a socket. This unit was created by this invocation.
-                        try:
-                            subprocess.run(['systemctl', '--user', 'kill', '--kill-whom=all',
-                                '--signal=SIGKILL', unit + '.scope'], stdout=log, stderr=log, timeout=5)
-                        except (OSError, subprocess.TimeoutExpired) as error:
-                            raise RuntimeError('Could not clean up the cancelled model scope. Check runtime/llama.log before retrying.') from error
-                    state.pop('llama', None)
-                    save_state(statepath, state)
+                process = subprocess.Popen(launch_command, cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
+                    stdout=log, stderr=log, start_new_session=True)
+                state['llama'] = {'root': str(ROOT), 'pid': process.pid, 'starttime': identity(process.pid),
+                    'command': launch_command, 'model': args.model, 'context': args.context,
+                    'memoryLimitBytes': memory_limit, 'scope': unit, 'cpuMoeLayers': args.cpu_moe if unit else 0,
+                    'cacheType': cache, 'runtimeProfile': RUNTIME_PROFILE, 'requested': mode}
+                save_state(statepath, state)
+                until = time.monotonic() + 110
+                while time.monotonic() < until and process.poll() is None:
+                    models = request('http://127.0.0.1:8080/v1/models') or {}
+                    if any(item.get('id') == args.model for item in models.get('data', [])):
+                        inference_ms = verify_inference(args.context)
+                        actual = recover_llama(ROOT, pins, RUNTIME_PROFILE)
+                        if actual:
+                            state['llama'].update(actual)
+                        if process.poll() is not None and not actual:
+                            raise RuntimeFailure('Owned AI stopped after inference.', 'exit')
+                        result = runtime_policy(ROOT, 'result', log=current_log(log_start), failure='inference', device=device)
+                        evidence = result['evidence']
+                        backend = 'cpu' if device is None else device['backend'] if evidence and evidence['offloadedLayers'] > 0 else 'cpu' if evidence else 'unverified'
+                        state['llama']['acceleration'] = {
+                            'requested': mode, 'backend': backend, 'device': device['id'] if device else None, 'deviceKey': result.get('key') if device else None,
+                            'inferenceVerified': True, 'inferenceMs': inference_ms, 'attempts': attempt_number,
+                            'failures': failures, 'fallbackReason': 'runtime-selected-cpu' if device and evidence and evidence['offloadedLayers'] == 0 else fallback_reason,
+                            **(evidence or {}), **({'offloadedLayers': 0} if device is None else {})}
+                        state['llama']['loadSeconds'] = time.perf_counter() - load_start
+                        save_state(statepath, state)
+                        prepared = True
+                        print(json.dumps({'ready': True, **state['llama']}), flush=True)
+                        return
+                    time.sleep(.3)
+                raise RuntimeFailure('The local model did not become ready. See runtime/llama.log and retry preparation.', 'exit' if process.poll() is not None else 'timeout')
+            except RuntimeFailure as error:
+                result = runtime_policy(ROOT, 'result', log=current_log(log_start), failure=error.kind, device=device) if device and error.kind != 'invariant' else None
+                if not result or not result['reason']:
+                    raise
+                fallback_reason = result['reason']
+                accelerator['blocked'].append(result['key'])
+                accelerator['lastFailure'] = fallback_reason
+                failures.append({'backend': device['backend'], 'device': device['id'], 'reason': fallback_reason})
+                save_state(statepath, state)
             finally:
-                log.close()
+                try:
+                    if process is not None and not prepared:
+                        current = inspect_llama(ROOT, process.pid, pins, RUNTIME_PROFILE)
+                        # systemd-run can put the actual server in a separate scope;
+                        # its PID and process group differ from the launcher's.
+                        if current is None:
+                            current = recover_llama(ROOT, pins, RUNTIME_PROFILE)
+                            if current and (current['model'] != args.model or current['context'] != args.context):
+                                current = None
+                        if current:
+                            stop_llama(ROOT, current, pins, RUNTIME_PROFILE)
+                        if process.poll() is None:
+                            # The launcher was created by this invocation and is still its child.
+                            try:
+                                os.killpg(process.pid, signal.SIGTERM)
+                                process.wait(timeout=5)
+                            except subprocess.TimeoutExpired:
+                                os.killpg(process.pid, signal.SIGKILL)
+                                process.wait(timeout=5)
+                            except ProcessLookupError:
+                                pass
+                        if unit:
+                            # The scoped server may still be loading weights before it
+                            # opens a socket. This unit was created by this invocation.
+                            try:
+                                subprocess.run(['systemctl', '--user', 'kill', '--kill-whom=all',
+                                    '--signal=SIGKILL', unit + '.scope'], stdout=log, stderr=log, timeout=5)
+                            except (OSError, subprocess.TimeoutExpired) as error:
+                                raise RuntimeError('Could not clean up the cancelled model scope. Check runtime/llama.log before retrying.') from error
+                        state.pop('llama', None)
+                        save_state(statepath, state)
+                finally:
+                    log.close()
 
 
 def cancelled(_signum, _frame):

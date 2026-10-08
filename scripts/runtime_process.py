@@ -5,12 +5,13 @@
 """Recover project llama.cpp ownership using the listening socket and /proc."""
 import json
 import os
+import re
 from pathlib import Path
 import signal
 import tempfile
 import time
 
-RUNTIME_PROFILE = 'responsive-prefix-v3'
+RUNTIME_PROFILE = 'responsive-prefix-v4-accelerator'
 
 
 def prompt_cache_mib(alias):
@@ -103,7 +104,7 @@ def inspect_llama(root, pid, pins, profile):
         if context not in model_contexts(pin):
             return None
         required = {'--parallel': '1', '--ctx-checkpoints': '16', '--checkpoint-min-step': '512',
-                    '--cache-ram': str(prompt_cache_mib(alias)), '--reasoning': 'off', '--gpu-layers': 'all', '--flash-attn': 'on'}
+                    '--cache-ram': str(prompt_cache_mib(alias)), '--reasoning': 'off', '--flash-attn': 'on'}
         sampler_flags = {'temperature': '--temp', 'top_p': '--top-p', 'top_k': '--top-k', 'min_p': '--min-p', 'dry_multiplier': '--dry-multiplier', 'xtc_probability': '--xtc-probability'}
         if 'ubatch_size' in pin.get('runtime', {}):
             required['--ubatch-size'] = str(pin['runtime']['ubatch_size'])
@@ -111,6 +112,10 @@ def inspect_llama(root, pid, pins, profile):
             if key in sampler_flags:
                 required[sampler_flags[key]] = str(value)
         compatible = same_binary and all(option(arguments, key) == value for key, value in required.items())
+        layers = option(arguments, '--gpu-layers')
+        device = option(arguments, '--device') or ''
+        acceleration = layers == '0' and device == 'none' and option(arguments, '--fit') == 'off' or layers == 'auto' and re.fullmatch(r'(?:CUDA|Vulkan|Metal|ROCm|HIP|SYCL)\d+|Metal', device) and option(arguments, '--fit') == 'on'
+        compatible = compatible and bool(acceleration) and option(arguments, '--fit-ctx') == str(context) and option(arguments, '--fit-target') == '1024'
         compatible = compatible and '--jinja' in arguments and '--no-webui' in arguments
         cache = context_cache_type(pin, context)
         compatible = compatible and option(arguments, '--cache-type-k') == cache and option(arguments, '--cache-type-v') == cache

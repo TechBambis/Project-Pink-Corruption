@@ -10,7 +10,7 @@
     "nativeSourceCompleteness": ["apps/desktop/AppRun", "apps/desktop/AppRun.alpha", "CLA.md", "docs/anubis-model.json", "docs/community-models.json"],
     "modelSelection": ["apps/web/src/model-setup.ts", "config/local-model-catalog.json", "packages/ai/model-catalog.ts"],
     "situationalConversation": ["packages/ai/situational.ts", "packages/ai/character.ts", "packages/content/interaction.ts"],
-    "modelLifecycle": ["packages/runtime/service-lifecycle.ts", "packages/runtime/desktop-services.ts"],
+    "modelLifecycle": ["packages/runtime/service-lifecycle.ts", "packages/runtime/desktop-services.ts", "packages/runtime/accelerator-policy.mjs", "packages/runtime/accelerator-runtime.mjs", "scripts/accelerator-plan.mjs", "scripts/accelerator_bridge.py"],
     "signedUpdateFoundation": ["packages/runtime/update-manifest.ts", "scripts/desktop-update.ts"],
     "turnGrammarExperiment": ["packages/ai/turn-grammar.ts"]
   },
