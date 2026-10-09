@@ -12,7 +12,6 @@ export type Settings=Record<string,SettingValue>;
 export type SettingCategory='portable'|'personal'|'machine-specific'|'runtime-only';
 export const sectionLabels={audio:'Audio & voice',visuals:'Visuals',triggers:'Trigger timing & effects',session:'Session & conversation',personal:'Personal text',machine:'This machine'} as const;
 export type SettingsSection=keyof typeof sectionLabels;
-export const voiceNames=['af_heart','af_bella','af_sarah','af_nicole','af_sky','af_river','af_aoede','bambi_classic'] as const;
 const numericChoice=(min:number,max:number,step?:number)=>z.union([z.string().min(1).refine(v=>v.trim()!==''&&Number.isFinite(Number(v))&&Number(v)>=min&&Number(v)<=max,'Outside setting range'),z.number().finite().min(min).max(max)]).refine(value=>step===undefined||Math.abs((Number(value)-min)/step-Math.round((Number(value)-min)/step))<1e-6,'Use a supported setting increment').transform(value=>String(Number(value)));
 const voiceReference=z.string().min(1).max(80).regex(/^[a-z][a-z0-9_]*$/);
 const logicalReference=z.string().min(1).max(160).regex(/^(?:[a-zA-Z0-9][a-zA-Z0-9_.-]*\/)*[a-zA-Z0-9][a-zA-Z0-9_.:-]*$/).refine(v=>!v.includes('..'),'Use a logical model identifier');

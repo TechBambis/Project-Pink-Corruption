@@ -10,7 +10,7 @@ import { SpeechPlayback } from '../../packages/speech/playback';
 import { triggerAliases } from '../../config/trigger-sequence';
 import { choreographyAt, immersiveChoreographyAt, mergePresentation, type VisualPresentation } from '../../packages/visuals/choreography';
 import { TRIGGER_EFFECTS, strongestTriggerEffect } from '../../packages/visuals/trigger-effects';
-import { findTriggers, triggerSoundSettings } from '../../config/trigger-sounds';
+import { findTriggers } from '../../config/trigger-sounds';
 import { modelForPerformance, modelLabel, nativeSamplingModels } from '../../packages/ai/models';
 import { snapshotSession } from '../../packages/ai/session-state';
 import {sessionPhaseAt} from '../../packages/session-director/phases';

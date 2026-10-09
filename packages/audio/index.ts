@@ -253,7 +253,6 @@ export class AudioEngine {
   if(effect==='pop'&&settings.bubbleInflate){
    const inflate=this.sound('inflate')!.buffer.duration;cues.push({kind:'inflate',offset:0,duration:inflate,gain:.75});
    if(settings.bubbleSqueak){const duration=this.sound('squeak')!.buffer.duration;for(const fraction of [.25,.68])cues.push({kind:'squeak',offset:Math.max(0,Math.min(inflate-duration,inflate*fraction)),duration,gain:settings.bubbleSqueakGain});}
-   const gap=Number.isFinite(settings.bubbleGapMs)?Math.max(0,Math.min(1500,settings.bubbleGapMs))/1000:.4;
    cues.push({kind:'pop',offset:0,duration:this.sound('pop')!.buffer.duration,gain:1});
   }else if(effect)cues.push({kind:effect,offset:0,duration:effect==='wiper'?this.wiperDuration():this.sound(effect)!.buffer.duration,gain:1});
   if(settings.effects&&trigger.trim().toUpperCase()==='GOOD GIRL')cues.push({kind:'tick',offset:0,duration:this.sound('tick')!.buffer.duration,gain:1});

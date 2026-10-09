@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { BAMBISLEEP_SAMPLING } from '../../config/sampling';
 import {desktopAlpha} from '../runtime/paths';
-import {desktopSetup,alphaModels} from '../runtime/desktop-setup';
+import {desktopSetup} from '../runtime/desktop-setup';
 import {desktopServices} from '../runtime/desktop-services';
 import {randomUUID} from 'node:crypto';
 const runtimeSession=randomUUID();

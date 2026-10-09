@@ -9,14 +9,20 @@ const track={playlistId,playlistTitle:'Public fixture',fileId,title:'Playable fi
 const playlist={id:playlistId,title:'Public fixture',author:'Fixture',tracks:[track,{...track,fileId:lockedId,title:'Locked fixture',url:null,cueUrl:null,locked:true},{...track,fileId:'bdd1ab0c-02bd-48a0-9d80-37d11f89e8ef',title:'Second playable',durationMs:10000}]};
 const rate=24000,wav=Buffer.alloc(44+rate*2*10);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(rate,24);wav.writeUInt32LE(rate*2,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
 const giggleWav=Buffer.from(wav.subarray(0,44+rate*2));giggleWav.writeUInt32LE(giggleWav.length-8,4);giggleWav.writeUInt32LE(giggleWav.length-44,40);
-const browser=await chromium.launch({executablePath:'/opt/brave.com/brave/brave',headless:true,args:['--mute-audio','--autoplay-policy=no-user-gesture-required']});
+const base=process.env.BAMBI_BROWSER_BASE_URL||'http://127.0.0.1:6969';
+const settingsModule=buildSync({entryPoints:['packages/settings/index.ts'],bundle:true,write:false,format:'esm',platform:'node'}).outputFiles[0].text;
+const {migrateStoredSettings,profileMetadata}=await import('data:text/javascript;base64,'+Buffer.from(settingsModule).toString('base64'));
+const browser=await chromium.launch({...(process.env.BAMBI_BROWSER_BINARY?{executablePath:process.env.BAMBI_BROWSER_BINARY}:{}),headless:true,args:['--mute-audio','--autoplay-policy=no-user-gesture-required']});
 const errors=[],commands=[],mediaRequests=[],aiRequests=[];let warmGate=null,eventGate=null;let saved=[],profile={'session-events':true,'narration-enabled':true,'ai-mode':'voice',mode:'conversation','visuals-enabled':true,duration:'16506.028709666665',master:'.1'};
+let revision=0;
+const snapshot=()=>({revision,profile:'media-fixture',settings:migrateStoredSettings(profile),undoRevision:null});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',e=>errors.push(String(e)));
  await page.route('**/api/**',async route=>{const req=route.request(),u=new URL(req.url()),path=u.pathname;if(['/api/warm','/api/events/render','/api/trigger-preview'].includes(path))aiRequests.push(path);
   if(path==='/api/warm'){if(warmGate)await warmGate;return route.fulfill({json:{ok:true}});}
   if(path==='/api/events/render'){if(eventGate)await eventGate;return route.fulfill({json:{payloadId:req.postDataJSON().payloadId,text:'A measured original fixture narration.',audio:giggleWav.toString('base64'),words:[]}});}
-  if(path==='/api/preferences'){if(req.method()==='PUT')profile=req.postDataJSON();return route.fulfill({json:req.method()==='GET'?profile:{ok:true}});}
+  if(path==='/api/settings')return route.fulfill({json:snapshot()});
+  if(path==='/api/preferences'){if(req.method()==='PUT'){const body=req.postDataJSON();if(body.revision!==revision)return route.fulfill({status:409,json:snapshot()});profile={...body.settings,...profileMetadata};revision++;}return route.fulfill({json:snapshot()});}
   if(path==='/api/library'){if(req.method()==='PUT')saved=req.postDataJSON();return route.fulfill({json:req.method()==='GET'?saved:{ok:true}});}
   if(path==='/api/bambicloud/playlist')return route.fulfill({json:playlist});
   if(path==='/api/bambicloud/cues')return route.fulfill({json:{cues:[{start:1000,stop:2000,trigger:'Good girl',snap:true},{start:2500,stop:2800,trigger:'Unlisted future cue'},{start:4000,stop:4300,trigger:'Bambi reset'},{start:5200,stop:5700,trigger:'Bambi eyes lock',snap:true},{start:5800,stop:6200,trigger:'Giggletime'},{start:7000,stop:7300,trigger:'Snap'}]}});
@@ -24,16 +30,18 @@ try{
   if(path==='/api/local-sounds/catalog')return route.fulfill({json:{assets:[{id:'giggle',status:'available',url:'/api/local-sounds/giggle.wav',gainDb:-12}]}});
   if(path==='/api/local-sounds/giggle.wav')return route.fulfill({contentType:'audio/wav',body:giggleWav});
   if(path==='/api/content')return route.continue();
-  if(path==='/api/access')return route.fulfill({json:{version:1,configured:true,choices:{microphone:false,devices:false,modelDownloads:false,onlineMedia:true,cloudAI:false,localClock:false,approximateLocation:false,contextToCloud:false},place:null}});
+  if(path==='/api/access')return route.fulfill({json:{version:1,configured:true,choices:{microphone:false,devices:true,modelDownloads:false,onlineMedia:true,cloudAI:false,localClock:false,approximateLocation:false,contextToCloud:false},place:null}});
   if(path==='/api/health')return route.fulfill({json:{models:[],voices:[],hardware:{},audioPresets:{}}});
   if(path==='/api/memory')return route.fulfill({json:{facts:[],turns:[],semantic:'ready'}});
   return route.fulfill({json:{ok:true}});
  });
  await page.routeWebSocket('**/ws',ws=>{ws.onMessage(raw=>commands.push(JSON.parse(String(raw))));ws.send(JSON.stringify({type:'connected',protocolVersion:1,replyCorrelation:true}));});
- await page.goto('http://127.0.0.1:6969');await page.waitForFunction(()=>window.bambi);
+ await page.goto(base);await page.waitForFunction(()=>window.bambi);
  await page.waitForFunction(()=>document.getElementById('seek').disabled);
- assert.equal(await page.locator('#duration').inputValue(),'1200','Legacy playlist length restores a bounded AI duration');
+ assert.equal(await page.locator('#duration').inputValue(),'unlimited','Invalid legacy playlist length falls back to the current session default');
  assert.doesNotMatch(await page.locator('#duration').textContent(),/16506/,'No raw legacy duration option');
+ await page.locator('#duration').selectOption('1200');
+ await page.waitForFunction(()=>JSON.parse(localStorage.getItem('bambi-profile')).duration==='1200');
  assert.equal(await page.locator('#media-seek').isVisible(),false,'Live conversation has no media seek bar');
  assert.equal(await page.locator('#player-controls-toggle').count(),0,'No extra Controls button');
  assert.equal(await page.locator('.session-dock').evaluate(dock=>dock.parentElement.id),'stage');
@@ -100,7 +108,8 @@ try{
  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('bambi-profile')).duration==='1200');
  await page.waitForTimeout(900);
  assert.equal(profile.duration,'1200','Media transport duration is not persisted as an AI preference');
- await page.evaluate(()=>{window.testCues=[];document.addEventListener('trigger-detected',e=>window.testCues.push({name:e.detail.triggerName,playSound:e.detail.playSound,mediaTime:document.getElementById('media').currentTime}));const box=document.getElementById('bambicloud-cues');if(!box.checked)box.click();});
+ // Capture short cue text at delivery; browser polling can outlive a 300 ms cue.
+ await page.evaluate(()=>{window.testCues=[];document.addEventListener('trigger-detected',e=>window.testCues.push({name:e.detail.triggerName,playSound:e.detail.playSound,mediaTime:document.getElementById('media').currentTime,text:document.querySelector('.session-cue-text').textContent}));const box=document.getElementById('bambicloud-cues');if(!box.checked)box.click();});
  await page.waitForFunction(()=>document.getElementById('timeline-info').textContent.includes('source-timed'));
  assert.equal(await page.locator('#player-cue-markers').isChecked(),true,'Trigger timeline markers default on');
  assert.equal(await page.locator('.cue-marker-option').evaluate(node=>node.hidden),false,'Timed recording exposes the marker option');
@@ -157,11 +166,11 @@ try{
  await page.evaluate(()=>window.bambi.playbackClock.schedule({id:'native-style-fixture',time:window.bambi.playbackClock.time,type:'trigger-cue',data:{text:'Good girl',playSound:false,source:'speech'}}));
  await page.waitForFunction(n=>window.testCues.length>n&&document.getElementById('stage').hasAttribute('data-trigger-text'),beforeNative);assert.deepEqual(await cueStyle(),sourceStyle,'Aligned speech and recorded cues have identical typography');await page.locator('#stage').screenshot({path:'runtime/shared-trigger-native.png'});
  const seekTo=async seconds=>{await page.locator('#seek').evaluate((input,t)=>{input.value=String(t);input.dispatchEvent(new Event('input',{bubbles:true}));},seconds);await page.waitForFunction(()=>!document.getElementById('media').seeking);};
- const nextCueAfterSeek=async(seconds,name,at)=>{const count=await page.evaluate(()=>window.testCues.length);await seekTo(seconds);await page.waitForFunction(n=>window.testCues.length>n,count);const next=await page.evaluate(n=>window.testCues[n],count);assert.equal(next.name.toLowerCase(),name.toLowerCase(),JSON.stringify({seconds,count,next,all:await page.evaluate(()=>window.testCues)}));assert.ok(Math.abs(next.mediaTime-at)<.16,'Cue remains synchronized after seek');};
- await nextCueAfterSeek(2.2,'Unlisted future cue',2.5);
- assert.equal((await cueStyle()).text,'UNLISTED FUTURE CUE','Unknown source names render in full');
- await nextCueAfterSeek(4.9,'Bambi eyes lock',5.2);
- assert.equal((await cueStyle()).text,'BAMBI EYES LOCK','Cloud cue does not fire the shorter Bambi trigger');
+ const nextCueAfterSeek=async(seconds,name,at)=>{const count=await page.evaluate(()=>window.testCues.length);await seekTo(seconds);await page.waitForFunction(n=>window.testCues.length>n,count);const next=await page.evaluate(n=>window.testCues[n],count);assert.equal(next.name.toLowerCase(),name.toLowerCase(),JSON.stringify({seconds,count,next,all:await page.evaluate(()=>window.testCues)}));assert.ok(Math.abs(next.mediaTime-at)<.16,'Cue remains synchronized after seek');return next;};
+ const unknownCue=await nextCueAfterSeek(2.2,'Unlisted future cue',2.5);
+ assert.equal(unknownCue.text,'UNLISTED FUTURE CUE','Unknown source names render in full at delivery');
+ const eyesCue=await nextCueAfterSeek(4.9,'Bambi eyes lock',5.2);
+ assert.equal(eyesCue.text,'BAMBI EYES LOCK','Cloud cue does not fire the shorter Bambi trigger');
  await nextCueAfterSeek(5.6,'Giggletime',5.8);
  assert.deepEqual(await page.evaluate(()=>window.bambi.audio.scheduledSounds),[],'Giggletime stays visual even with a playable giggle asset');
  await nextCueAfterSeek(3.5,'Bambi reset',4);
