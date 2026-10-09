@@ -62,6 +62,9 @@ if(alpha){
  native={llama:pins.llama,speech:await buildMacNative({root,backend,notices,cache:resolve('.runtime/desktop-downloads/macos-native'),pins})};
 }
 writeSamples(join(backend,'dist/web/samples'),true);
+const guide=`# Bambi Local ${version} · Apple Silicon tester\n\nExtract the ZIP and copy the app to Applications. This tester has an ad-hoc signature and is not notarized. Keep macOS security controls enabled; report a blocked download or launch.\n\nTry the offline sample, Play/Pause, mute and End session. In Studio, import the prepared chime sample, preview, export and reopen it. Settings export/import and named presets are in Extras.\n\n${alpha?'Use Setup to explicitly download or import supported model and speech data; allow 15 GB free. No models are downloaded automatically. Test the full reference model/context with CPU and Metal separately. macOS may request microphone permission after you enable it in Privacy & access.':'AI, speech and microphone are unavailable in this Smoke build.'}\n\nPhysical downloaded-app/Gatekeeper, audible output, microphone capture, permission revocation and sleep/wake remain unqualified. Alpha full-model Metal/CPU and disconnected-network conversation also require their recorded tests. Do not describe a missing gate as passed.\n`;
+const escaped=guide.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+writeFileSync(join(backend,'dist/web/desktop-guide.html'),`<!doctype html><html lang="en"><meta charset="utf-8"><title>Bambi Local tester guide</title><body><a href="/">Open app</a> · <a href="/setup">Setup</a> · <a href="/corresponding-source.tar.gz">Matching source</a> · <a href="/samples/studio-chimes.bambi.json" download>Studio sample</a><pre style="white-space:pre-wrap;max-width:80ch">${escaped}</pre></body></html>`);
 const source=join(stage,'source'),sourceManifest=await stageDesktopSource(root,source,version),release=await releaseIdentity(root,sourceManifest);
 writeSourceManifest(source,sourceManifest);
 run('/usr/bin/tar',['-czf',join(backend,'dist/web/corresponding-source.tar.gz'),'-C',source,'.']);
@@ -82,9 +85,10 @@ assertMachArm64(join(bundle,'Contents/MacOS',product));
 run('/usr/bin/codesign',['--verify','--deep','--strict','--verbose=2',bundle]);
 copy(join(backend,'dist/web/corresponding-source.tar.gz'),join(output,`bambi-local-${version}-macos-arm64-source.tar.gz`));
 copy(join(notices,'RUNTIME-MANIFEST.json'),join(output,'RUNTIME-MANIFEST.json'));
+writeFileSync(join(output,'TESTER-GUIDE.md'),guide);
 run('/usr/bin/tar',['-czf',join(output,'NOTICES.tar.gz'),'-C',join(resources,'notices'),'.']);
 const sums=[];
 const {readdirSync}=await import('node:fs');sums.length=0;
-for(const filename of readdirSync(output).sort())if(/\.(?:zip|tar\.gz|json)$/.test(filename))sums.push(`${await hashFile(join(output,filename))}  ${filename}`);
+for(const filename of readdirSync(output).sort())if(/\.(?:zip|tar\.gz|json|md)$/.test(filename))sums.push(`${await hashFile(join(output,filename))}  ${filename}`);
 writeFileSync(join(output,'SHA256SUMS'),sums.join('\n')+'\n');
 console.log('macOS tester artifacts:',output,'\nMatching source digest:',manifest.sourceDigest);

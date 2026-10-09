@@ -4,7 +4,7 @@ import {readFileSync,writeFileSync,mkdirSync,readdirSync,rmSync,chmodSync} from 
 import {join,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {downloadPinned,hashFile,copy,copyTree,inventory} from './desktop-windows-support.mjs';
-import {assertMachArm64,macNativeReport,copyResolvedNativeTree} from './desktop-macos-support.mjs';
+import {assertMachArm64,macNativeReport,machOInfo,copyResolvedNativeTree} from './desktop-macos-support.mjs';
 
 export async function buildMacNative({root,backend,notices,cache,pins}){
  if(process.platform!=='darwin'||process.arch!=='arm64')throw Error('Native Apple Silicon is required.');
@@ -29,7 +29,15 @@ export async function buildMacNative({root,backend,notices,cache,pins}){
  if(speechReport.unresolved.length)throw Error('Frozen speech has external native dependencies: '+JSON.stringify(speechReport.unresolved));
  // PyInstaller may create internal links. Audit first, then copy their resolved
  // bytes into the self-contained resource tree used by the shared inventory.
- copyResolvedNativeTree(speech,join(backend,'native/speech'));
+ const aliases=copyResolvedNativeTree(speech,join(backend,'native/speech'));
+ for(const alias of aliases){
+  const bytes=readFileSync(alias.path);if(bytes.length<4||bytes.readUInt32LE(0)!==0xfeedfacf)continue;
+  // A materialized top-level alias no longer has the original library's
+  // directory as its loader path. Its sibling aliases form the same closure.
+  if(!machOInfo(bytes).rpaths.includes('@loader_path'))run('/usr/bin/install_name_tool',['-add_rpath','@loader_path',alias.path]);
+  run('/usr/bin/codesign',['--force','--sign','-',alias.path]);
+ }
+ writeFileSync(join(notices,'MACOS-MATERIALIZED-ALIASES.json'),JSON.stringify(aliases,null,2)+'\n');
  assertMachArm64(join(backend,'native/speech/bambi-speech'));
  const site=join(venv,'lib/python3.12/site-packages');
  for(const folder of readdirSync(site).filter(name=>name.endsWith('.dist-info')))copyTree(join(site,folder),join(notices,'speech-metadata',folder));

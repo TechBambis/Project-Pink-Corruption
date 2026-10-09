@@ -95,6 +95,7 @@ try{
  current=await launch();const {application,page,backend}=current;record('isolated-packaged-launch',{startupMs:current.startupMs,backendPid:backend.pid,nodeExecutable:join(resources,'backend/node/bin/node'),rendererSandbox:true,chromiumSandboxSwitchAbsent:true});
  const health=await page.evaluate(async()=>await(await fetch('/api/health')).json());assert(health.database&&(alpha?health.desktopAlpha:health.desktopSmoke));assert(!health.ollama&&!health.kokoro&&!health.whisper&&!health.streamingSpeech);record('bundled-node-sqlite-and-explicit-capabilities',{health});
  const api=`http://127.0.0.1:16969`;
+ const guideResponse=await fetch(api+'/desktop-guide.html');assert.equal(guideResponse.status,200);assert((await guideResponse.text()).includes(runtime.version));record('packaged-guide-and-matching-source-link');
  assert.equal((await fetch(api+'/api/preferences',{headers:{origin:'https://example.com'}})).status,403);
  assert.equal((await fetch(api+'/api/desktop/identity')).status,403);
  if(alpha)assert.equal((await fetch(api+'/api/desktop/setup/install',{method:'POST'})).status,403,'Model downloads require explicit consent');
