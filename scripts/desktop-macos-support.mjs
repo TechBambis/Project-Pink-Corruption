@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
-import {readFileSync,readdirSync,realpathSync,existsSync} from 'node:fs';
+import {readFileSync,readdirSync,realpathSync,existsSync,statSync,mkdirSync,copyFileSync,chmodSync} from 'node:fs';
 import {join,dirname,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 
@@ -47,6 +47,19 @@ export function macNativeReport(root){
   if(!candidates.some(path=>existsSync(path)&&realpathSync(path).startsWith(root+'/')))unresolved.push({path:entry.path,dependency});
  }
  return {root,entries,unresolved};
+}
+export function copyResolvedNativeTree(source,destination){
+ source=realpathSync(source);destination=resolve(destination);
+ if(destination===source||destination.startsWith(source+'/'))throw Error('Native destination overlaps source');
+ const walk=(from,to,parents)=>{
+  const actual=realpathSync(from);
+  if(actual!==source&&!actual.startsWith(source+'/'))throw Error('Native copy link escapes source: '+from);
+  const entry=statSync(actual);
+  if(entry.isFile()){copyFileSync(actual,to);chmodSync(to,entry.mode&0o777);return;}
+  if(!entry.isDirectory()||parents.has(actual))throw Error('Unexpected entry or cycle in native copy: '+from);
+  mkdirSync(to,{recursive:true});const next=new Set([...parents,actual]);
+  for(const name of readdirSync(actual))walk(join(actual,name),join(to,name),next);
+ };walk(source,destination,new Set());
 }
 export function processRows(){
  return execFileSync('/bin/ps',['-axo','pid=,ppid=,stat=,command='],{encoding:'utf8'}).split('\n').flatMap(line=>{

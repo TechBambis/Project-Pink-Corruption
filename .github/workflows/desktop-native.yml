@@ -62,9 +62,6 @@ jobs:
         run: |
           cd "$BAMBI_SNAPSHOT"
           npx playwright install-deps chromium
-      - name: Build the native package
-        id: build
-        run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" build "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET"
       - name: Locate immutable output
         run: |
           if [ "$BAMBI_RELEASE_TARGET" = "windows-x64" ]; then
@@ -74,6 +71,9 @@ jobs:
           else
             echo "BAMBI_RELEASE_OUTPUT=$BAMBI_SNAPSHOT/dist/desktop/$BAMBI_RELEASE_VERSION" >> "$GITHUB_ENV"
           fi
+      - name: Build the native package
+        id: build
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" build "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET"
       - name: Prepare the Windows read-only process and ACL observer
         if: inputs.target == 'windows-x64'
         shell: pwsh
@@ -108,6 +108,7 @@ jobs:
             ${{ env.BAMBI_RELEASE_OUTPUT }}/RUNTIME-MANIFEST.json
             ${{ env.BAMBI_RELEASE_OUTPUT }}/DESKTOP-QUALIFICATION.json
             ${{ env.BAMBI_RELEASE_OUTPUT }}/SOURCE-CHECKS.json
+            ${{ env.BAMBI_SNAPSHOT }}/SOURCE-CHECKS.json
             ${{ env.BAMBI_RELEASE_OUTPUT }}/MACOS-NATIVE-SPEECH-CHECK.json
       - name: Write the target readiness report
         if: success() || (always() && inputs.target == 'macos-arm64' && steps.build.outcome == 'success')

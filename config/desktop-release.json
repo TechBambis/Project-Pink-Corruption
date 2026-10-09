@@ -16,7 +16,7 @@
     "turnGrammarExperiment": ["packages/ai/turn-grammar.ts"]
   },
   "windowsRequired": ["apps/desktop/speech.manifest", "packages/speech/desktop-windows.lock", "scripts/desktop-windows-native.mjs", "scripts/desktop-windows-install-check.mjs", "scripts/desktop-windows-runtime-slice.mjs", "scripts/desktop-windows-observer.cs", "docs/licenses/windows-python-3.12.13/PROVENANCE.json"],
-  "macosRequired": ["desktop-macos-builder.cjs", "apps/desktop/macos-entitlements.plist", "scripts/desktop-macos-build.mjs", "scripts/desktop-macos-check.mjs", "scripts/desktop-macos-support.mjs", "scripts/desktop-macos-native.mjs", "scripts/desktop-macos-runtime-check.mjs", "packages/speech/desktop-macos.lock", "config/desktop-macos-runtime.json", "docs/licenses/macos-python-3.12.13/PROVENANCE.json"],
+  "macosRequired": ["desktop-macos-builder.cjs", "apps/desktop/macos-entitlements.plist", "scripts/desktop-macos-build.mjs", "scripts/desktop-macos-check.mjs", "scripts/desktop-macos-support.mjs", "scripts/desktop-macos-native.mjs", "scripts/desktop-macos-runtime-check.mjs", "packages/speech/desktop-macos.lock", "config/desktop-macos-runtime.json", "docs/licenses/macos-python-3.12.13/PROVENANCE.json", "scripts/desktop-macos-ai-check.mjs"],
   "gates": {
     "smoke": ["sourceChecks", "packaging", "installer"],
     "alpha": ["sourceChecks", "packaging", "installer", "speech", "localConversation", "offlineConversation", "physicalAudio", "recipientInstallation", "permissions", "modelSelection"]

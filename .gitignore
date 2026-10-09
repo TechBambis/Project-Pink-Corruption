@@ -212,3 +212,4 @@ test-results/
 !/scripts/desktop-macos-support.mjs
 !/scripts/desktop-macos-native.mjs
 !/scripts/desktop-macos-runtime-check.mjs
+!/scripts/desktop-macos-ai-check.mjs

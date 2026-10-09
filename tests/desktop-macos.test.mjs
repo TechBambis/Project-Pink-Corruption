@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,readFileSync,rmSync,mkdirSync,symlinkSync,lstatSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {assertMachArm64,appPaths,ownedProcessIds,closeTrackedApplication,machOInfo,macNativeReport} from '../scripts/desktop-macos-support.mjs';
+import {assertMachArm64,appPaths,ownedProcessIds,closeTrackedApplication,machOInfo,macNativeReport,copyResolvedNativeTree} from '../scripts/desktop-macos-support.mjs';
 import {readReleaseArtifact} from '../scripts/desktop-release-support.mjs';
 import {digest} from '../scripts/desktop-windows-support.mjs';
 
@@ -53,4 +53,12 @@ test('Mac Python redistribution retains each exact archive notice under a unique
  const root=new URL('../docs/licenses/macos-python-3.12.13/',import.meta.url),provenance=JSON.parse(readFileSync(new URL('PROVENANCE.json',root),'utf8'));
  assert.equal(new Set(provenance.notices.map(n=>n.file)).size,provenance.notices.length);
  for(const notice of provenance.notices){assert(!notice.file.startsWith('/')&&!notice.file.split('/').includes('..'));const bytes=readFileSync(new URL(notice.file,root));assert.equal(bytes.length,notice.bytes);assert.equal(digest(bytes),notice.sha256,notice.file);}
+});
+test('native resource copy materializes internal library links and rejects external/cyclic links',t=>{
+ if(process.platform==='win32'){t.skip('POSIX link preparation; native Apple Silicon source checks also exercise this.');return;}
+ const root=mkdtempSync(join(tmpdir(),'bambi-native-copy-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const source=join(root,'source');mkdirSync(source);writeFileSync(join(source,'lib.dylib'),'reviewed native bytes');symlinkSync('lib.dylib',join(source,'alias.dylib'));
+ const target=join(root,'received');copyResolvedNativeTree(source,target);assert(!lstatSync(join(target,'alias.dylib')).isSymbolicLink());assert.equal(readFileSync(join(target,'alias.dylib'),'utf8'),'reviewed native bytes');
+ writeFileSync(join(root,'external'),'host-only bytes');symlinkSync('../external',join(source,'outside'));assert.throws(()=>copyResolvedNativeTree(source,join(root,'bad')),/escapes source/);rmSync(join(source,'outside'));
+ symlinkSync('.',join(source,'loop'));assert.throws(()=>copyResolvedNativeTree(source,join(root,'cycle')),/cycle/);
 });

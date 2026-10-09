@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
-import {readFileSync,writeFileSync,mkdirSync,readdirSync,rmSync,chmodSync,cpSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync,readdirSync,rmSync,chmodSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {downloadPinned,hashFile,copy,copyTree,inventory} from './desktop-windows-support.mjs';
-import {assertMachArm64,macNativeReport} from './desktop-macos-support.mjs';
+import {assertMachArm64,macNativeReport,copyResolvedNativeTree} from './desktop-macos-support.mjs';
 
 export async function buildMacNative({root,backend,notices,cache,pins}){
  if(process.platform!=='darwin'||process.arch!=='arm64')throw Error('Native Apple Silicon is required.');
@@ -29,7 +29,7 @@ export async function buildMacNative({root,backend,notices,cache,pins}){
  if(speechReport.unresolved.length)throw Error('Frozen speech has external native dependencies: '+JSON.stringify(speechReport.unresolved));
  // PyInstaller may create internal links. Audit first, then copy their resolved
  // bytes into the self-contained resource tree used by the shared inventory.
- cpSync(speech,join(backend,'native/speech'),{recursive:true,dereference:true});
+ copyResolvedNativeTree(speech,join(backend,'native/speech'));
  assertMachArm64(join(backend,'native/speech/bambi-speech'));
  const site=join(venv,'lib/python3.12/site-packages');
  for(const folder of readdirSync(site).filter(name=>name.endsWith('.dist-info')))copyTree(join(site,folder),join(notices,'speech-metadata',folder));

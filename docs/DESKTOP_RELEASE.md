@@ -56,6 +56,8 @@ node scripts/desktop-release.mjs qualify . macos-arm64 dist/desktop-macos/0.1.0-
 
 Output: ZIP containing the app, matching source, notices, manifest and checksums. Extract the ZIP and copy the app to Applications. The tester has an ad-hoc signature and is not notarized. CI tests the extracted/copied final app, player PCM, Studio, settings and process cleanup. Alpha freezes hash-locked native speech and bundles arm64 llama.cpp; models are installed only through explicit setup. Its received-runtime checks cover synthesis and streaming recognition. Full-context Metal/CPU conversation, model setup/offline restart, downloaded Gatekeeper behavior, physical audio/microphone consent and sleep/wake remain required qualification gates.
 
+After Alpha packaging checks, run `desktop-macos-ai-check.mjs "/Applications/Bambi Local.app/Contents/MacOS/Bambi Local" MODEL_DATA`, then repeat with `--cpu`. The check preserves the full reference model and 24,576-token context; auto requires actual Metal offload. `--download-check` explicitly enables pinned download cancellation/retry checks. Restart results distinguish rejected renderer requests from a physically disconnected network; complete the latter on the Mac before claiming offline qualification.
+
 ## CI and evidence
 
 **Manual desktop release** selects Windows, Linux Smoke or Apple Silicon; Linux alpha currently uses an attended local build. Before private CI, verify account **337824705**, actual free allowance, storage and zero-spend controls. Use `upload_packages` within the recorded allowance; `transfer_packages` is the optional sequential-part receiver route.

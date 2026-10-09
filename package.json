@@ -42,7 +42,8 @@
     "pretest:settings": "npm run build",
     "test:settings": "node --import tsx scripts/settings-browser-check.mjs",
     "desktop:macos-build": "node scripts/desktop-macos-build.mjs",
-    "desktop:macos-check": "node scripts/desktop-macos-check.mjs"
+    "desktop:macos-check": "node scripts/desktop-macos-check.mjs",
+    "desktop:macos-ai-check": "node scripts/desktop-macos-ai-check.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0",
