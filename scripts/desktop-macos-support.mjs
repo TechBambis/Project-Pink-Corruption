@@ -40,7 +40,7 @@ export function macNativeReport(root){
   else if(/\.(so|dylib|exe|dll)$/.test(path)||bytes.subarray(0,4).equals(Buffer.from([0x7f,0x45,0x4c,0x46])))throw Error('Foreign or non-native runtime binary: '+path);
  }};walk(root);
  const unresolved=[];
- const expand=(value,path)=>value.startsWith('@loader_path/')?resolve(dirname(path),value.slice(13)):value;
+ const expand=(value,path)=>value==='@loader_path'?dirname(path):value.startsWith('@loader_path/')?resolve(dirname(path),value.slice(13)):value;
  for(const entry of entries)for(const dependency of entry.dependencies){
   if(dependency.startsWith('/System/Library/')||dependency.startsWith('/usr/lib/'))continue;
   const candidates=dependency.startsWith('@rpath/')?entry.rpaths.map(rpath=>join(expand(rpath,entry.path),dependency.slice(7))):[expand(dependency,entry.path)];

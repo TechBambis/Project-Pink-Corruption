@@ -62,3 +62,12 @@ test('native resource copy materializes internal library links and rejects exter
  writeFileSync(join(root,'external'),'host-only bytes');symlinkSync('../external',join(source,'outside'));assert.throws(()=>copyResolvedNativeTree(source,join(root,'bad')),/escapes source/);rmSync(join(source,'outside'));
  symlinkSync('.',join(source,'loop'));assert.throws(()=>copyResolvedNativeTree(source,join(root,'cycle')),/cycle/);
 });
+test('Mac native audit resolves a bare loader-path rpath to the current library directory',t=>{
+ const root=mkdtempSync(join(tmpdir(),'bambi-rpath-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const command=(type,text,base)=>{const string=Buffer.from(text+'\0'),length=Math.ceil((base+string.length)/8)*8,bytes=Buffer.alloc(length);bytes.writeUInt32LE(type);bytes.writeUInt32LE(length,4);bytes.writeUInt32LE(base,8);string.copy(bytes,base);return bytes;};
+ const header=Buffer.alloc(32);header.writeUInt32LE(0xfeedfacf);header.writeUInt32LE(0x0100000c,4);
+ writeFileSync(join(root,'libbundled.dylib'),header);
+ const dependency=command(0xc,'@rpath/libbundled.dylib',24),rpath=command(0x8000001c,'@loader_path',12);
+ header.writeUInt32LE(1,16);header.writeUInt32LE(dependency.length,20);writeFileSync(join(root,'service'),Buffer.concat([header,dependency]));assert.equal(macNativeReport(root).unresolved.length,1);
+ header.writeUInt32LE(2,16);header.writeUInt32LE(dependency.length+rpath.length,20);writeFileSync(join(root,'service'),Buffer.concat([header,dependency,rpath]));assert.deepEqual(macNativeReport(root).unresolved,[]);
+});
