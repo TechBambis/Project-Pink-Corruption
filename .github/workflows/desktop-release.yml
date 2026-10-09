@@ -1,4 +1,4 @@
-name: Manual desktop release
+name: Received Apple Silicon runtime evidence
 on:
   workflow_dispatch:
     inputs:
@@ -11,7 +11,7 @@ on:
         options: [smoke, alpha]
         default: smoke
       version:
-        description: New immutable version matching the selected phase
+        description: Existing immutable app version under observation
         type: string
         required: true
       quota_checked:
@@ -35,17 +35,47 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: desktop-release-${{ inputs.target }}-${{ github.ref }}
+  group: macos-received-runtime-evidence
   cancel-in-progress: false
 jobs:
-  native:
-    uses: ./.github/workflows/desktop-native.yml
-    with:
-      target: ${{ inputs.target }}
-      phase: ${{ inputs.phase }}
-      version: ${{ inputs.version }}
-      quota_checked: ${{ inputs.quota_checked }}
-      quota_record: ${{ inputs.quota_record }}
-      upload_packages: ${{ inputs.upload_packages }}
-      transfer_packages: ${{ inputs.transfer_packages }}
-      remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}
+  evidence:
+    runs-on: macos-15
+    timeout-minutes: 5
+    env:
+      BAMBI_EVIDENCE_OUTPUT: ${{ runner.temp }}/macos-native-evidence
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.18.1
+      - name: Require native host and recorded allowance
+        env:
+          QUOTA_RECORD: ${{ inputs.quota_record }}
+        run: node -e 'if(process.platform!=="darwin"||process.arch!=="arm64"||!process.env.QUOTA_RECORD.trim())throw Error("Native standard Apple Silicon and recorded free allowance required");'
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: 11586709960
+          merge-multiple: true
+          run-id: 37865036225
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/received-alpha28
+      - name: Verify and extract exact received distributable
+        run: |
+          node --input-type=module -e 'import {readFileSync} from "node:fs";import {createHash} from "node:crypto";const p=process.env.RUNNER_TEMP+"/received-alpha28/bambi-local-0.1.0-alpha.28-macos-arm64.zip";if(createHash("sha256").update(readFileSync(p)).digest("hex")!=="9604bdde4c2857e58bc0554656c16185b28e5346d897a78d1ee223391cf6b76b")throw Error("Received ZIP changed");'
+          /usr/bin/ditto -x -k "$RUNNER_TEMP/received-alpha28/bambi-local-0.1.0-alpha.28-macos-arm64.zip" "$RUNNER_TEMP/Received ü app"
+      - name: Observe native Metal and real model-setup guard
+        timeout-minutes: 3
+        run: node tests/macos-received-runtime-evidence.mjs "$RUNNER_TEMP/Received ü app/Bambi Local.app/Contents/MacOS/Bambi Local"
+      - name: Save only bounded public fixture evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: macos-runtime-evidence-${{ github.run_id }}
+          retention-days: 1
+          if-no-files-found: ignore
+          path: |
+            ${{ env.BAMBI_EVIDENCE_OUTPUT }}/evidence.json
+            ${{ env.BAMBI_EVIDENCE_OUTPUT }}/setup-memory-guard.png
