@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
-const {app,BrowserWindow,dialog,Menu,session,ipcMain,shell}=require('electron');
+const {app,BrowserWindow,dialog,Menu,session,ipcMain,shell,systemPreferences}=require('electron');
 const {spawn,spawnSync}=require('node:child_process');
 const {mkdirSync,openSync,closeSync,lstatSync,readFileSync}=require('node:fs');
 const {resolve,join,dirname}=require('node:path');
@@ -82,7 +82,12 @@ else {
   }
   if(quitting)return;
   if(!ready)throw Error(`The owned backend could not start on port ${port}. Another application may already use it. No unrelated process was stopped. See logs/backend.log; retry with --bambi-port=6970.`);
-  const permissions=permissionHandlers({alpha,origin,ownedContents:()=>window?.webContents,readAccess:async()=>{
+  const permissions=permissionHandlers({alpha,origin,ownedContents:()=>window?.webContents,
+   ...(process.platform==='darwin'?{askSystemAccess:async()=>{
+    const status=systemPreferences.getMediaAccessStatus('microphone');
+    if(status==='granted')return true;
+    return status==='not-determined'?systemPreferences.askForMediaAccess('microphone'):false;
+   }}:{}),readAccess:async()=>{
    const response=await fetch(origin+'/api/access',{signal:AbortSignal.timeout(1500)});if(!response.ok)throw Error('Access choices unavailable.');return response.json();
   }});
   session.defaultSession.setPermissionRequestHandler(permissions.request);

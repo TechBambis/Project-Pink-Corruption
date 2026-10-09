@@ -15,6 +15,7 @@ const root=fileURLToPath(new URL('../',import.meta.url));
 if(process.platform!=='darwin'||process.arch!=='arm64')throw Error('Use a native Apple Silicon host.');
 const executable=realpathSync(resolve(process.argv[2]));
 const {resources,bundle}=appPaths(executable);
+const alpha=executable.endsWith('/Bambi Local');
 assert(!executable.startsWith(root),'Extract/copy the received artifact outside the repository before testing');
 const outputRoot=resolve(process.env.BAMBI_SMOKE_OUTPUT||join(process.env.HOME,'.local/share/bambi-macos-tests'));mkdirSync(outputRoot,{recursive:true});
 const output=mkdtempSync(join(outputRoot,'macOS ü smoke ')),data=join(output,'User data ä'),emptyPath=join(output,'empty-path');mkdirSync(emptyPath);
@@ -83,6 +84,7 @@ try{
  for(const file of sourceManifest.files)assert.equal(hash(readFileSync(join(source,file.path))),file.sha256,'Source snapshot mismatch: '+file.path);
  const runtime=JSON.parse(readFileSync(join(resources,'notices/RUNTIME-MANIFEST.json'),'utf8'));assert.equal(runtime.sourceDigest,sourceManifest.sourceDigest);assert.equal(hash(readFileSync(join(extracted,'main.cjs'))),runtime.shell.mainSha256);assert.equal(hash(readFileSync(join(source,'apps/desktop/main.cjs'))),runtime.shell.mainSha256);assert.equal(JSON.parse(readFileSync(join(extracted,'package.json'),'utf8')).version,runtime.version);
  if(runtime.shell.permissionPolicySha256){assert.equal(hash(readFileSync(join(extracted,'permission-policy.cjs'))),runtime.shell.permissionPolicySha256);assert.equal(hash(readFileSync(join(source,'apps/desktop/permission-policy.cjs'))),runtime.shell.permissionPolicySha256);}
+ if(alpha){assert.equal(runtime.phase,'alpha');assert.equal(hash(readFileSync(join(extracted,'preload.cjs'))),runtime.shell.preloadSha256);assertMachArm64(join(resources,'backend/native/llama/llama-server'));assertMachArm64(join(resources,'backend/native/speech/bambi-speech'));}
  assertMachArm64(executable);assertMachArm64(join(resources,'backend/node/bin/node'));
  execFileSync('/usr/bin/codesign',['--verify','--deep','--strict',bundle]);
  for(const file of runtime.files)assert.equal(hash(readFileSync(join(resources,'backend',file.path))),file.sha256,'Runtime inventory mismatch: '+file.path);
@@ -91,11 +93,12 @@ try{
  for(const path of inputs){assert(!/(?:^|\/)(?:\.env(?:\.|$)|\.git|\.runtime|internal|vendor|imported-sounds|recordings)(?:\/|$)|\.(?:sqlite|key|pem|p12|pfx|gguf)$/.test(relative(bundle,path)),'Excluded material in finished artifact '+path);const bytes=readFileSync(path);assert(!secrets.some(secret=>bytes.includes(secret)),'Private credential found (value withheld)');}
  record('finished-artifact-and-matching-source-audit',{files:inputs.length,sourceDigest:runtime.sourceDigest,privateCredentialValuesChecked:secrets.length,scope:'Allowlisted paths, every runtime/source SHA-256, actual local credential values; not an exhaustive semantic secret detector'});
  current=await launch();const {application,page,backend}=current;record('isolated-packaged-launch',{startupMs:current.startupMs,backendPid:backend.pid,nodeExecutable:join(resources,'backend/node/bin/node'),rendererSandbox:true,chromiumSandboxSwitchAbsent:true});
- const health=await page.evaluate(async()=>await(await fetch('/api/health')).json());assert(health.database&&health.desktopSmoke);assert(!health.ollama&&!health.kokoro&&!health.whisper&&!health.streamingSpeech);record('bundled-node-sqlite-and-explicit-capabilities',{health});
+ const health=await page.evaluate(async()=>await(await fetch('/api/health')).json());assert(health.database&&(alpha?health.desktopAlpha:health.desktopSmoke));assert(!health.ollama&&!health.kokoro&&!health.whisper&&!health.streamingSpeech);record('bundled-node-sqlite-and-explicit-capabilities',{health});
  const api=`http://127.0.0.1:16969`;
  assert.equal((await fetch(api+'/api/preferences',{headers:{origin:'https://example.com'}})).status,403);
  assert.equal((await fetch(api+'/api/desktop/identity')).status,403);
- assert.equal((await fetch(api+'/api/warm',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,503);
+ if(alpha)assert.equal((await fetch(api+'/api/desktop/setup/install',{method:'POST'})).status,403,'Model downloads require explicit consent');
+ else assert.equal((await fetch(api+'/api/warm',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,503);
  assert.equal(await page.evaluate(()=>typeof window.require),'undefined');record('local-boundary-and-unavailable-service-gates');
  await page.evaluate(()=>{
   const connect=AudioNode.prototype.connect;
@@ -199,7 +202,7 @@ try{
  current=await launch(16970);await current.page.locator('#offline-sample').click();await current.page.locator('#stage').hover();await current.page.locator('#pause').click();await current.page.waitForFunction(()=>document.querySelector('#media').currentTime>.3);await current.page.screenshot({path:join(output,'packaged-player.png')});await current.application.evaluate(({app})=>app.quit());await stopped(current.pids);await closeApp(current.application);record('explicit-alternate-port-recovery');
  for(const entry of before)assert.equal(hash(readFileSync(entry.path)),entry.sha,'Immutable resource changed: '+entry.path);record('resources-unchanged-and-private-user-data-separated');
  assert.deepEqual(evidence.errors,[],'Unexpected packaged renderer errors');
- evidence.result='passed';evidence.limitations=['PCM verifies app output; no human listening or speaker/earbud certification.','Available runtime reference is recorded in environment.os and environment.kernel; a separate clean physical machine is not tested.','This initial runner covers packaging and sample only; local AI/speech/microphone integration remains pending. Microphone consent, native AI/speech, physical Mac installation, Gatekeeper, real audio devices, sleep/wake and Intel Macs are unqualified.'];
+ evidence.result='passed';evidence.limitations=['PCM verifies app output; no human listening or speaker/earbud certification.','Available runtime reference is recorded in environment.os and environment.kernel; a separate clean physical machine is not tested.','This app check covers startup without installed models, player, Studio, settings and cleanup. Native service evidence is separate. Full-context Metal/CPU conversation, setup/offline restart, OS microphone consent, physical installation/Gatekeeper, real devices, sleep/wake and Intel Macs remain unqualified.'];
 }catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);if(current)await closeApp(current.application);process.exitCode=1;}
 finally{for(const application of [...applications.keys()])await closeApp(application);if(conflict?.listening)await new Promise(accept=>conflict.close(accept));writeFileSync(join(output,'evidence.json'),JSON.stringify(evidence,null,2)+'\n');console.log('Evidence:',join(output,'evidence.json'));clearTimeout(watchdog);}
 // Failed Electron startup can retain a driver transport even after its child

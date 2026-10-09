@@ -41,7 +41,7 @@ jobs:
           const e=process.env;
           if(!e.BAMBI_QUOTA_RECORD?.trim() || !/^\d+$/.test(e.BAMBI_REMAINING_ARTIFACT_MIB)) throw Error("Record actual remaining allowance before dispatch.");
           if(!["linux-x64","windows-x64","macos-arm64"].includes(e.BAMBI_RELEASE_TARGET)) throw Error("Target not implemented.");
-          if(e.BAMBI_RELEASE_TARGET === "macos-arm64" && (process.platform !== "darwin" || process.arch !== "arm64" || e.BAMBI_RELEASE_PHASE !== "smoke")) throw Error("Apple Silicon smoke only until native integration is qualified.");
+          if(e.BAMBI_RELEASE_TARGET === "macos-arm64" && (process.platform !== "darwin" || process.arch !== "arm64")) throw Error("Native Apple Silicon host required.");
           if(e.BAMBI_RELEASE_TARGET === "linux-x64" && e.BAMBI_RELEASE_PHASE === "alpha") throw Error("Linux alpha currently requires its attended native freeze environment; use the local snapshot builder.");'
           if [ '${{ inputs.transfer_packages }}' = 'true' ] && { [ "$BAMBI_RELEASE_TARGET" != 'windows-x64' ] || [ "$BAMBI_RELEASE_PHASE" != 'alpha' ] || [ '${{ inputs.upload_packages }}' != 'true' ]; }; then
             echo 'Bounded transfer requires an explicitly requested Windows alpha upload.' >&2
@@ -92,7 +92,7 @@ jobs:
         run: xvfb-run --auto-servernum node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" qualify "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET" "$BAMBI_RELEASE_OUTPUT"
       - name: Native Apple Silicon received ZIP acceptance
         if: inputs.target == 'macos-arm64'
-        timeout-minutes: 10
+        timeout-minutes: ${{ inputs.phase == 'alpha' && 18 || 10 }}
         run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" qualify "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET" "$BAMBI_RELEASE_OUTPUT"
       - name: Save bounded macOS qualification diagnostics
         if: always() && inputs.target == 'macos-arm64'
@@ -108,6 +108,7 @@ jobs:
             ${{ env.BAMBI_RELEASE_OUTPUT }}/RUNTIME-MANIFEST.json
             ${{ env.BAMBI_RELEASE_OUTPUT }}/DESKTOP-QUALIFICATION.json
             ${{ env.BAMBI_RELEASE_OUTPUT }}/SOURCE-CHECKS.json
+            ${{ env.BAMBI_RELEASE_OUTPUT }}/MACOS-NATIVE-SPEECH-CHECK.json
       - name: Write the target readiness report
         if: success() || (always() && inputs.target == 'macos-arm64' && steps.build.outcome == 'success')
         run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" status "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_OUTPUT" > "$BAMBI_RELEASE_OUTPUT/RELEASE-STATUS.json"

@@ -22,7 +22,7 @@ test('readiness never treats a build, speech check or another version/platform a
  assert.equal(status([{target:'windows-x64',runtime:{...runtime,platform:'linux'}}]).status,'source-mismatch');
  assert.equal(status([{target:'windows-x64',runtime,qualification:{...qualification,sourceDigest:'old'}}]).status,'evidence-mismatch');
  assert.equal(status([{target:'windows-x64',runtime,qualification:{...qualification,gates:{packaging:'failed'}}}]).status,'failed');
- assert.equal(releaseReport(spec).ready,false);assert.equal(releaseReport(spec).targets.find(t=>t.target==='macos-arm64').status,'not-implemented');
+ assert.equal(releaseReport(spec).ready,false);assert.equal(releaseReport(spec).targets.find(t=>t.target==='macos-arm64').status,'not-built');
  assert.throws(()=>releaseReport(spec,[{target:'windows-x64',runtime,qualification:{...qualification,gates:{unknown:'passed'}}}]),/Invalid/);
  assert.throws(()=>releaseReport(spec,[{target:'windows-x64',runtime},{target:'windows-x64',runtime}]),/Duplicate/);
 });
@@ -30,7 +30,8 @@ test('readiness never treats a build, speech check or another version/platform a
 test('native target selection rejects cross-platform execution and unimplemented targets',()=>{
  assert.doesNotThrow(()=>assertNativeTarget(spec,'windows-x64','win32','x64'));
  assert.throws(()=>assertNativeTarget(spec,'windows-x64','linux','x64'),/native/);
- assert.throws(()=>assertNativeTarget(spec,'macos-arm64','darwin','arm64'),/phase is not implemented/);
+ assert.doesNotThrow(()=>assertNativeTarget(spec,'macos-arm64','darwin','arm64'));
+ assert.throws(()=>assertNativeTarget({...spec,phase:'future'},'macos-arm64','darwin','arm64'),/phase is not implemented/);
  assert.doesNotThrow(()=>assertNativeTarget({...spec,phase:'smoke'},'macos-arm64','darwin','arm64'));
  assert.throws(()=>assertNativeTarget({...spec,phase:'smoke'},'macos-arm64','darwin','x64'),/native/);
 });

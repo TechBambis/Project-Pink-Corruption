@@ -210,3 +210,5 @@ test-results/
 !/scripts/desktop-macos-build.mjs
 !/scripts/desktop-macos-check.mjs
 !/scripts/desktop-macos-support.mjs
+!/scripts/desktop-macos-native.mjs
+!/scripts/desktop-macos-runtime-check.mjs

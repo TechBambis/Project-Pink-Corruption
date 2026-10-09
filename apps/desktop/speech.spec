@@ -23,5 +23,6 @@ a.binaries = [entry for entry in a.binaries
 pyz = PYZ(a.pure)
 # eSpeak consumes UTF-8 paths; select that code page before CRT initialization.
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='bambi-speech', console=True, upx=False,
+          target_arch='arm64' if sys.platform == 'darwin' else None,
           manifest=str(root / 'apps/desktop/speech.manifest') if sys.platform == 'win32' else None)
 coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='bambi-speech')

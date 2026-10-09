@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {assertMachArm64,appPaths,ownedProcessIds,closeTrackedApplication} from '../scripts/desktop-macos-support.mjs';
+import {assertMachArm64,appPaths,ownedProcessIds,closeTrackedApplication,machOInfo,macNativeReport} from '../scripts/desktop-macos-support.mjs';
 import {readReleaseArtifact} from '../scripts/desktop-release-support.mjs';
 import {digest} from '../scripts/desktop-windows-support.mjs';
 
@@ -38,4 +38,14 @@ test('Mac automation closes using its retained child after Playwright disposes t
  assert.equal(kills,0);
  await closeTrackedApplication({close:()=>new Promise(()=>{})},{exitCode:null,signalCode:null,kill(signal){assert.equal(signal,'SIGKILL');kills++;}},10);
  assert.equal(kills,1);
+});
+test('Mac native dependency audit rejects truncated load commands and missing external libraries',t=>{
+ const dir=mkdtempSync(join(tmpdir(),'bambi-mac-load-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
+ const image=dependency=>{const name=Buffer.from(dependency+'\0'),length=Math.ceil((24+name.length)/8)*8,bytes=Buffer.alloc(32+length);bytes.writeUInt32LE(0xfeedfacf);bytes.writeUInt32LE(0x0100000c,4);bytes.writeUInt32LE(1,16);bytes.writeUInt32LE(length,20);bytes.writeUInt32LE(0xc,32);bytes.writeUInt32LE(length,36);bytes.writeUInt32LE(24,40);name.copy(bytes,56);return bytes;};
+ const system=image('/usr/lib/libSystem.B.dylib');assert.deepEqual(machOInfo(system).dependencies,['/usr/lib/libSystem.B.dylib']);
+ assert.throws(()=>machOInfo(system.subarray(0,system.length-1)),/Truncated/);
+ const path=join(dir,'service');writeFileSync(path,system);assert.deepEqual(macNativeReport(dir).unresolved,[]);
+ writeFileSync(path,image('/opt/homebrew/lib/libhost-only.dylib'));assert.equal(macNativeReport(dir).unresolved.length,1);
+ writeFileSync(path,image('@loader_path/libbundled.dylib'));writeFileSync(join(dir,'libbundled.dylib'),system);assert.deepEqual(macNativeReport(dir).unresolved,[]);
+ const foreign=Buffer.from(system);foreign.writeUInt32LE(0x01000007,4);writeFileSync(join(dir,'libbundled.dylib'),foreign);assert.throws(()=>macNativeReport(dir),/arm64/);
 });

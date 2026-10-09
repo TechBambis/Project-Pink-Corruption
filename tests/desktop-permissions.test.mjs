@@ -20,3 +20,17 @@ test('desktop policy rejects camera, GPS, subframes, foreign windows and smoke a
  assert.equal(await ask(handlers,contents,'geolocation',audio),false);assert.equal(await ask(handlers,{getURL:()=>origin+'/'},'media',audio),false);
  assert.equal(await ask(permissionHandlers({...options,alpha:false})),false);assert.equal(reads,0);
 });
+test('native microphone prompt follows app consent and rejects OS denial or errors',async()=>{
+ let enabled=false,calls=0,osAllowed=false;
+ const options={alpha:true,origin,ownedContents:()=>contents,readAccess:async()=>({configured:true,choices:{microphone:enabled}}),askSystemAccess:async()=>{calls++;return osAllowed;}};
+ assert.equal(await ask(permissionHandlers(options)),false);assert.equal(calls,0);
+ enabled=true;assert.equal(await ask(permissionHandlers(options)),false);assert.equal(calls,1);
+ osAllowed=true;assert.equal(await ask(permissionHandlers(options)),true);
+ assert.equal(await ask(permissionHandlers({...options,askSystemAccess:async()=>{throw Error('OS unavailable');}})),false);
+});
+test('native microphone approval cannot outlive app consent or its owning local page',async()=>{
+ let enabled=true,url=origin+'/',resolvePrompt;
+ const page={getURL:()=>url};const options={alpha:true,origin,ownedContents:()=>page,readAccess:async()=>({configured:true,choices:{microphone:enabled}}),askSystemAccess:()=>new Promise(resolve=>{resolvePrompt=resolve;})};
+ const revoked=ask(permissionHandlers(options),page);await new Promise(resolve=>setImmediate(resolve));enabled=false;resolvePrompt(true);assert.equal(await revoked,false);
+ enabled=true;const navigated=ask(permissionHandlers(options),page);await new Promise(resolve=>setImmediate(resolve));url='https://example.com/';resolvePrompt(true);assert.equal(await navigated,false);
+});

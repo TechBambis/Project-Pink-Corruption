@@ -1,6 +1,6 @@
 # Desktop builds
 
-Linux and Windows x64 share `scripts/desktop-release.mjs`, the source allowlist and `config/desktop-release.json`. **Smoke** packages test the shell/player; **alpha** packages add local AI and speech. Apple Silicon currently supports the packaging Smoke phase; native AI/speech integration remains pending.
+Linux/Windows x64 and Apple Silicon share `scripts/desktop-release.mjs`, the source allowlist and `config/desktop-release.json`. **Smoke** packages test the shell/player; **alpha** packages add local AI and speech. Apple Silicon Smoke passed received-ZIP CI checks; its Alpha build remains unqualified until the required native and recipient gates pass.
 
 ## Frozen source
 
@@ -47,18 +47,18 @@ For actual model tests, run `desktop-windows-ai-check.mjs EXE MODEL_DATA` using 
 
 ## macOS Apple Silicon
 
-On an Apple Silicon Mac (macOS 13+), use a fresh Smoke snapshot:
+On Apple Silicon, use a fresh snapshot (macOS 13+ for Smoke, 14+ for Alpha):
 
 ```sh
 node scripts/desktop-release.mjs build . macos-arm64
 node scripts/desktop-release.mjs qualify . macos-arm64 dist/desktop-macos/0.1.0-smoke.N
 ```
 
-Output: ZIP containing the app, matching source, notices, manifest and checksums. Extract the ZIP and copy the app to Applications. The tester has an ad-hoc signature and is not notarized. CI tests the extracted/copied final app, player PCM, Studio, settings and process cleanup. Downloaded Gatekeeper behavior, a physical Mac's audio and microphone consent, sleep/wake, Metal/CPU AI and offline speech remain separate qualification gates. No AI models ship in Smoke.
+Output: ZIP containing the app, matching source, notices, manifest and checksums. Extract the ZIP and copy the app to Applications. The tester has an ad-hoc signature and is not notarized. CI tests the extracted/copied final app, player PCM, Studio, settings and process cleanup. Alpha freezes hash-locked native speech and bundles arm64 llama.cpp; models are installed only through explicit setup. Its received-runtime checks cover synthesis and streaming recognition. Full-context Metal/CPU conversation, model setup/offline restart, downloaded Gatekeeper behavior, physical audio/microphone consent and sleep/wake remain required qualification gates.
 
 ## CI and evidence
 
-**Manual desktop release** selects Windows, Linux Smoke or Apple Silicon Smoke; Linux alpha currently uses an attended local build. Before private CI, verify account **337824705**, actual free allowance, storage and zero-spend controls. Use `upload_packages` within the recorded allowance; `transfer_packages` is the optional sequential-part receiver route.
+**Manual desktop release** selects Windows, Linux Smoke or Apple Silicon; Linux alpha currently uses an attended local build. Before private CI, verify account **337824705**, actual free allowance, storage and zero-spend controls. Use `upload_packages` within the recorded allowance; `transfer_packages` is the optional sequential-part receiver route.
 
 Compare built targets with `node scripts/desktop-release.mjs status SOURCE TARGET_OUTPUT...`. Keep runtime/source manifests, qualification records and their unchanged payloads. Source checks are bound to source/version/host. A build with missing required gates stays `built-unqualified`; test results from older packages are not reused.
 

@@ -1,12 +1,52 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync,realpathSync,existsSync} from 'node:fs';
+import {join,dirname,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 
 export function assertMachArm64(path){
  const bytes=readFileSync(path);
  if(bytes.length<32||bytes.readUInt32LE(0)!==0xfeedfacf||bytes.readUInt32LE(4)!==0x0100000c)
   throw Error('Expected native Mach-O arm64: '+path);
+}
+export function machOInfo(bytes){
+ if(bytes.length<32||bytes.readUInt32LE(0)!==0xfeedfacf||bytes.readUInt32LE(4)!==0x0100000c)throw Error('Expected thin Mach-O arm64');
+ const dependencies=[],rpaths=[];let offset=32;
+ const commands=bytes.readUInt32LE(16),end=32+bytes.readUInt32LE(20);
+ if(end>bytes.length)throw Error('Truncated Mach-O command table');
+ for(let index=0;index<commands;index++){
+  if(offset+8>end)throw Error('Truncated Mach-O command');
+  const command=bytes.readUInt32LE(offset),length=bytes.readUInt32LE(offset+4);
+  if(length<8||offset+length>end)throw Error('Invalid Mach-O command size');
+  if([0xc,0x80000018,0x8000001f,0x20,0x80000023,0x8000001c].includes(command)){
+   if(length<12)throw Error('Invalid Mach-O path command');
+   const start=offset+bytes.readUInt32LE(offset+8),finish=bytes.indexOf(0,start);
+   if(start<offset+12||start>=offset+length||finish<start||finish>=offset+length)throw Error('Invalid Mach-O path string');
+   (command===0x8000001c?rpaths:dependencies).push(bytes.toString('utf8',start,finish));
+  }
+  offset+=length;
+ }
+ if(offset!==end)throw Error('Mach-O command table size mismatch');
+ return {dependencies,rpaths};
+}
+export function macNativeReport(root){
+ root=realpathSync(root);const entries=[];
+ const walk=folder=>{for(const entry of readdirSync(folder,{withFileTypes:true})){
+  const path=join(folder,entry.name);
+  if(entry.isSymbolicLink()){if(!realpathSync(path).startsWith(root+'/'))throw Error('Native link escapes packaged runtime: '+path);continue;}
+  if(entry.isDirectory()){walk(path);continue;}if(!entry.isFile())throw Error('Unexpected native filesystem entry: '+path);
+  const bytes=readFileSync(path);
+  if(bytes.length>=4&&bytes.readUInt32LE(0)===0xfeedfacf)entries.push({path,...machOInfo(bytes)});
+  else if(/\.(so|dylib|exe|dll)$/.test(path)||bytes.subarray(0,4).equals(Buffer.from([0x7f,0x45,0x4c,0x46])))throw Error('Foreign or non-native runtime binary: '+path);
+ }};walk(root);
+ const unresolved=[];
+ const expand=(value,path)=>value.startsWith('@loader_path/')?resolve(dirname(path),value.slice(13)):value;
+ for(const entry of entries)for(const dependency of entry.dependencies){
+  if(dependency.startsWith('/System/Library/')||dependency.startsWith('/usr/lib/'))continue;
+  const candidates=dependency.startsWith('@rpath/')?entry.rpaths.map(rpath=>join(expand(rpath,entry.path),dependency.slice(7))):[expand(dependency,entry.path)];
+  if(!candidates.some(path=>existsSync(path)&&realpathSync(path).startsWith(root+'/')))unresolved.push({path:entry.path,dependency});
+ }
+ return {root,entries,unresolved};
 }
 export function processRows(){
  return execFileSync('/bin/ps',['-axo','pid=,ppid=,stat=,command='],{encoding:'utf8'}).split('\n').flatMap(line=>{
@@ -32,7 +72,7 @@ export async function closeTrackedApplication(application,child,timeoutMs=4000){
  }
 }
 export function appPaths(executable){
- if(!executable.endsWith('.app/Contents/MacOS/Bambi Local Smoke'))throw Error('Select the received macOS smoke app executable.');
+ if(!['Bambi Local Smoke','Bambi Local'].some(name=>executable.endsWith(name+'.app/Contents/MacOS/'+name)))throw Error('Select the received macOS app executable.');
  const contents=executable.slice(0,executable.lastIndexOf('/MacOS/'));
  return {contents,resources:contents+'/Resources',bundle:contents.slice(0,-'/Contents'.length)};
 }
