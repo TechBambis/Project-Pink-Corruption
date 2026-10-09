@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {assertMachArm64,appPaths,ownedProcessIds,closeTrackedApplication,machOInfo,macNativeReport} from '../scripts/desktop-macos-support.mjs';
@@ -48,4 +48,9 @@ test('Mac native dependency audit rejects truncated load commands and missing ex
  writeFileSync(path,image('/opt/homebrew/lib/libhost-only.dylib'));assert.equal(macNativeReport(dir).unresolved.length,1);
  writeFileSync(path,image('@loader_path/libbundled.dylib'));writeFileSync(join(dir,'libbundled.dylib'),system);assert.deepEqual(macNativeReport(dir).unresolved,[]);
  const foreign=Buffer.from(system);foreign.writeUInt32LE(0x01000007,4);writeFileSync(join(dir,'libbundled.dylib'),foreign);assert.throws(()=>macNativeReport(dir),/arm64/);
+});
+test('Mac Python redistribution retains each exact archive notice under a unique path',()=>{
+ const root=new URL('../docs/licenses/macos-python-3.12.13/',import.meta.url),provenance=JSON.parse(readFileSync(new URL('PROVENANCE.json',root),'utf8'));
+ assert.equal(new Set(provenance.notices.map(n=>n.file)).size,provenance.notices.length);
+ for(const notice of provenance.notices){assert(!notice.file.startsWith('/')&&!notice.file.split('/').includes('..'));const bytes=readFileSync(new URL(notice.file,root));assert.equal(bytes.length,notice.bytes);assert.equal(digest(bytes),notice.sha256,notice.file);}
 });
