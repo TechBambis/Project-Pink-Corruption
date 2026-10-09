@@ -13,9 +13,9 @@ export function acceleratorMode(value){
  throw Error('Choose Automatic or CPU acceleration.');
 }
 export function deviceBackend(id){
- const match=/^(CUDA|Vulkan|Metal|ROCm|HIP|SYCL)(\d*)$/.exec(id);
+ const match=/^(CUDA|Vulkan|Metal|MTL|ROCm|HIP|SYCL)(\d*)$/.exec(id);
  if(!match||(!match[2]&&match[1]!=='Metal'))return null;
- return {CUDA:'cuda',Vulkan:'vulkan',Metal:'metal',ROCm:'hip',HIP:'hip',SYCL:'sycl'}[match[1]];
+ return {CUDA:'cuda',Vulkan:'vulkan',Metal:'metal',MTL:'metal',ROCm:'hip',HIP:'hip',SYCL:'sycl'}[match[1]];
 }
 /** Accept only local device identifiers emitted by the owned llama runtime. */
 export function acceleratorDevices(output,backend){

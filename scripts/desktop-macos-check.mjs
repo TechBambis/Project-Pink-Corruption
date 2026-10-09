@@ -101,6 +101,21 @@ try{
  if(alpha)assert.equal((await fetch(api+'/api/desktop/setup/install',{method:'POST'})).status,403,'Model downloads require explicit consent');
  else assert.equal((await fetch(api+'/api/warm',{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,503);
  assert.equal(await page.evaluate(()=>typeof window.require),'undefined');record('local-boundary-and-unavailable-service-gates');
+ if(alpha){
+  await page.goto(api+'/setup');await page.waitForSelector('.model-list input',{state:'attached'});
+  const catalog=await page.evaluate(async()=>await(await fetch('/api/models/catalog')).json()),reference=catalog.alternatives.find(model=>model.id==='bambi-qwen35-9b-hauhau:q4_k_m');assert(reference);
+  assert.equal(reference.contextTokens,24576);assert.equal(reference.weightsBytes,5627044224);
+  await page.getByRole('button',{name:'2. Choose a model',exact:true}).click();await page.locator('input[value="'+reference.id+'"]').check();await page.getByRole('button',{name:'3. Install and start',exact:true}).click();
+  await page.locator('[data-access]').click();await page.locator('#privacy-access[open]').waitFor();await page.locator('#privacy-access [name=modelDownloads]').check();await page.locator('#privacy-access button[type=submit]').click();await page.locator('#privacy-access').waitFor({state:'hidden'});
+  assert.equal(await page.evaluate(async()=>(await(await fetch('/api/access')).json()).choices.modelDownloads),true);
+  const controls={downloadDisabled:await page.locator('#setup-install').isDisabled(),importDisabled:await page.locator('#setup-copy').isDisabled(),prepareDisabled:await page.locator('#setup-prepare').isDisabled()};
+  if(reference.memoryFit!=='fits')assert(controls.downloadDisabled&&controls.importDisabled&&controls.prepareDisabled,'Setup must retain its real memory guard after download consent');
+  record('reference-model-selection-and-real-hardware-fit-guard',{hardware:catalog.hardware,reference,controls,modelDownloaded:false,fullContextPreserved:true});
+  await page.screenshot({path:join(output,'setup-memory-guard.png')});
+  await page.locator('[data-access]').click();await page.locator('#privacy-access[open]').waitFor();await page.locator('#privacy-access [data-local-only]').click();await page.locator('#privacy-access').waitFor({state:'hidden'});
+  assert.equal(await page.evaluate(async()=>(await(await fetch('/api/access')).json()).choices.modelDownloads),false);
+  await page.goto(api+'/');await page.waitForSelector('#offline-sample',{state:'visible'});
+ }
  await page.evaluate(()=>{
   const connect=AudioNode.prototype.connect;
   AudioNode.prototype.connect=function(destination,...args){

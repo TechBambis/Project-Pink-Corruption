@@ -66,6 +66,9 @@ try{
  await page.goto(origin+'/setup');await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='not-installed');
  const denied=await page.evaluate(async()=>{let microphone;try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(track=>track.stop());microphone='granted';}catch(error){microphone=error.name;}return {download:(await fetch('/api/desktop/setup/install',{method:'POST'})).status,microphone};});
  assert.deepEqual(denied,{download:403,microphone:'NotAllowedError'});record('explicit-download-and-microphone-consent-required',denied);
+ const catalog=await page.evaluate(async()=>await(await fetch('/api/models/catalog')).json()),reference=catalog.alternatives.find(model=>model.id==='bambi-qwen35-9b-hauhau:q4_k_m');assert(reference);assert.equal(reference.contextTokens,24576);assert.equal(reference.weightsBytes,5627044224);
+ record('reference-model-real-hardware-fit-observation',{hardware:catalog.hardware,reference});
+ assert.equal(reference.memoryFit,'fits','The actual Mac must pass the full reference model memory guard before setup/conversation acceptance. Model, context and hardware must not be substituted.');
  await page.getByRole('button',{name:'3. Install and start',exact:true}).click();
  if(downloads){
   await page.locator('[data-access]').click();await page.locator('#privacy-access[open]').waitFor();await page.locator('#privacy-access [name=modelDownloads]').check();await page.locator('#privacy-access button[type=submit]').click();await page.locator('#privacy-access').waitFor({state:'hidden'});

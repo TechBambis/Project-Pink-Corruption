@@ -43,7 +43,9 @@ function enumerate(command,env,timeout,signal){
   signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();
  });
 }
-export async function acceleratorPlan({command,library,platform,environment,mode,context,blocked=[],devices:cachedDevices,cpuThreads=availableParallelism(),probeTimeoutMs=8000,signal=new AbortController().signal}){
+// Cold Metal discovery in the received runtime took 22.7 seconds on a standard
+// Apple Silicon runner. Preserve the existing Windows/Linux bound.
+export async function acceleratorPlan({command,library,platform,environment,mode,context,blocked=[],devices:cachedDevices,cpuThreads=availableParallelism(),probeTimeoutMs=platform==='darwin'?60000:8000,signal=new AbortController().signal}){
  const requested=acceleratorMode(mode),devices=[...(cachedDevices??[])],probeFailures=[];
  const cpuEnvironment=acceleratorEnvironment(environment,{library,platform});
  if(requested==='auto'&&!cachedDevices){

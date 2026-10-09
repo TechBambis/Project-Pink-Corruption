@@ -35,6 +35,22 @@ test('loader and visibility overrides are removed in both CPU and GPU environmen
  assert.equal(source.GGML_BACKEND_PATH,'foreign');
 });
 
+test('the received Mac MTL identifier selects Metal without changing Windows/Linux candidates',()=>{
+ const devices=acceleratorDevices('Available devices:\n  MTL0: Apple Paravirtual device (4778 MiB, 4778 MiB free)\n  BLAS: Accelerate (0 MiB, 0 MiB free)');
+ assert.deepEqual(devices,[{id:'MTL0',backend:'metal',name:'Apple Paravirtual device',totalMiB:4778,freeMiB:4778}]);
+ assert.deepEqual(acceleratorCandidates(devices,'darwin').map(device=>device.id),['MTL0']);
+ assert.deepEqual(acceleratorCandidates(devices,'linux'),[]);assert.deepEqual(acceleratorCandidates(devices,'win32'),[]);
+ assert.equal(acceleratorArguments(devices[0],24576)[1],'MTL0');
+ assert.equal(acceleratorDevices('MTL: Missing index (4778 MiB, 4778 MiB free)\nMTL0;bad: Bad (4778 MiB, 4778 MiB free)').length,0);
+});
+
+test('cold Mac discovery may exceed the existing eight-second bound and still produce a Metal plan',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'Bambi cold Metal fixture '));t.after(()=>rm(root,{recursive:true,force:true}));
+ const script=join(root,'probe.mjs');await writeFile(script,"setTimeout(()=>console.log('MTL0: Apple Paravirtual device (4778 MiB, 4778 MiB free)'),8500);");
+ const plan=await acceleratorPlan({command:{executable:process.execPath,prefix:[script]},platform:'darwin',library:root,context:24576,environment:process.env});
+ assert.deepEqual(plan.attempts.map(attempt=>attempt.device?.backend??'cpu'),['metal','cpu']);assert.deepEqual(plan.probeFailures,[]);
+});
+
 test('an unusable optional plugin leaves a working backend available; CPU never inherits its loader',async t=>{
  const root=await mkdtemp(join(tmpdir(),'Bambi backend probes ü '));t.after(()=>rm(root,{recursive:true,force:true}));
  for(const backend of ['cuda','vulkan']){await mkdir(join(root,backend));await writeFile(join(root,backend,`libggml-${backend}.so`),'fixture');}

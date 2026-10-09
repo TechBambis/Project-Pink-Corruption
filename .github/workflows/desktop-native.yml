@@ -17,7 +17,7 @@ jobs:
   native:
     if: inputs.quota_checked && github.actor_id == '337824705'
     runs-on: ${{ inputs.target == 'macos-arm64' && 'macos-15' || inputs.target == 'windows-x64' && 'windows-2022' || 'ubuntu-24.04' }}
-    timeout-minutes: ${{ inputs.target == 'macos-arm64' && inputs.phase == 'smoke' && 15 || inputs.target == 'macos-arm64' && 25 || 60 }}
+    timeout-minutes: ${{ inputs.target == 'macos-arm64' && 15 || 60 }}
     env:
       BAMBI_RELEASE_TARGET: ${{ inputs.target }}
       BAMBI_RELEASE_PHASE: ${{ inputs.phase }}
@@ -92,7 +92,7 @@ jobs:
         run: xvfb-run --auto-servernum node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" qualify "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET" "$BAMBI_RELEASE_OUTPUT"
       - name: Native Apple Silicon received ZIP acceptance
         if: inputs.target == 'macos-arm64'
-        timeout-minutes: ${{ inputs.phase == 'alpha' && 18 || 10 }}
+        timeout-minutes: 10
         run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" qualify "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET" "$BAMBI_RELEASE_OUTPUT"
       - name: Save bounded macOS qualification diagnostics
         if: always() && inputs.target == 'macos-arm64'
@@ -104,6 +104,7 @@ jobs:
           path: |
             ${{ env.BAMBI_RELEASE_OUTPUT }}/qualification-macos/*/evidence.json
             ${{ env.BAMBI_RELEASE_OUTPUT }}/qualification-macos/*/packaged-player.png
+            ${{ env.BAMBI_RELEASE_OUTPUT }}/qualification-macos/*/setup-memory-guard.png
             ${{ env.BAMBI_RELEASE_OUTPUT }}/qualification-macos/*/User data ä/logs/backend.log
             ${{ env.BAMBI_RELEASE_OUTPUT }}/RUNTIME-MANIFEST.json
             ${{ env.BAMBI_RELEASE_OUTPUT }}/DESKTOP-QUALIFICATION.json
