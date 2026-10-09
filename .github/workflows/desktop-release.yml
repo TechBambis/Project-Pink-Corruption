@@ -41,8 +41,6 @@ jobs:
   evidence:
     runs-on: macos-15
     timeout-minutes: 5
-    env:
-      BAMBI_EVIDENCE_OUTPUT: ${{ runner.temp }}/macos-native-evidence
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -54,6 +52,8 @@ jobs:
         env:
           QUOTA_RECORD: ${{ inputs.quota_record }}
         run: node -e 'if(process.platform!=="darwin"||process.arch!=="arm64"||!process.env.QUOTA_RECORD.trim())throw Error("Native standard Apple Silicon and recorded free allowance required");'
+      - name: Locate private diagnostic output
+        run: echo "BAMBI_EVIDENCE_OUTPUT=$RUNNER_TEMP/macos-native-evidence" >> "$GITHUB_ENV"
       - run: npm ci --ignore-scripts
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
