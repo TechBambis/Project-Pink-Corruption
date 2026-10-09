@@ -11,6 +11,7 @@ import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
 import {macNativeReport} from './desktop-macos-support.mjs';
 import {downloadPinned,inventory,hashFile} from './desktop-windows-support.mjs';
+import {acceleratorDevices} from '../packages/runtime/accelerator-policy.mjs';
 
 if(process.platform!=='darwin'||process.arch!=='arm64')throw Error('Native Apple Silicon is required.');
 const root=resolve(fileURLToPath(new URL('../',import.meta.url)));process.chdir(root);
@@ -85,6 +86,9 @@ try{
  const required=['--ctx-size','--parallel','--ctx-checkpoints','--checkpoint-min-step','--cache-ram','--gpu-layers','--flash-attn','--jinja','--reasoning','--no-webui','--cache-type-k','--cache-type-v','--api-key','--alias','--device','--list-devices','--fit','--fit-ctx','--fit-target'];
  for(const option of required)assert(options.includes(option),'Native llama lacks required option '+option);
  record('relocated-native-llama-loader-and-required-options',{sha256:await hashFile(llama),options:required,modelLoaded:false});
+ let devices=[],probeFailure;
+ try{devices=acceleratorDevices(execFileSync(llama,['--list-devices'],{env,cwd:data,encoding:'utf8',timeout:15000,maxBuffer:1024**2}),'metal');}catch(error){probeFailure=String(error.message);}
+ record('native-Metal-device-discovery-observation',{devices,probeFailure,modelLoaded:false,gpuOffloading:false});
  for(const asset of manifest.assets.slice(1))await downloadPinned(asset,join(models,asset.path));
  record('checksum-verified-public-speech-assets',{assets:manifest.assets.slice(1).map(({path,bytes,sha256})=>({path,bytes,sha256})),chatModelDownloaded:false});
  const original=await inventory(backend),speech=join(backend,'native/speech/bambi-speech'),servicePort=await port();env.BAMBI_TTS_PORT=String(servicePort);
