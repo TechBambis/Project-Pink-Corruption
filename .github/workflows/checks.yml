@@ -51,7 +51,7 @@ jobs:
         run: npm run test:settings
       - name: Save browser diagnostics on failure
         if: failure() && matrix.node == 24
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-diagnostics-node-${{ matrix.node }}
           retention-days: 1
