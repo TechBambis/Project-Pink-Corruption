@@ -32,10 +32,13 @@ const reservation=createServer();reservation.listen(0,'127.0.0.1');await once(re
 const base=`http://127.0.0.1:${port}`,errors=[];let browser,logs='';
 // A separate working directory excludes private .env files, recordings and caches.
 const fixture=mkdtempSync(join(tmpdir(),'bambi-browser-check-'));
-for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])
+for(const name of ['packages','presets','voices','apps','docs','dist','config','node_modules'])
  if(existsSync(join(root,name)))symlinkSync(join(root,name),join(fixture,name),process.platform==='win32'?'junction':'dir');
 if(realStreaming){mkdirSync(join(fixture,'.runtime'),{recursive:true});for(const name of ['streaming-stt-venv','streaming-speech'])symlinkSync(join(root,'.runtime',name),join(fixture,'.runtime',name),'dir');}
 writeFileSync(join(fixture,'package.json'),'{"type":"module"}');
+// Native preparation/cleanup must never resolve a symlink to the real lifecycle owner.
+mkdirSync(join(fixture,'scripts'),{recursive:true});
+writeFileSync(join(fixture,'scripts/llama-runtime.py'),'print("Simulated native lifecycle")\n');
 writeFileSync(join(fixture,'bootstrap.mjs'),`
  import dgram from 'node:dgram';
  import {EventEmitter} from 'node:events';
@@ -43,7 +46,7 @@ writeFileSync(join(fixture,'bootstrap.mjs'),`
  await import(${JSON.stringify(new URL('../apps/server/index.ts',import.meta.url).href)});
 `);
 const inherited=Object.fromEntries(Object.entries(process.env).filter(([key])=>!/^BAMBI_|^OLLAMA_/.test(key)));
-const app=spawn(process.execPath,['--import','tsx','bootstrap.mjs'],{cwd:fixture,env:{...inherited,BAMBI_PORT:String(port),BAMBI_DATABASE:':memory:',BAMBI_TTS_URL:`http://127.0.0.1:${stubPort}`,BAMBI_CLOUD_URL:`http://127.0.0.1:${stubPort}`,BAMBI_CLOUD_MODEL:'Cydonia-24B-v4.3',BAMBI_CLOUD_CONTEXT:'32768',BAMBI_CLOUD_KIND:'llama.cpp',BAMBI_CLOUD_API_KEY:'fixture-key'},stdio:['ignore','pipe','pipe']});
+const app=spawn(process.execPath,['--import','tsx','bootstrap.mjs'],{cwd:fixture,env:{...inherited,BAMBI_PORT:String(port),BAMBI_DATABASE:':memory:',BAMBI_LLM_URL:`http://127.0.0.1:${stubPort}`,BAMBI_TTS_URL:`http://127.0.0.1:${stubPort}`,BAMBI_CLOUD_URL:`http://127.0.0.1:${stubPort}`,BAMBI_CLOUD_MODEL:'Cydonia-24B-v4.3',BAMBI_CLOUD_CONTEXT:'32768',BAMBI_CLOUD_KIND:'llama.cpp',BAMBI_CLOUD_API_KEY:'fixture-key'},stdio:['ignore','pipe','pipe']});
 app.stdout.on('data',data=>logs+=data);app.stderr.on('data',data=>logs+=data);
 let auditPage;
 try{
@@ -69,9 +72,97 @@ try{
  const fixtureModelSave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON().settings.model==='cloud:cydonia-24b-v4.3'&&response.ok());
  await page.evaluate(()=>{const model=document.getElementById('model');model.value='cloud:cydonia-24b-v4.3';model.dispatchEvent(new Event('input',{bubbles:true}));});
  await fixtureModelSave;
+ // Q8 UI contract only: native worker switching is tested separately with isolated children.
+ let cacheEnabled=false,failCache=false,holdCache=null;
+ let dflashEnabled=false,failDflash=false,holdDflash=null;const dflashRequests=[];
+ const cacheRequests=[];
+ await page.route('**/api/health',async route=>{const response=await route.fetch();const data=await response.json();data.kvCache={supported:true,model:'bambi-qwen35-9b-hauhau:q4_k_m',enabled:cacheEnabled};data.dflash={supported:true,model:'bambi-qwen35-4b-hauhau:q4_k_m',enabled:dflashEnabled};data.models=[...new Set([...(data.models||[]),'bambi-qwen35-9b-hauhau:q4_k_m','bambi-qwen35-4b-hauhau:q4_k_m','bambi-qwen35-4b-hauhau-mtp-experiment:q4_k_m','bambi-qwen35-4b-hauhau-mtp-baseline:q4_k_m'])];await route.fulfill({response,json:data});});
+ await page.route('**/api/preferences',async route=>{if(route.request().method()!=='GET'){await route.continue();return;}const response=await route.fetch();await route.fulfill({response,json:{...await response.json(),'q8-kv-cache':cacheEnabled,'dflash-4b':dflashEnabled}});});
+ await page.route('**/api/runtime/kv-cache',async route=>{const data=route.request().postDataJSON();cacheRequests.push(data);if(holdCache)await holdCache;if(failCache){await route.fulfill({status:503,json:{error:'Fixture cache preparation failed'}});return;}cacheEnabled=data.enabled;await route.fulfill({json:{ok:true,enabled:cacheEnabled,supported:true}});});
+ await page.route('**/api/runtime/dflash',async route=>{const data=route.request().postDataJSON();dflashRequests.push(data);if(holdDflash)await holdDflash;if(failDflash){await route.fulfill({status:503,json:{error:'Fixture DFlash preparation failed'}});return;}dflashEnabled=data.enabled;await route.fulfill({json:{ok:true,enabled:dflashEnabled,supported:true}});});
+ await page.locator('[data-nav="voice"]').click();
+ await page.locator('#ai-advanced-settings summary').click();
+ const q8ModelSave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON().model==='bambi-qwen35-9b-hauhau:q4_k_m'&&response.ok());
+ await page.evaluate(()=>{const select=document.getElementById('model');if(![...select.options].some(o=>o.value==='bambi-qwen35-9b-hauhau:q4_k_m'))select.add(new Option('Hauhau 9B','bambi-qwen35-9b-hauhau:q4_k_m'));select.value='bambi-qwen35-9b-hauhau:q4_k_m';select.dispatchEvent(new Event('input',{bubbles:true}));});
+ await q8ModelSave;
+ await page.waitForFunction(()=>!document.getElementById('q8-kv-cache').disabled);
+ assert.equal(await page.locator('#q8-kv-cache').isChecked(),false,'Q8 defaults off');
+ let releaseCache;holdCache=new Promise(resolve=>{releaseCache=resolve;});
+ await page.locator('#q8-kv-cache').check();
+ await page.waitForFunction(()=>document.getElementById('q8-kv-cache').disabled&&document.getElementById('q8-kv-status').textContent.startsWith('Preparing'));
+ releaseCache();holdCache=null;
+ await page.waitForFunction(()=>!document.getElementById('q8-kv-cache').disabled&&document.getElementById('q8-kv-status').textContent.startsWith('On'));
+ await page.reload();
+ await page.waitForFunction(()=>document.getElementById('q8-kv-cache').checked);
+ await page.locator('[data-nav="voice"]').click();
+ if(!await page.locator('#q8-kv-cache').isVisible())await page.locator('#ai-advanced-settings summary').click();
+ await page.waitForFunction(()=>!document.getElementById('q8-kv-cache').disabled);
+ failCache=true;await page.locator('#q8-kv-cache').uncheck();
+ await page.waitForFunction(()=>!document.getElementById('q8-kv-cache').disabled&&document.getElementById('q8-kv-cache').checked);
+ assert.match(await page.locator('#notice').textContent(),/Fixture cache preparation failed/);
+ failCache=false;await page.locator('#q8-kv-cache').uncheck();
+ await page.waitForFunction(()=>!document.getElementById('q8-kv-cache').disabled&&document.getElementById('q8-kv-status').textContent.startsWith('Off'));
+ assert.deepEqual(cacheRequests.map(r=>r.enabled),[true,false,false]);
+ assert(cacheRequests.every(r=>r.model==='bambi-qwen35-9b-hauhau:q4_k_m'));
+ await page.evaluate(()=>{const model=document.getElementById('model');model.value='cloud:cydonia-24b-v4.3';model.dispatchEvent(new Event('input',{bubbles:true}));});
+ await page.waitForFunction(()=>document.getElementById('q8-kv-cache').disabled);
+ // Installed 4B is an ordinary model choice; DFlash remains a separate opt-in.
+ const fourBModelSave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON().model==='bambi-qwen35-4b-hauhau:q4_k_m'&&response.ok());
+ await page.locator('#model').selectOption('bambi-qwen35-4b-hauhau:q4_k_m');
+ await page.locator('#model').dispatchEvent('input');
+ await fourBModelSave;
+ await page.waitForFunction(()=>!document.getElementById('dflash-4b').disabled);
+ assert.match(await page.locator('#model option:checked').textContent(),/4B.*Experimental/);
+ assert.equal(await page.locator('#dflash-4b').isChecked(),false);
+ assert.equal(await page.locator('#q8-kv-cache').isDisabled(),true);
+ let releaseDflash;holdDflash=new Promise(resolve=>{releaseDflash=resolve;});
+ await page.locator('#dflash-4b').check();
+ await page.waitForFunction(()=>document.getElementById('dflash-4b').disabled&&document.getElementById('dflash-status').textContent.startsWith('Preparing'));
+ releaseDflash();holdDflash=null;
+ await page.waitForFunction(()=>!document.getElementById('dflash-4b').disabled&&document.getElementById('dflash-status').textContent.startsWith('On'));
+ await page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON().model==='bambi-qwen35-4b-hauhau:q4_k_m'&&response.ok());
+ await page.reload();
+ await page.waitForFunction(()=>document.getElementById('dflash-4b').checked&&document.getElementById('model').value==='bambi-qwen35-4b-hauhau:q4_k_m');
+ await page.locator('[data-nav="voice"]').click();
+ if(!await page.locator('#dflash-4b').isVisible())await page.locator('#ai-advanced-settings summary').click();
+ failDflash=true;await page.locator('#dflash-4b').uncheck();
+ await page.waitForFunction(()=>!document.getElementById('dflash-4b').disabled&&document.getElementById('dflash-4b').checked);
+ assert.match(await page.locator('#notice').textContent(),/Fixture DFlash preparation failed/);
+ failDflash=false;await page.locator('#dflash-4b').uncheck();
+ await page.waitForFunction(()=>!document.getElementById('dflash-4b').disabled&&document.getElementById('dflash-status').textContent.startsWith('Off'));
+ assert.deepEqual(dflashRequests.map(r=>r.enabled),[true,false,false]);
+ assert(dflashRequests.every(r=>r.model==='bambi-qwen35-4b-hauhau:q4_k_m'));
+ // MTP is a pair of explicit model choices; neither changes the selected personality.
+ const originalCharacter=await page.locator('#prompt-template').inputValue();
+ for(const alias of ['bambi-qwen35-4b-hauhau-mtp-experiment:q4_k_m','bambi-qwen35-4b-hauhau-mtp-baseline:q4_k_m']){
+  const saved=page.waitForResponse(r=>r.url().endsWith('/api/preferences')&&r.request().method()==='PUT'&&r.request().postDataJSON().model===alias&&r.ok());
+  await page.locator('#model').selectOption(alias);await page.locator('#model').dispatchEvent('input');await saved;
+  assert.equal(await page.locator('#prompt-template').inputValue(),originalCharacter);
+  assert.equal(await page.locator('#dflash-4b').isDisabled(),true,'DFlash does not apply to the MTP export');
+  await page.reload();await page.waitForFunction(alias=>window.bambi&&document.getElementById('model').value===alias,alias);
+  assert.equal(await page.locator('#prompt-template').inputValue(),originalCharacter);
+  await page.locator('[data-nav="voice"]').click();
+  if(!await page.locator('#model').isVisible())await page.locator('#ai-advanced-settings summary').click();
+ }
+ await page.locator('#model').selectOption('bambi-qwen35-9b-hauhau:q4_k_m');await page.locator('#model').dispatchEvent('input');
+ await page.waitForFunction(()=>document.getElementById('dflash-4b').disabled);
+ await page.locator('#model').selectOption('cloud:cydonia-24b-v4.3');await page.locator('#model').dispatchEvent('input');
+ await page.unroute('**/api/runtime/dflash');
+ await page.unroute('**/api/runtime/kv-cache');await page.unroute('**/api/health');await page.unroute('**/api/preferences');
+ const invalidCache=await fetch(base+'/api/runtime/kv-cache',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:true,model:'cloud:cydonia-24b-v4.3'})});assert.equal(invalidCache.status,400);
+ const invalidDflash=await fetch(base+'/api/runtime/dflash',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:true,model:'bambi-qwen35-9b-hauhau:q4_k_m'})});assert.equal(invalidDflash.status,400);
+ const originalPreferences=await (await fetch(base+'/api/preferences')).json();
+ const ordinarySave=await fetch(base+'/api/preferences',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({...originalPreferences,'q8-kv-cache':true,'dflash-4b':true})});assert.equal(ordinarySave.status,200);
+ assert.equal((await (await fetch(base+'/api/preferences')).json())['q8-kv-cache'],false,'Ordinary preference saves cannot bypass runtime preparation');
+ assert.equal((await (await fetch(base+'/api/preferences')).json())['dflash-4b'],false,'Ordinary preference saves cannot bypass DFlash preparation');
+ await page.locator('[data-nav="session"]').click();
+
  const output=join(root,'.runtime/navigation-preview');mkdirSync(output,{recursive:true});
  const report={scope:'Fresh isolated profile; simulated AI and voice, no private recordings or physical devices.',checks:[],errors};
  const check=(name)=>{report.checks.push(name);};
+ check('Q8 defaults off, locks while preparing, survives reload, rolls back on failure and can be switched off; other models disable it. Simulated runtime only.');
+ check('MTP on/off choices persist across reload without changing character; DFlash is unavailable for that export. Simulated runtime only.');
+ check('4B can be selected and restored across reload; DFlash defaults off, locks, rolls back and switches off; switching back to 9B disables DFlash. Simulated runtime only.');
  const state=()=>page.evaluate(()=>({mode:document.getElementById('mode').value,narration:document.getElementById('narration-enabled').checked,events:document.getElementById('session-events').checked,style:document.getElementById('conversation-style').value,voice:document.getElementById('voice').value,master:document.getElementById('master').value,active:window.bambi.director.active}));
  assert.equal((await state()).narration,true);assert.equal((await state()).events,true);
  assert.equal(await page.locator('#duration').inputValue(),'unlimited');
@@ -79,7 +170,7 @@ try{
  assert.equal(await page.locator('#session-flow-settings').evaluate(node=>node.open),false);
  assert.equal(await page.locator('#session-direction-settings').isVisible(),true);
  assert.equal(await page.locator('.experience-bar').count(),0);
- assert.equal(await page.locator('#experience-choices [aria-pressed="true"]').locator('span').innerText(),'Guided session');
+ assert.equal(await page.locator('#experience-choices [aria-pressed="true"]').locator('span').innerText(),'Interactive session');
  assert.equal((await state()).active,false);
  assert.ok((await page.locator('#stage').boundingBox()).y<30,'Picture starts at the top without a header');
  check('Fresh profile defaults to Guided without autoplay; header removed; navigation ordered by priority.');
@@ -120,15 +211,26 @@ try{
  assert.equal(await page.locator('#guided-style').inputValue(),guidedStyle);
  await page.screenshot({path:join(output,'desktop-chat-personality.png')});
  check('Chat personality and Guided narration style are independent; built-in personalities disable only custom chat text.');
+ const englishSave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON()['prompt-template']==='english-conversation'&&response.ok());
+ await page.locator('#prompt-template').selectOption('english-conversation');await englishSave;
+ assert.match(await page.locator('#prompt-description').innerText(),/arguments.*corrections/);
+ assert.equal(await page.locator('#persona').isDisabled(),true);
+ await page.reload();await page.waitForFunction(()=>document.getElementById('prompt-template').value==='english-conversation');
+ await page.locator('[data-nav="voice"]').click();
+ if(!await page.locator('#prompt-template').isVisible())await page.locator('#chat-personality-settings summary').click();
+ assert.equal(await page.locator('#persona').inputValue(),chatPersonality);
+ const classicSave=page.waitForResponse(response=>response.url().endsWith('/api/preferences')&&response.request().method()==='PUT'&&response.request().postDataJSON()['prompt-template']==='bambisleep-classic'&&response.ok());
+ await page.locator('#prompt-template').selectOption('bambisleep-classic');await classicSave;
+ check('English Conversation is selectable and persists after reload without replacing custom personality text.');
  await openSetup();
  await page.waitForFunction(()=>document.getElementById('session-launch').getBoundingClientRect().bottom<innerHeight);
  assert.equal(await page.locator('#session-direction-settings').isVisible(),true);
+ await page.locator('#direction-details summary').click();
  await page.locator('#session-direction').selectOption('reference-contrast');
  assert.equal(await page.locator('#direction-contrast').inputValue(),'90');
  assert.equal(await page.locator('#direction-repetition').inputValue(),'65');
  assert.ok((await page.locator('#direction-influence').innerText()).includes('Tom Tame'));
  assert.equal((await state()).voice,'af_sarah');assert.equal((await state()).master,'0.41');
- await page.locator('#direction-details summary').click();
  await page.locator('#direction-motifs').selectOption('heart');
  await page.locator('#direction-mindwipe').uncheck();
  assert.equal(await page.locator('#session-direction').inputValue(),'custom');
@@ -151,8 +253,8 @@ try{
  assert.equal(await page.evaluate(()=>window.bambi.sessionEvents.program.events[0].speech.delivery),'settle');
  const initialDirectionProgram=await page.evaluate(()=>window.bambi.sessionEvents.program);
  const committedDirectionEvent=await page.evaluate(()=>window.bambi.sessionEvents.program.events[0]);
- await page.locator('#session-direction').selectOption('driving');
  await page.locator('#direction-details summary').click();
+ await page.locator('#session-direction').selectOption('driving');
  await page.locator('#direction-motifs').selectOption('ring');
  assert.deepEqual(await page.evaluate(()=>window.bambi.sessionEvents.program.events[0]),committedDirectionEvent);
  check('Saved direction reaches the actual engine; live edits leave already committed episode boundaries intact.');
@@ -262,7 +364,7 @@ try{
  assert.equal(await page.locator('#guided-style').inputValue(),'Legacy gentle style.');
  assert.equal(await page.locator('#persona').inputValue(),'Legacy gentle style.');
  assert.equal((await state()).events,false);assert.equal((await state()).voice,'af_sarah');assert.equal((await state()).master,'0.41');
- assert.equal(await page.locator('#experience-choices [aria-pressed="true"]').locator('span').innerText(),'Guided session');
+ assert.equal(await page.locator('#experience-choices [aria-pressed="true"]').locator('span').innerText(),'Interactive session');
  await choose('guided');assert.equal((await state()).events,true);assert.equal((await state()).active,false);
  assert.equal((await state()).voice,'af_sarah');assert.equal((await state()).master,'0.41');
  check('Legacy profile retains settings on reload; explicit Guided selection enables the director without resetting voice/mix.');

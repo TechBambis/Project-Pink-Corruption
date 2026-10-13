@@ -4,13 +4,13 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { analyseWiper, wiperFrame, emptyWiperFrame, type WiperPlayback } from '../packages/audio/wiper';
+import { analyseWiper, wiperMotionProfile, wiperFrame, emptyWiperFrame, type WiperPlayback } from '../packages/audio/wiper';
 import { synthesizeTriggerSound } from '../packages/audio/trigger-synthesis';
 import { createEpisode } from '../packages/session-director/events/episodes';
 import { EventSchema } from '../packages/session-director/events/contract';
 import { compileEvent } from '../packages/session-director/events/runtime';
 import { stateGains, wipeNarrationFacts } from '../packages/session-director/events/presentation';
-import { windshieldPose } from '../packages/visuals/wiper';
+import { windshieldPose, windshieldLayout } from '../packages/visuals/wiper';
 
 test('wiper analysis detects acoustic strokes and silence rather than assuming a constant animation rate', () => {
   const profile = analyseWiper(synthesizeTriggerSound('wiper', 8000), 8000);
@@ -38,13 +38,87 @@ test('audible stroke midpoint erases half the word; direction alternates and gap
   assert.deepEqual(wiperFrame({ ...playback, profile: { duration: 0, strokes: [] } }, 10.2), emptyWiperFrame);
 });
 
-test('car blade rotates about a fixed bottom pivot; word erasure and the swept sector use the same angle', () => {
-  const mid = windshieldPose(wiperFrame(playback, 10.4));
-  assert.ok(Math.abs(mid.angle) < 1e-9); assert.match(mid.clip, /^M500 690 L500 /);
-  assert.equal(windshieldPose(wiperFrame(playback, 10.9)).angle, 64);
-  assert.equal(windshieldPose(wiperFrame(playback, 12)).angle, -64);
-  assert.equal(windshieldPose(wiperFrame(playback, 10.9)).clip, 'M0 0Z');
-  assert.match(mid.sheen, /A570 570/);
+test('paired car blades share a reversible stroke, with hidden distinct pivots and overlapping wipe sectors', () => {
+  const first = windshieldPose(wiperFrame(playback, 10.1));
+  const middle = windshieldPose(wiperFrame(playback, 10.4));
+  const raised = windshieldPose(wiperFrame(playback, 10.9));
+  const parked = windshieldPose(wiperFrame(playback, 12));
+  assert.equal(middle.length, 2); assert.notEqual(middle[0].x, middle[1].x);
+  for (let i = 0; i < 2; i++) {
+    assert.equal(middle[i].y, 760); assert.ok(middle[i].y > 700);
+    assert.ok(first[i].angle < middle[i].angle && middle[i].angle < raised[i].angle);
+    assert.equal(parked[i].angle, i === 0 ? -100 : -102); assert.equal(raised[i].clip, 'M0 0Z');
+    assert.match(middle[i].clip, new RegExp(`^M${middle[i].x} 760 L`));
+    assert.match(middle[i].sheen, / A/);
+  }
+  assert.equal(raised[0].angle, 100); assert.equal(raised[1].angle, 98);
+  const returning = windshieldPose(wiperFrame(playback, 11.5));
+  for (let i = 0; i < 2; i++) assert.ok(Math.abs(returning[i].angle - middle[i].angle) < 1e-8);
+});
+
+test('windshield geometry reaches the top of wide and tall surfaces while mounts stay below the frame', () => {
+  for (const [width, height] of [[1920, 1080], [3440, 1440], [390, 844]]) {
+    const layout = windshieldLayout(width, height);
+    for (const blade of layout) {
+      assert.ok(blade.y > height);
+      const top = blade.y - Math.cos((blade.rest + blade.raised) / 2 * Math.PI / 180) * blade.reach;
+      assert.ok(top <= 0, 'The centre of the stroke reaches the upper edge, rather than occupying a small central area.');
+    }
+    const pose = windshieldPose(wiperFrame(playback, 10.4), layout);
+    assert.ok(pose.every(blade => Number.isFinite(blade.angle) && blade.y > height));
+  }
+});
+
+test('both arms leave the glass geometrically at each reversal and re-enter on the return stroke', () => {
+  for (const [width, height] of [[1920, 1080], [3440, 1440], [390, 844]]) {
+    const layout = windshieldLayout(width, height);
+    for (const blade of layout) {
+      for (const angle of [blade.rest, blade.raised]) {
+        const radians = angle * Math.PI / 180;
+        // Include the complete arm back to its mount and the outer blade/clamp thickness.
+        for (const radius of [0, blade.inner, blade.reach]) {
+          for (const lateral of [-18, 18]) {
+            const y = blade.y + lateral * Math.sin(radians) - radius * Math.cos(radians);
+            assert.ok(y > height, 'No arm or rubber blade remains in the image at reversal.');
+          }
+        }
+      }
+      assert.ok(blade.y - blade.reach < height, 'Both blades return into the visible image mid-stroke.');
+    }
+  }
+});
+
+test('travel passes the acoustic peak without a mid-screen stall and slows only at reversal', () => {
+  const dt = .00001, peak = 10.4;
+  const left = (wiperFrame(playback, peak).x - wiperFrame(playback, peak - dt).x) / dt;
+  const right = (wiperFrame(playback, peak + dt).x - wiperFrame(playback, peak).x) / dt;
+  assert.ok(left > 1 && right > 1, 'The blade must keep moving through the sound peak.');
+  assert.ok(Math.abs(left - right) < .001, 'Speed must be continuous across the acoustic landmark.');
+  const start = 10.1, end = 10.8;
+  assert.ok((wiperFrame(playback, start + dt).x - wiperFrame(playback, start).x) / dt < .001);
+  assert.ok((1 - wiperFrame(playback, end - dt).x) / dt < .001);
+  let previous = 0;
+  for (let t = start; t < end; t += .001) {
+    const x = wiperFrame(playback, t).x;
+    assert.ok(x >= previous && x >= 0 && x <= 1); previous = x;
+  }
+});
+
+test('short friction accents receive travel room without shifting peaks or overlapping neighboring strokes', () => {
+  const original = { duration: 2, strokes: [
+    { start: .13, peak: .2, end: .27 }, { start: .63, peak: .7, end: .77 },
+    { start: 1.13, peak: 1.2, end: 1.27 }, { start: 1.63, peak: 1.7, end: 1.77 },
+  ] };
+  const expanded = wiperMotionProfile(original);
+  assert.equal(expanded.duration, original.duration);
+  expanded.strokes.forEach((s, i) => {
+    assert.equal(s.peak, original.strokes[i].peak);
+    assert.ok(s.end - s.start > .4, 'An isolated friction accent must not force an entire 200-degree sweep into 140 ms.');
+    assert.ok(s.start >= 0 && s.end <= original.duration);
+    if (i) assert.ok(s.start >= expanded.strokes[i - 1].end);
+  });
+  assert.equal(original.strokes[0].start, .13);
+  assert.deepEqual(wiperMotionProfile({duration:1,strokes:[]}), {duration:1,strokes:[]});
 });
 
 test('looping and resumed buffers retain their audible phase without replaying a completed wipe', () => {
@@ -72,7 +146,7 @@ test('engine wipe ends exactly before mindwipe blank, owns its sound layer and k
 
 test('wipe narration describes current capabilities and never describes wiping during blank/reanchor', () => {
   const event = createEpisode('mindwipe', 'wipe', 24000, 15100, 'conditioning', 'ring', .6, true);
-  assert.match(wipeNarrationFacts(event, 24000), /windshield blade/);
+  assert.match(wipeNarrationFacts(event, 24000), /Two dark rubber windshield blades/);
   assert.match(wipeNarrationFacts(event, 24000, { visualsEnabled: true, reducedMotion: true }), /without a moving wiper/);
   assert.match(wipeNarrationFacts(event, 24000, { visualsEnabled: false, reducedMotion: false }), /Visuals are disabled/);
   assert.match(wipeNarrationFacts(event, 24000, { visualsEnabled: true, reducedMotion: false, effectsEnabled: false }), /wipe effect is disabled/);

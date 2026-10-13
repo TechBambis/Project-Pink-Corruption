@@ -78,18 +78,19 @@ try{
  const measurement=measureProcesses(owner,120);const turns=[];
  for(const prompt of ['Describe a small silver key in one sentence.','Now describe a blue glass in one sentence.','Compare their colors briefly.','Give the key a simple name.','What name did you choose for the key?','Tell me one short sentence about a quiet room.','Mention the key and glass together briefly.','Give a brief closing sentence about the room.'])turns.push(await reply(prompt,true));
  evidence.measurements.sustainedConversation={turns,processes:await measurement};record('eight-spoken-turns-and-owned-resource-measurement',{turns:turns.length});
+ evidence.runtime=await page.evaluate(async()=>(await(await fetch('/api/desktop/capabilities')).json()).runtime);
  await page.evaluate(()=>window.bambi.hardStop());const rows=(await processSnapshot(owner)).processes,quitStart=performance.now();await application.evaluate(({app})=>{setImmediate(()=>app.quit());});
  await until(async()=>{const current=await observeRows(rows.map(r=>r.pid));return rows.every(r=>!current.some(now=>now.pid===r.pid&&now.created===r.created));},12000);record('Quit-after-native-AI-cleans-owned-tree',{ms:performance.now()-quitStart});await application.close().catch(()=>{});application=null;
  const llamaLog=readFileSync(join(data,'logs/llama.log'),'utf8');
- evidence.accelerationEvidence=llamaLog.split(/\r?\n/).filter(line=>/offload.*layers.*GPU|Vulkan.*device|device.*Vulkan/i.test(line));
+ evidence.accelerationEvidence=llamaLog.split(/\r?\n/).filter(line=>/offload.*layers.*GPU|(?:Vulkan|CUDA|ggml_cuda).*device|device.*(?:Vulkan|CUDA)/i.test(line));
  const offloaded=evidence.accelerationEvidence.some(line=>/offloaded [1-9][0-9]*\//i.test(line));
- if(cpu)assert(!offloaded,'CPU fallback unexpectedly offloaded layers');
- else assert(offloaded,'Auto/Vulkan qualification requires actual GPU-offloaded layers; CPU fallback is a separate run.');
- record('acceleration-observations',{requested:evidence.accelerator,logLines:evidence.accelerationEvidence,gpuQualified:!cpu&&evidence.accelerationEvidence.some(line=>/offloaded [1-9][0-9]*\//i.test(line))});
+ if(cpu){assert(!offloaded,'CPU fallback unexpectedly offloaded layers');assert.equal(evidence.runtime.backend,'cpu');}
+ else {assert(offloaded,'Automatic GPU qualification requires actual GPU-offloaded layers; CPU fallback is a separate run.');assert(['cuda','vulkan','hip','sycl','metal'].includes(evidence.runtime.backend));assert(evidence.runtime.offloadedLayers>0);}
+ record('acceleration-observations',{requested:evidence.accelerator,backend:evidence.runtime.backend,cudaVersion:evidence.runtime.cudaVersion,logLines:evidence.accelerationEvidence,gpuQualified:!cpu&&offloaded});
  await launch();await page.goto(`http://127.0.0.1:${port}/setup`);await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='installed',{},{timeout:180000});
  await page.getByRole('button',{name:'3. Install and start',exact:true}).click();await page.locator('#setup-prepare').click();await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='ready',{},{timeout:300000});record('reopen-with-verified-installed-models',{networkIsolationVerified:false});
  assert.deepEqual(await inventory(resources),before);record('resources-unchanged');evidence.result='passed';
- evidence.limitations=['This is native application acceptance with a synthetic microphone, not physical hearing/microphone qualification.','Received browser download, Windows security policy, actual NSIS install/uninstall and offline network isolation are separate gates.','Setup copy is verified here; actual model download, cancellation/retry and damaged-install recovery need the setup acceptance run.','CPU and auto/Vulkan must be run separately; GPU presence alone is not support evidence.'];
+ evidence.limitations=['This is native application acceptance with a synthetic microphone, not physical hearing/microphone qualification.','Received browser download, Windows security policy, actual NSIS install/uninstall and offline network isolation are separate gates.','Setup copy is verified here; actual model download, cancellation/retry and damaged-install recovery need the setup acceptance run.','CPU and automatic GPU must be run separately. Automatic qualifies only the observed backend/variant; use the setup performance comparison to measure other CUDA/Vulkan paths. GPU presence alone is not support evidence.'];
 }catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);process.exitCode=1;}
 finally{
  if(application){

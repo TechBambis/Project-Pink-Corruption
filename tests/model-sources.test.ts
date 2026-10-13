@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,open,readFile,rm,symlink,writeFile,lstat,realpath} from 'node:fs/promises';
+import {mkdtemp,mkdir,open,readFile,rm,symlink,writeFile,lstat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ModelSources} from '../packages/runtime/model-sources';
@@ -12,10 +12,10 @@ test('chosen files and nested repository folders persist, deduplicate and can be
  const root=await mkdtemp(join(tmpdir(),'bambi-sources-'));t.after(()=>rm(root,{recursive:true,force:true}));const profile=join(root,'profile'),folder=join(root,'another-repository'),nested=join(folder,'models/community');await mkdir(nested,{recursive:true});
  const file=join(nested,'renamed.gguf'),handle=await open(file,'w');await handle.truncate(pin.bytes);await handle.close(); // Sparse metadata fixture, not model weights.
  const sources=new ModelSources(profile),id=await sources.add(file,'file');assert.equal(await sources.add(file,'file'),id);const directoryId=await sources.add(folder,'folder');
- const reopened=new ModelSources(profile),entries=await reopened.list();assert.equal(entries.length,2);assert.deepEqual(entries[1].models,[pin.alias]);assert.equal((await reopened.find(directoryId,pin.alias)).modelFile,await realpath(file));
+ const reopened=new ModelSources(profile),entries=await reopened.list();assert.equal(entries.length,2);assert.deepEqual(entries[1].models,[pin.alias]);assert.equal((await reopened.find(directoryId,pin.alias)).modelFile,file);
  await reopened.remove(id);assert.equal((await new ModelSources(profile).list()).length,1);assert.equal((await lstat(file)).size,pin.bytes);
  await assert.rejects(()=>reopened.find(id,pin.alias),/saved model location/);
- const persisted=JSON.parse(await readFile(join(profile,'model-sources.json'),'utf8'));assert.equal(persisted[0].path,await realpath(folder));
+ const persisted=JSON.parse(await readFile(join(profile,'model-sources.json'),'utf8'));assert.equal(persisted[0].path,folder);
 });
 test('unknown quantizations, unchosen paths and links outside a registered folder are not import candidates',async t=>{
  const root=await mkdtemp(join(tmpdir(),'bambi-sources-boundary-'));t.after(()=>rm(root,{recursive:true,force:true}));const folder=join(root,'chosen');await mkdir(folder);const foreign=join(root,'foreign.gguf'),handle=await open(foreign,'w');await handle.truncate(pin.bytes);await handle.close();await symlink(foreign,join(folder,'escape.gguf'));

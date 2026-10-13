@@ -4,10 +4,12 @@ import {readFileSync,mkdirSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
 import {join,resolve,dirname} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {archiveTool,downloadPinned,hashFile,copy,copyTree,llamaEntries,assertNativeTree,assertWindowsX64} from './desktop-windows-support.mjs';
+import {verifyCudaNotices} from './desktop-cuda-notices.mjs';
 
 /** Both the small native slice and the final installer use this exact builder. */
 export async function buildWindowsNative({root,backend,notices,cache,pins}){
  if(process.platform!=='win32'||process.arch!=='x64')throw Error('Native Windows x64 is required.');
+ await verifyCudaNotices(root);
  const run=(command,args,options={})=>execFileSync(command,args,{stdio:'inherit',windowsHide:true,...options});
  const acquire=async asset=>{const path=join(cache,asset.file);await downloadPinned(asset,path);return path;};
  const buildEnv=resolve(root,'.runtime/alpha-windows-build');

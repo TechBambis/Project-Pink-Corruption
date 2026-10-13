@@ -1,0 +1,26 @@
+{
+  "id": "hauhau-4b-dflash",
+  "status": "experiment-only",
+  "targetAlias": "bambi-qwen35-4b-hauhau-experiment:q4_k_m",
+  "context": 24576,
+  "promptCacheMiB": 2048,
+  "target": {
+    "alias": "bambi-qwen35-4b-hauhau-experiment:q4_k_m",
+    "repo": "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
+    "revision": "c09cdbcdb1fefad6d335809d445621b5f5ba0c6e",
+    "file": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+    "bytes": 2707513696,
+    "sha256": "79e28ecacf84e75b6056cf4059636d435aa9eb67795780f7b7dbc7d32a962741",
+    "license": "apache-2.0"
+  },
+  "draft": {
+    "repo": "EntityDeletr/Qwen3.5-4B-DFlash-GGUF",
+    "revision": "c2e6879b70f5870f389f850934b144fbdb51c8e4",
+    "file": "Qwen3.5-4B-DFlash.gguf",
+    "bytes": 454200928,
+    "sha256": "a46bda8d229760ff330de40a02d948e4d1811c4419a774321588e4355707762b",
+    "license": "apache-2.0",
+    "sourceTarget": "Qwen/Qwen3.5-4B",
+    "quantization": "Q5_K_M"
+  }
+}

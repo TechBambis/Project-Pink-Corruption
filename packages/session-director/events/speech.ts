@@ -11,9 +11,9 @@ import { giggleOffset } from '../../audio/giggle';
 import { pinkWordOffsets } from '../../visuals/spoken-cues';
 
 // Older event clients supplied only persona text; retain that custom-character default.
-export const EventSpeechRequestSchema = ChatRequestSchema.pick({ model: true, voice: true, speed: true, preset: true, sampling: true, context: true, persona: true, username: true, selectedTriggers: true, collar: true, collarName: true, localContext: true }).extend({ promptId: ChatRequestSchema.shape.promptId.default('custom'), narrationStyle: z.string().max(300).optional(), event: EventSchema, payloadId: z.string().min(1).max(160), allowedTriggers: z.array(z.string().max(100)).max(100), motif: MotifSchema.optional(), precedingNarration: z.string().max(1200).optional(), presentationPreferences: z.object({ visualsEnabled: z.boolean(), reducedMotion: z.boolean(), effectsEnabled: z.boolean().optional() }).strict().optional() }).strict();
+export const EventSpeechRequestSchema = ChatRequestSchema.pick({ model: true, voice: true, speed: true, preset: true, sampling: true, context: true, persona: true, username: true, selectedTriggers: true, collar: true, collarName: true, localContext: true }).extend({ promptId: ChatRequestSchema.shape.promptId.default('custom'), narrationStyle: z.string().max(300).optional(), event: EventSchema, payloadId: z.string().min(1).max(160), requestId: z.string().min(1).max(160).optional(), experimentProfile: z.literal('next-gen-ab').optional(), allowedTriggers: z.array(z.string().max(100)).max(100), motif: MotifSchema.optional(), precedingNarration: z.string().max(1200).optional(), presentationPreferences: z.object({ visualsEnabled: z.boolean(), reducedMotion: z.boolean(), effectsEnabled: z.boolean().optional() }).strict().optional() }).strict();
 export type EventSpeechRequest = z.infer<typeof EventSpeechRequestSchema>;
-export interface RenderedEventSpeech { payloadId: string; text: string; audio: string; durationMs: number; targetMs: number; textAttempts: number; triggerOffsetMs?: number; cueOffsetMs?: number; giggleOffsetMs?: number; pinkOffsetsMs?: number[]; words?: { word: string; atMs: number }[] }
+export interface RenderedEventSpeech { payloadId: string; requestId?: string; text: string; audio: string; durationMs: number; targetMs: number; textAttempts: number; triggerOffsetMs?: number; cueOffsetMs?: number; giggleOffsetMs?: number; pinkOffsetsMs?: number[]; words?: { word: string; atMs: number; endMs?: number }[] }
 export class SpeechWindowError extends Error {
   readonly wordsPerMs: number;
   constructor(readonly durationMs: number, readonly targetMs: number, words: number) {
@@ -110,7 +110,7 @@ export function validatePresentationText(text: string, state: PresentationState,
 
 export async function renderEventSpeech(raw: EventSpeechRequest, dependencies: {
   generate: (instruction: string, signal: AbortSignal, words: number, exactPhrase?: string) => Promise<string>;
-  render: (text: string, signal: AbortSignal) => Promise<{ bytes: Uint8Array; words?: { word: string; atMs: number }[] }>;
+  render: (text: string, signal: AbortSignal) => Promise<{ bytes: Uint8Array; words?: { word: string; atMs: number; endMs?: number }[] }>;
   knownTriggers: string[];
 }, signal: AbortSignal): Promise<RenderedEventSpeech> {
   const request = EventSpeechRequestSchema.parse(raw), compiled = compileEvent(request.event), slot = compiled.speech.find(s => s.payloadId === request.payloadId);

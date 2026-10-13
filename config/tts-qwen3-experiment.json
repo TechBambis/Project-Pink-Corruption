@@ -1,0 +1,51 @@
+{
+  "status": "voice-lab-experiment",
+  "model": "Serveurperso/Qwen3-TTS-GGUF",
+  "revision": "b7ee2e8c7459c3bea99da23e3d178125a7d1713c",
+  "upstreamModel": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+  "modelLicense": "Apache-2.0",
+  "codeLicense": "MIT",
+  "abiVersion": 5,
+  "device": "Vulkan / CPU",
+  "files": [
+    {
+      "file": "qwen-talker-1.7b-voicedesign-Q4_K_M.gguf",
+      "bytes": 1182630816,
+      "sha256": "7605ed0cc5e72059f27468c27f70c070e05d1cc0c7b1c76bfb9cba717a59eee3"
+    },
+    {
+      "file": "qwen-tokenizer-12hz-BF16.gguf",
+      "bytes": 358980384,
+      "sha256": "cc04d7352ff4cb339435cdccf59cf38e6e92f3cf789bc94a6a1b467093bafa18"
+    },
+    {
+      "file": "README.md",
+      "bytes": 4940,
+      "sha256": "120cf739d983f43444432165bc88fca51869199dccb5ba9a8edc7587144fa409"
+    }
+  ],
+  "codeArchives": [
+    {
+      "file": "source.tar.gz",
+      "repository": "ServeurpersoCom/qwentts.cpp",
+      "revision": "51512f129a7419567f4b8abfb06801451789b8f1",
+      "bytes": 1131739,
+      "sha256": "34b7bc6ebf94cff408290e7aa43c81ccdcd73fb50b1f821afea4c03aef197846"
+    },
+    {
+      "file": "ggml.tar.gz",
+      "repository": "ServeurpersoCom/ggml",
+      "revision": "2eddaf94a8cdbbf1c30017d28313cd661a9da543",
+      "bytes": 4217459,
+      "sha256": "51e43995eda10667fdc5826a9e2a8cfcb9981de92f8a54dca6618ee6bdb7ebb1"
+    }
+  ],
+  "modelLicenseFile": {
+    "file": "MODEL_LICENSE",
+    "repository": "QwenLM/Qwen3-TTS",
+    "revision": "022e286b98fbec7e1e916cb940cdf532cd9f488e",
+    "source": "LICENSE",
+    "bytes": 11343,
+    "sha256": "a44a6081c73ad75f0255bb2bb5cab74ef1829565a895a24e53a4f11290ab7655"
+  }
+}

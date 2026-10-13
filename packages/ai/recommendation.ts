@@ -3,14 +3,20 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import type {HardwareProfile} from '../hardware';
+import {resourcePlan,type ModelMemoryProfile,type ResourcePlan} from '../runtime/resource-plan';
 
 export interface ModelCandidate {
  id:string;
  label:string;
  weightsBytes:number|null;
  contextTokens:number;
+ memoryProfile?:ModelMemoryProfile;
+ resourceProfile?:{promptCacheMinimumMiB:number;minimumCheckpoints:number};
+ preferredFor?:'compact'|'balanced';
  backend:'ollama'|'llama.cpp';
  installed:boolean;
+ /** Size-matching local files are candidates for verification, not proof of readiness. */
+ availableForComparison?:boolean;
  priority:number;
  desktopSupported?:boolean;
  qualification?:'reference-tested'|'experimental'|'development-only';
@@ -26,6 +32,7 @@ export interface ModelAssessment extends ModelCandidate {
  execution:'unified-memory'|'gpu'|'cpu-or-partial'|'unknown';
  runtime:'available'|'setup-needed'|'platform-pending';
  reasons:string[];
+ resourcePlan:ResourcePlan;
 }
 export interface ModelRecommendation {
  hardware:HardwareProfile;
@@ -38,15 +45,13 @@ export interface ModelRecommendation {
 const GiB=1024**3;
 export function recommendModels(hardware:HardwareProfile,candidates:ModelCandidate[],backends:{ollama:boolean;native:boolean;platformReady?:boolean}):ModelRecommendation {
  // Explicit estimates, not measured model requirements or speed guarantees.
- const reserveBytes=Math.max(4*GiB,hardware.ramTotal*.2);
+ const reserveBytes=resourcePlan(hardware,{weightsBytes:null,contextTokens:1}).reserveBytes;
  const ramBudget=Math.max(0,hardware.ramTotal-reserveBytes);
- const largestGPU=hardware.gpus.reduce((largest,gpu)=>Math.max(largest,gpu.memoryTotal??0),0);
+ const largestGPU=hardware.gpus.reduce((largest,gpu)=>Math.max(largest,Math.min(gpu.memoryTotal??0,gpu.memoryBudget??gpu.memoryTotal??0,gpu.memoryFree??gpu.memoryTotal??0)),0);
  const gpuBudget=Math.max(0,largestGPU-1.5*GiB);
  const platformReady=backends.platformReady??(hardware.platform==='linux'&&hardware.architecture==='x64');
  const alternatives:ModelAssessment[]=candidates.map(candidate=>{
-  const weights=candidate.weightsBytes;
-  const estimatedWorkingBytes=weights!==null&&Number.isFinite(weights)&&weights>0&&Number.isFinite(candidate.contextTokens)&&candidate.contextTokens>0
-   ?Math.ceil(weights+Math.max(2*GiB,weights*.2)+candidate.contextTokens*64*1024):null;
+  const plan=resourcePlan(hardware,candidate),estimatedWorkingBytes=plan.estimatedWorkingBytes;
   const fitsRAM=estimatedWorkingBytes!==null&&estimatedWorkingBytes<=ramBudget;
   const fitsGPU=!hardware.unifiedMemory&&estimatedWorkingBytes!==null&&estimatedWorkingBytes<=gpuBudget;
   // Native large MoE profiles still use CPU memory; require RAM headroom too.
@@ -64,10 +69,15 @@ export function recommendModels(hardware:HardwareProfile,candidates:ModelCandida
   if(runtime==='platform-pending')reasons.push('This build does not support local AI startup on this platform. Use an AI-enabled build qualified for your operating system.');
   else if(runtime==='setup-needed')reasons.push(candidate.installed?'The local backend still needs setup or a runtime check.':'This model is not installed.');
   if(candidate.promptCompatible===false)reasons.push('The configured context is too short for the complete default companion prompt. It is not recommended for that session.');
-  return {...candidate,estimatedWorkingBytes,memoryFit,execution,runtime,reasons};
+  if(plan.mode==='compact')reasons.push('Uses a smaller cache and processing batches while keeping the full companion instructions. Test conversation and voice on this computer.');
+  return {...candidate,estimatedWorkingBytes,memoryFit,execution,runtime,reasons,resourcePlan:plan};
  });
  const fit=alternatives.filter(model=>model.memoryFit==='fits'&&model.desktopSupported!==false&&model.promptCompatible!==false);
- fit.sort((a,b)=>Number(b.qualification==='reference-tested')-Number(a.qualification==='reference-tested')||Number(b.runtime==='available')-Number(a.runtime==='available')||Number(b.installed)-Number(a.installed)||Number(b.execution==='gpu')-Number(a.execution==='gpu')||b.priority-a.priority||(a.estimatedWorkingBytes??Infinity)-(b.estimatedWorkingBytes??Infinity));
+ // A smaller dense model is a useful starting point on ordinary laptops when
+ // full dedicated-GPU fit is not established. Explicit experimental consent
+ // is still required; an existing verified selection is never switched here.
+ const laptop=hardware.ramTotal<=20*GiB&&!fit.some(model=>model.execution==='gpu'&&model.qualification==='reference-tested');
+ fit.sort((a,b)=>(laptop?Number(b.preferredFor===b.resourcePlan.mode)-Number(a.preferredFor===a.resourcePlan.mode)||(a.weightsBytes??Infinity)-(b.weightsBytes??Infinity):0)||Number(b.qualification==='reference-tested')-Number(a.qualification==='reference-tested')||Number(b.runtime==='available')-Number(a.runtime==='available')||Number(b.installed)-Number(a.installed)||Number(b.execution==='gpu')-Number(a.execution==='gpu')||b.priority-a.priority||(a.estimatedWorkingBytes??Infinity)-(b.estimatedWorkingBytes??Infinity));
  const warnings=[...hardware.warnings,'Memory fit is an estimate. A real first-run timing and memory check is still required.'];
  if(hardware.ramAvailable<Math.max(2*GiB,hardware.ramTotal*.15))warnings.push('Available RAM is low right now. Close other apps or account for an already loaded model before testing.');
  if(!platformReady)warnings.push('Local model launch on this operating system is not ready in this app yet.');

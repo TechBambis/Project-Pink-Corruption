@@ -12,10 +12,47 @@ import {interactionDirection} from '../packages/content/interaction';
 import {buildRuntimePrompt} from '../packages/content';
 import {buildSituationalBase} from '../packages/content/situational';
 import {snapshotSession} from '../packages/ai/session-state';
-import {fitContext,ContextOverflowError} from '../packages/ai/context';
+import {fitContext,ContextOverflowError,checkpointContextMessages} from '../packages/ai/context';
 import {createReferenceProgram} from '../packages/session-director/events/program';
 import {compileEvent} from '../packages/session-director/events/runtime';
 import {EventSpeechRequestSchema,renderEventSpeech} from '../packages/session-director/events/speech';
+import {resolveReplyIntent} from '../packages/ai/intent';
+import {replyTaskContract,replyTaskDirection} from '../packages/ai/response';
+
+test('unchanged reply rules are cached once while current task and evidence follow heard history',()=>{
+ const input=ChatRequestSchema.parse({type:'chat',text:'Explain the difference.',collar:true,collarName:'Chosen collar wording',selectedTriggers:['BAMBI SLEEP']});
+ const base=buildCharacterDocument(input).core,prefix=buildFixedReplyPrompt(base);
+ const history=[{role:'user' as const,content:'A correction.'},{role:'assistant' as const,content:'The heard answer.'}];
+ for(const narration of [false,true]){
+  const request=narration?'Continue the session.':'In one sentence, explain the difference.';
+  const system=buildReplyPrompt(base,request,false,'',undefined,'Current quoted evidence.',true,narration);
+  assert.ok(system.startsWith(prefix));assert.ok(prefix.includes(replyTaskContract));
+  assert.equal(system.split(replyTaskContract).length-1,1);
+  for(const rule of replyTaskContract.split('\n').slice(1))assert.ok(system.includes(rule));
+  const messages=checkpointContextMessages([{role:'system',content:system},...history,{role:'user',content:request}],prefix);
+  assert.ok(system.includes(base));assert.ok(system.includes(replyTaskDirection(request,narration,false)));
+  assert.ok(!system.slice(prefix.length).includes(replyTaskContract));
+  assert.deepEqual(messages.slice(2,-2),history);
+  assert.ok(messages[0].content.includes(replyTaskContract));
+  assert.ok(messages.at(-2)!.content.includes('Current quoted evidence.'));
+  assert.ok(messages.at(-2)!.content.includes(replyTaskDirection(request,narration,false)));
+  assert.equal(messages.at(-1)!.content,request);
+ }
+});
+
+test('English conversation is selectable across reply, preparation and event contracts and preserves its complete optional sections',()=>{
+ const input=ChatRequestSchema.parse({type:'chat',text:'Hi',promptId:'english-conversation',username:'Explorer',collar:true,collarName:'Silver constellation',selectedTriggers:['BAMBI SLEEP']});
+ const authored=buildCharacterDocument(input).core;
+ assert.match(authored,/speaking with Explorer/);assert.match(authored,/Silver constellation/);assert.match(authored,/BAMBI SLEEP/);
+ assert.match(authored,/Address the strongest relevant objection directly/);assert.match(authored,/acknowledge it and improve your answer/);
+ assert.doesNotMatch(authored,/FALSE MEMORY|CHANGE THE SUBJECT|STRATEGY ENGINE/);
+ assert.ok(buildReplyPrompt(authored,'Explain that objection.',false,'',undefined,'',true,false).startsWith(authored));
+ assert.ok(buildFixedReplyPrompt(authored).startsWith(authored));assert.ok(buildEventNarrationPrefix(input).startsWith(authored));
+ assert.equal(resolveReplyIntent('Hi','english-conversation',true),'conversation');
+ assert.equal(resolveReplyIntent('Continue','english-conversation',true,undefined,'conversation'),'conversation');
+ assert.equal(resolveReplyIntent('Guide me through a relaxation session','english-conversation',true),'narration');
+ assert.equal(resolveReplyIntent('Start','bambisleep-classic',true),'narration');
+});
 
 test('shared delivery does not impose a character on Gentle or a custom personality',()=>{
  for(const promptId of ['gentle-induction','custom'] as const){
@@ -88,7 +125,7 @@ test('native event checkpoints keep changing context outside the reusable comple
   const messages=eventNarrationMessages(input,'At most 8 words.',context),counted:unknown[]=[];
   const plan=await fitContext(messages[0].content,[],messages[1].content,async candidate=>{counted.push(candidate);return 2100;},4096,64,256,64,'',{checkpointPrefix:prefix});
   assert.ok(plan.messages[0].content.startsWith(prefix));assert.ok(!plan.messages[0].content.includes(context));
-  assert.match(plan.messages[1].content,/APPLICATION CONTEXT/);assert.ok(plan.messages[1].content.includes(context));
+  assert.match(plan.messages.at(-2)!.content,/APPLICATION CONTEXT/);assert.ok(plan.messages.at(-2)!.content.includes(context));
   assert.equal(plan.messages.at(-1)!.content,'At most 8 words.');assert.ok(counted.length>0);
  }
 });

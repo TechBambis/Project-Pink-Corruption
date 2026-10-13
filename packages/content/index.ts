@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {compilePromptDocument,type RuntimePhase} from './runtime-prompt';
+import {englishConversation} from './english-conversation';
 
 export const contentRoot = fileURLToPath(new URL('./stable-2.0/', import.meta.url));
 const read = (path: string) => JSON.parse(readFileSync(contentRoot + path, 'utf8'));
@@ -21,13 +22,13 @@ export const triggerData = {...stableTriggerData, categories:{...stableTriggerDa
   })),
 ]};
 // Prompt texts can be stored as editable line lists or as legacy strings.
-export const prompts: Prompt[] = ['bambisleep-classic', 'gentle-induction'].map(id => {
+export const prompts: Prompt[] = [...['bambisleep-classic', 'gentle-induction'].map(id => {
   const prompt = read(`workers/prompts/${id}.json`);
   for (const key of ['main', 'collar_addon', 'strategy']) {
     if (Array.isArray(prompt[key])) prompt[key] = prompt[key].join('\n');
   }
   return prompt;
-});
+}),englishConversation];
 export const agentPrompts = JSON.parse(readFileSync(new URL('./agent-prompts.json', import.meta.url), 'utf8'));
 export const defaultTriggers = (() => {
   const primary = triggerData.triggers.filter(trigger => trigger.category === 'primary').slice(0, 2);

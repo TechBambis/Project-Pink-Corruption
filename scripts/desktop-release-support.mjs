@@ -7,6 +7,7 @@ import {hashFile} from './desktop-windows-support.mjs';
 export function assertNativeTarget(spec,target,platform=process.platform,architecture=process.arch){
  const entry=spec.targets[target];
  if(!entry?.implemented)throw Error('Target is not implemented: '+target);
+ if(entry.phases&&!entry.phases.includes(spec.phase))throw Error('Target phase is not implemented: '+target+' '+spec.phase);
  if(entry.platform!==platform||entry.architecture!==architecture)throw Error('Use a native '+target+' host.');
 }
 
@@ -22,7 +23,7 @@ export function releaseReport(spec,artifacts=[]){
   const artifact=artifacts.find(item=>item.target===target);
   const gates=Object.fromEntries(spec.gates[spec.phase].map(gate=>[gate,'pending']));
   if(target==='linux-x64')gates.installer='not-applicable';
-  if(!entry.implemented)return {target,status:'not-implemented',gates};
+  if(!entry.implemented||entry.phases&&!entry.phases.includes(spec.phase))return {target,status:'not-implemented',gates};
   if(!artifact)return {target,status:'not-built',gates};
   const {runtime,qualification}=artifact;
   const identity=runtime.release;
@@ -40,12 +41,12 @@ export function releaseReport(spec,artifacts=[]){
   return {target,status,gates,sourceDigest:runtime.sourceDigest,applicationDigest:identity.applicationDigest};
  });
  if(new Set(artifacts.map(a=>a.target)).size!==artifacts.length||artifacts.some(a=>!spec.targets[a.target]))throw Error('Duplicate or unknown artifact target.');
- return {schema:1,version:spec.version,applicationDigest:spec.applicationDigest,ready:targets.filter(t=>spec.targets[t.target].implemented).every(t=>t.status==='qualified'),targets};
+ return {schema:1,version:spec.version,applicationDigest:spec.applicationDigest,ready:targets.filter(t=>spec.targets[t.target].implemented&&(!spec.targets[t.target].phases||spec.targets[t.target].phases.includes(spec.phase))).every(t=>t.status==='qualified'),targets};
 }
 
 export async function readReleaseArtifact(directory){
  const runtime=JSON.parse(readFileSync(join(directory,'RUNTIME-MANIFEST.json'),'utf8'));
- const target=runtime.platform==='win32'?'windows-'+runtime.architecture:runtime.platform+'-'+runtime.architecture;
+ const target=runtime.platform==='win32'?'windows-'+runtime.architecture:runtime.platform==='darwin'?'macos-'+runtime.architecture:runtime.platform+'-'+runtime.architecture;
  // Qualification is valid only while the exact tested distribution payload is unchanged.
  const path=join(directory,'DESKTOP-QUALIFICATION.json');
  const qualification=existsSync(path)?JSON.parse(readFileSync(path,'utf8')):undefined;

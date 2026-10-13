@@ -42,9 +42,24 @@ export function analyseWiper(channels: readonly Float32Array[], rate: number): W
 }
 
 const profiles = new WeakMap<AudioBuffer, WiperProfile>();
+/** Friction peaks locate the stroke centre; their narrow energy envelopes are not full travel windows. */
+export function wiperMotionProfile(profile: WiperProfile): WiperProfile {
+  const { duration, strokes } = profile;
+  if (!strokes.length || duration <= 0) return profile;
+  return { duration, strokes: strokes.map((stroke, i) => {
+    const previous = i ? strokes[i - 1].peak : strokes.at(-1)!.peak - duration;
+    const next = i + 1 < strokes.length ? strokes[i + 1].peak : strokes[0].peak + duration;
+    // Derive room for travel from adjacent acoustic peaks; keep real gaps and all peak times.
+    const halfTravel = Math.min(.8, .85 * Math.min(stroke.peak - previous, next - stroke.peak)) / 2;
+    const lower = i ? (previous + stroke.peak) / 2 : 0;
+    const upper = i + 1 < strokes.length ? (stroke.peak + next) / 2 : duration;
+    return { start: Math.max(lower, Math.min(stroke.start, stroke.peak - halfTravel)), peak: stroke.peak,
+      end: Math.min(upper, Math.max(stroke.end, stroke.peak + halfTravel)) };
+  }) };
+}
 export function wiperProfile(buffer: AudioBuffer): WiperProfile {
   let profile = profiles.get(buffer);
-  if (!profile) { profile = analyseWiper(Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i)), buffer.sampleRate); profiles.set(buffer, profile); }
+  if (!profile) { profile = wiperMotionProfile(analyseWiper(Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i)), buffer.sampleRate)); profiles.set(buffer, profile); }
   return profile;
 }
 const smooth = (n: number) => { n = Math.max(0, Math.min(1, n)); return n * n * (3 - 2 * n); };
@@ -64,9 +79,13 @@ export function wiperFrame(playback: WiperPlayback | undefined, time: number): W
     return { active: false, visible: true, x: ordinal < 0 ? 0 : direction > 0 ? 1 : 0, direction, strength: 0, remaining: 0, text: '', stroke: ordinal };
   }
   const stroke = profile.strokes[index], ordinal = loop * profile.strokes.length + index, direction = ordinal % 2 ? -1 : 1;
-  // Reach the middle at the friction maximum, then settle at the far edge.
-  const progress = local <= stroke.peak ? .5 * smooth((local - stroke.start) / Math.max(.001, stroke.peak - stroke.start))
-    : .5 + .5 * smooth((local - stroke.peak) / Math.max(.001, stroke.end - stroke.peak));
+  // Monotone Hermite travel: stop only at reversal, with continuous nonzero speed at the sound peak.
+  const a = Math.max(.001, stroke.peak - stroke.start), b = Math.max(.001, stroke.end - stroke.peak);
+  const w1 = 2 * b + a, w2 = b + 2 * a;
+  const middleSpeed = (w1 + w2) / (w1 / (.5 / a) + w2 / (.5 / b));
+  const first = local <= stroke.peak, u = Math.min(1, Math.max(0, first ? (local - stroke.start) / a : (local - stroke.peak) / b));
+  const progress = first ? .5 * smooth(u) + a * middleSpeed * (u * u * u - u * u)
+    : .5 + .5 * smooth(u) + b * middleSpeed * (u * u * u - 2 * u * u + u);
   const fade = smooth((time - playback.start) / .06) * smooth((playback.start + playback.duration - time) / .08);
   return { active: true, x: direction > 0 ? progress : 1 - progress, direction,
     strength: Math.sin(Math.PI * progress) * fade, remaining: 1 - progress,

@@ -8,8 +8,9 @@ export function initPlayerComposer(){
  const preview=document.getElementById('composer-reply')!;
  const messages=document.getElementById('messages')!;
  const send=form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
- const invitation='Message Bambi, or turn on your mic.';
- let latest=invitation;
+ let locked=false;
+ const invitation=()=>locked?'Bambi leads this session. Choose your journey, then press Start.':'Message Bambi, or turn on your mic.';
+ let latest=invitation();
  let draft:string|undefined;
  let heard='';
  function show(text:string){
@@ -19,12 +20,12 @@ export function initPlayerComposer(){
  function sync(){
   const drafting=!!input.value.length;
   // An empty focused input still shows the scrollable reply after Enter.
-  const editing=drafting;
+  const editing=drafting&&!locked;
   form.dataset.editing=String(editing);
   form.dataset.drafting=String(drafting);
   preview.hidden=editing;
   input.placeholder=latest;
-  send.disabled=!input.value.trim();
+  input.disabled=locked;send.disabled=locked||!input.value.trim();
   if(draft!==input.value){
    draft=input.value;input.style.height='48px';
    if(drafting)input.style.height=Math.min(104,Math.max(48,input.scrollHeight))+'px';
@@ -33,7 +34,7 @@ export function initPlayerComposer(){
  function readReply(){
   const replies=messages.querySelectorAll<HTMLElement>('.message p');
   const reply=replies[replies.length-1];
-  const text=reply?(reply.dataset.displayText??reply.textContent?.trim()??''):invitation;
+  const text=reply?(reply.dataset.displayText??reply.textContent?.trim()??''):invitation();
   show(heard||text||'Bambi is replying…');
  }
  // Token updates are batched by the browser. No second stream or audio request.
@@ -41,8 +42,8 @@ export function initPlayerComposer(){
  input.addEventListener('input',sync);
  input.addEventListener('focus',sync);
  input.addEventListener('blur',sync);
- preview.addEventListener('click',()=>input.focus());
+ preview.addEventListener('click',()=>{if(!locked)input.focus();});
  form.addEventListener('submit',sync);
  readReply();
- return {hearing(text:string){heard=text;readReply();},clearHearing(){if(heard){heard='';readReply();}}};
+ return {setInputAllowed(allowed:boolean){locked=!allowed;form.dataset.inputAllowed=String(allowed);readReply();},hearing(text:string){heard=text;readReply();},clearHearing(){if(heard){heard='';readReply();}}};
 }

@@ -6,6 +6,9 @@ import { z } from 'zod';
 import type { EpisodeRecipe } from './events/episodes';
 import { EventSchema, type BambiEvent, type SpeechSpec } from './events/contract';
 import { deliveryProfiles } from './delivery';
+import { spiralStyles } from './regie/registry';
+import { sceneNames } from '../safety/actions';
+import {journeyIds} from './journeys';
 
 export const directionMechanisms = ['blink', 'fractionation', 'mindwipe', 'reset', 'self', 'mantra', 'peak'] as const;
 export const DirectionSchema = z.object({
@@ -15,6 +18,9 @@ export const DirectionSchema = z.object({
   motifs: z.enum(['mixed', 'ring', 'heart', 'gears']),
   theme: z.enum(['varied', 'attention', 'imagination', 'perspective', 'ease']),
   mechanisms: z.array(z.enum(directionMechanisms)).max(directionMechanisms.length),
+  regie:z.object({enabled:z.boolean(),innerResponses:z.boolean(),intent:z.string().max(800),withdrawal:z.boolean().optional(),
+    playfulRequests:z.boolean().optional(),breathing:z.boolean().optional(),interactive:z.boolean().optional(),journey:z.enum([...journeyIds,'custom']).optional(),
+    scenes:z.array(z.enum(sceneNames)).max(sceneNames.length).optional(),styles:z.array(z.enum(spiralStyles)).max(spiralStyles.length).optional()}).strict().optional(),
 }).strict();
 export type SessionDirection = z.infer<typeof DirectionSchema>;
 const base: SessionDirection = { contrast: .5, repetition: .5, rhythm: 'expressive', motifs: 'mixed', theme: 'varied', mechanisms: [...directionMechanisms] };

@@ -268,6 +268,48 @@ class AudioTests(unittest.TestCase):
         self.assertLess(np.max(np.abs(audio[8400:10800,0])),.04)
         self.assertEqual(report['durationSeconds'],.8)
 
+class SupertonicLabTests(unittest.TestCase):
+    def test_sentence_delivery_preserves_native_tags_and_explicit_silence_without_changing_default_stream(self):
+        text = 'Oh, darling; nice try! [pause:900] <laugh> Try again, sweetie.'
+        provider = FakeProvider()
+        _, report = Renderer(provider, split_clauses=False).render(text, load_preset('bambi_local_clean'))
+        self.assertEqual(provider.spoken, ['Oh, darling; nice try!', '<laugh> Try again, sweetie.'])
+        self.assertEqual(report['timeline'][0]['pauseMs'], 900)
+        provider.spoken.clear()
+        list(Renderer(provider, split_clauses=False).chunks(text, load_preset('bambi_local_clean')))
+        self.assertEqual(provider.spoken, ['Oh,', 'darling;', 'nice try!', '<laugh> Try again,', 'sweetie.'])
+        self.assertTrue(all(len(p.text) <= 180 for p in phrases('word, ' * 300, split_clauses=False)))
+        with self.assertRaises(InterruptedError):
+            Renderer(provider, split_clauses=False).render(text, load_preset('bambi_local_clean'), cancel=lambda: True)
+
+    def test_quality_controls_and_voice_contract_reject_unsupported_modes(self):
+        from packages.speech.local.supertonic import controls,SupertonicVoices
+        for steps in (2,3,True,4.0,'5'):
+            with self.assertRaises(ValueError):controls(steps)
+        for seed in (-1,2147483648,True,1.1):
+            with self.assertRaises(ValueError):controls(5,seed)
+        for voice in ('af_heart','F1:0.5 + F2:0.5','../F1'):
+            with self.assertRaises(ValueError):SupertonicVoices().style(voice)
+
+    def test_cache_distinguishes_voice_speed_steps_and_seed_without_changing_global_rng(self):
+        from collections import OrderedDict
+        from packages.speech.local.supertonic import SupertonicProvider,SupertonicVoices
+        provider=object.__new__(SupertonicProvider)
+        provider.model_id='public-model';provider.sample_rate=24000;provider.registry=SupertonicVoices()
+        provider.styles={'F1':'style1','F2':'style2'};provider.cache=OrderedDict();provider.cache_hits=provider.cache_misses=0
+        calls=[]
+        def model(text,lang,style,total_step,speed):
+            calls.append((style,total_step,speed));return np.random.randn(1,4800).astype(np.float32)*.01,np.array([.2])
+        provider.model=model;provider.configure(4,41)
+        before=np.random.get_state();first,_=provider.synthesize('Public phrase.','F1',.78);after=np.random.get_state()
+        np.testing.assert_array_equal(before[1],after[1]);self.assertEqual(before[2:],after[2:])
+        first[:]=0;cached,_=provider.synthesize('Public phrase.','F1',.78);self.assertGreater(float(np.max(np.abs(cached))),.001)
+        provider.synthesize('Public phrase.','F2',.78);provider.synthesize('Public phrase.','F1',.9)
+        provider.configure(5,41);provider.synthesize('Public phrase.','F1',.78)
+        provider.configure(5,42);provider.synthesize('Public phrase.','F1',.78)
+        self.assertEqual(len(calls),5);self.assertEqual(provider.cache_hits,1)
+
+
 class OfflineIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -372,6 +414,13 @@ class OfflineIntegrationTests(unittest.TestCase):
                 self.fail('Offline server startup timed out')
             self.assertTrue(health['offline']);self.assertEqual(health['device'],'CPUExecutionProvider')
             self.assertIn('bambi_classic',health['voices'])
+            with urllib.request.urlopen(f'http://127.0.0.1:{port}/lab/catalog',timeout=3) as response:
+                catalog=json.load(response)
+            self.assertEqual(catalog['providers']['supertonic3']['voices'],['F1','F2','F3','F4','F5'])
+            self.assertFalse(catalog['providers']['supertonic3']['voiceBlending'])
+            self.assertEqual(catalog['providers']['qwen3']['voices'],['doll','brat','tease','custom'])
+            self.assertFalse(catalog['providers']['qwen3']['voiceBlending'])
+            self.assertEqual(catalog['providers']['qwen3']['backends'],['Vulkan0','CPU'])
             token = token_path.read_text()
             self.assertEqual(len(token), 64)
             if os.name != 'nt':
@@ -410,6 +459,36 @@ class OfflineIntegrationTests(unittest.TestCase):
             self.assertEqual(rate, 24000)
             self.assertEqual(audio.shape[1], 2)
             self.assertGreater(len(audio), 2400)
+            for endpoint,payload in [('/dev/captioned_speech',{'provider':'supertonic3','voice':'F1'}),
+                                     ('/dev/captioned_speech',{'provider':'qwen3','voice':'doll'}),
+                                     ('/lab/render',{'provider':'qwen3','voice':'doll','phraseMode':'clauses'}),
+                                     ('/lab/render',{'provider':'qwen3','voice':'doll','speed':.9}),
+                                     ('/lab/render',{'provider':'qwen3','voice':'custom','instruct':''}),
+                                     ('/lab/render',{'provider':'qwen3','voice':'doll','seed':True}),
+                                     ('/lab/render',{'provider':'qwen3','voice':'doll','backend':'CUDA'}),
+                                     ('/lab/render',{'provider':'unknown'}),
+                                     ('/lab/render',{'provider':'kokoro','phraseMode':'sentences'}),
+                                     ('/lab/render',{'provider':'supertonic3','voice':'F1','phraseMode':'unknown'}),
+                                     ('/lab/render',{'provider':'supertonic3','voice':'F1','seed':-1}),
+                                     ('/lab/render',{'provider':'supertonic3','voice':'F1','steps':3}),
+                                     ('/lab/render',{'provider':'supertonic3','voice':'F1:0.5 + F2:0.5'})]:
+                invalid=urllib.request.Request(f'http://127.0.0.1:{port}{endpoint}',data=json.dumps({'text':'Clear.',**payload}).encode(),
+                    headers={'Content-Type':'application/json','X-Bambi-TTS-Token':token})
+                with self.assertRaises(urllib.error.HTTPError) as failure:urllib.request.urlopen(invalid,timeout=3)
+                self.assertEqual(failure.exception.code,400)
+                failure.exception.close()
+            if catalog['providers']['supertonic3']['available']:
+                request_super=urllib.request.Request(f'http://127.0.0.1:{port}/lab/render',
+                    data=json.dumps({'text':'Oh, darling; nice try! [pause:900] <laugh> Try again, sweetie.','provider':'supertonic3','voice':'F1','steps':4,'seed':42,'phraseMode':'sentences',
+                                     'preset':'bambi_local_clean','overrides':{'pitchSemitones':1.5}}).encode(),
+                    headers={'Content-Type':'application/json','X-Bambi-TTS-Token':token})
+                with urllib.request.urlopen(request_super,timeout=20) as response:
+                    super_audio,super_rate=read_wav(response.read())
+                    self.assertEqual(response.headers['X-Audio-Provider'],'supertonic3')
+                self.assertEqual(super_rate,24000)
+                self.assertEqual(super_audio.shape[1],2)
+                self.assertTrue(np.isfinite(super_audio).all())
+                self.assertGreater(float(np.max(np.abs(super_audio))),.001)
             # An in-flight request owns synthesis before its body is complete.
             # Reject a second request without mistaking its unread JSON for HTTP.
             body = json.dumps({'text':'Clear and calm.', 'preset':'bambi_classic'}).encode()
@@ -449,6 +528,75 @@ class OfflineIntegrationTests(unittest.TestCase):
             with patch.dict(os.environ, {'BAMBI_TTS_TOKEN':'invalid'}, clear=True):
                 with self.assertRaises(ValueError):
                     render_token()
+
+class QwenLabTests(unittest.TestCase):
+    def test_continuous_passage_keeps_sentences_in_one_synthesis_and_exact_pauses(self):
+        provider=FakeProvider()
+        text='Oh, darling. Nice try! You can do better?'
+        config=load_preset('bambi_voice_test')
+        renderer=Renderer(provider,split_clauses=False,split_sentences=False,max_chars=600)
+        _,report=renderer.render(text,config)
+        self.assertEqual(provider.spoken,[text])
+        self.assertEqual(len(report['timeline']),1)
+        provider.spoken.clear()
+        _,report=renderer.render(text+' [pause:900] Stay here. Keep listening.',config)
+        self.assertEqual(provider.spoken,[text,'Stay here. Keep listening.'])
+        self.assertEqual(report['timeline'][0]['pauseMs'],900)
+        provider.spoken.clear()
+        list(renderer.chunks(text,config))
+        self.assertEqual(provider.spoken,['Oh,','darling.','Nice try!','You can do better?'])
+
+    def test_sentence_comparison_and_long_passage_bound(self):
+        provider=FakeProvider()
+        text='Oh, darling. Nice try! You can do better?'
+        Renderer(provider,split_clauses=False).render(text,load_preset('bambi_voice_test'))
+        self.assertEqual(provider.spoken,['Oh, darling.','Nice try!','You can do better?'])
+        provider.spoken.clear()
+        long_text='Keep the small silver key beside the blue glass. '*8
+        Renderer(provider,split_clauses=False,split_sentences=False,max_chars=600).render(long_text,load_preset('bambi_voice_test'))
+        self.assertEqual(provider.spoken,[long_text.strip()])
+        from packages.speech.local.qwen3 import QwenRenderer
+        with self.assertRaises(ValueError):QwenRenderer('Adult voice.',phrase_mode='clauses')
+
+    def test_description_seed_backend_and_single_voice_are_validated(self):
+        from packages.speech.local.qwen3 import controls,validate_config,QwenVoices
+        self.assertEqual(controls('  Adult girly voice.  ',42,'CPU'),('Adult girly voice.',42,'CPU'))
+        for instruction,seed,backend in [('',41,'CPU'),('x\0y',41,'CPU'),('x'*1201,41,'CPU'),
+                                         ('Adult voice.',True,'CPU'),('Adult voice.',-1,'CPU'),('Adult voice.',41,'CUDA')]:
+            with self.assertRaises(ValueError): controls(instruction,seed,backend)
+        with self.assertRaises(ValueError): QwenVoices().style('doll:0.5 + brat:0.5')
+        config=load_preset('bambi_local_clean',{'voice':'doll','speed':1})
+        validate_config(config)
+        config['layers']['left_voice']['enabled']=True
+        with self.assertRaisesRegex(ValueError,'one voice'):validate_config(config)
+
+    def test_cancel_terminates_only_the_owned_worker(self):
+        from packages.speech.local import qwen3
+        actual_popen=subprocess.Popen;children=[];checks=[]
+        def launch(*args,**kwargs):
+            child=actual_popen([sys.executable,'-c','import time;time.sleep(30)'],stdin=subprocess.DEVNULL)
+            children.append(child)
+            return child
+        def cancelled():
+            checks.append(True)
+            return len(checks)>1
+        config=load_preset('bambi_local_clean',{'voice':'doll','speed':1})
+        with patch.object(qwen3,'available',return_value=True),patch.object(qwen3.subprocess,'Popen',side_effect=launch):
+            with self.assertRaises(InterruptedError):qwen3.QwenRenderer('Adult feminine voice.',backend='CPU').render('Public test.',config,cancelled)
+        self.assertEqual(len(children),1)
+        self.assertIsNotNone(children[0].poll())
+
+    def test_worker_timeout_releases_the_owned_process(self):
+        from packages.speech.local import qwen3
+        actual_popen=subprocess.Popen;children=[]
+        def launch(*args,**kwargs):
+            child=actual_popen([sys.executable,'-c','import time;time.sleep(30)'],stdin=subprocess.DEVNULL)
+            children.append(child)
+            return child
+        config=load_preset('bambi_local_clean',{'voice':'doll','speed':1})
+        with patch.object(qwen3,'available',return_value=True),patch.object(qwen3,'TIMEOUT',.02),patch.object(qwen3.subprocess,'Popen',side_effect=launch):
+            with self.assertRaises(TimeoutError):qwen3.QwenRenderer('Adult feminine voice.',backend='CPU').render('Public test.',config)
+        self.assertIsNotNone(children[0].poll())
 
 if __name__=='__main__':
     unittest.main()

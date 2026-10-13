@@ -1,0 +1,550 @@
+{
+  "version": 1,
+  "status": "experiment-only",
+  "providers": [
+    {
+      "id": "pocket",
+      "status": "access-required",
+      "codeRevision": "41cbc84af539ea78a804ffca5f9c6edc1a22ce44",
+      "codeLicense": "MIT",
+      "weightsLicense": "CC-BY-4.0",
+      "modelRevision": "983151f13aaeab1b13c1e5e3c2c383d49a9edf3f",
+      "reason": "Pinned voice-cloning weights require Hugging Face access; anonymous request returned 401 and no configured credential exists. No ungated checkpoint substitution."
+    },
+    {
+      "id": "sopro",
+      "status": "experiment-only",
+      "codeRevision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+      "codeLicense": "Apache-2.0",
+      "weightsLicense": "Apache-2.0",
+      "assets": [
+        {
+          "repo": "samuel-vitorino/sopro-v2-turbo",
+          "revision": "c12d0dc7c4a33b3cb6ea3d11ceb70bc60c7c6312",
+          "file": "README.md",
+          "path": "README.md",
+          "bytes": 5878,
+          "sha256": "0cd5af86ff15be2d0585fbda61f112ce94031108b0ff3f169477c7485dd0fca9"
+        },
+        {
+          "repo": "samuel-vitorino/sopro-v2-turbo",
+          "revision": "c12d0dc7c4a33b3cb6ea3d11ceb70bc60c7c6312",
+          "file": "config.json",
+          "path": "config.json",
+          "bytes": 4481,
+          "sha256": "9d5a45b510a0e24620700e0f80288cff2441b9d826416d6fd7ef745b485476f4"
+        },
+        {
+          "repo": "samuel-vitorino/sopro-v2-turbo",
+          "revision": "c12d0dc7c4a33b3cb6ea3d11ceb70bc60c7c6312",
+          "file": "model.safetensors",
+          "path": "model.safetensors",
+          "bytes": 486332212,
+          "sha256": "4a68c1b636b1201cb5f808475a8c05d9711dae041f2933084c9cf4f6f12677e3"
+        },
+        {
+          "repo": "samuel-vitorino/sopro-v2-turbo",
+          "revision": "c12d0dc7c4a33b3cb6ea3d11ceb70bc60c7c6312",
+          "file": "semantic_encoder.safetensors",
+          "path": "semantic_encoder.safetensors",
+          "bytes": 82497708,
+          "sha256": "d1d1bccdfffdcd6d01d802a3e5dbefa0674c660f5022d87ec14e3271596c5c5f"
+        },
+        {
+          "repo": "samuel-vitorino/sopro-v2-turbo",
+          "revision": "c12d0dc7c4a33b3cb6ea3d11ceb70bc60c7c6312",
+          "file": "speaker_encoder.safetensors",
+          "path": "speaker_encoder.safetensors",
+          "bytes": 10784100,
+          "sha256": "67422a45d801542ee0aa55ce824f570ceb1c6b2283b4e74978c1b4673b49acd7"
+        },
+        {
+          "repo": "samuel-vitorino/sopro-v2-turbo",
+          "revision": "c12d0dc7c4a33b3cb6ea3d11ceb70bc60c7c6312",
+          "file": "tokenizer.model",
+          "path": "tokenizer.model",
+          "bytes": 370821,
+          "sha256": "2d76e7a4e8dbd0a4d2137c13200ac9710ad3fd93fad20a61f71102ab7bae754d"
+        },
+        {
+          "repo": "samuel-vitorino/sopro-v2-turbo",
+          "revision": "c12d0dc7c4a33b3cb6ea3d11ceb70bc60c7c6312",
+          "file": "vocoder.safetensors",
+          "path": "vocoder.safetensors",
+          "bytes": 54348240,
+          "sha256": "07e5561491cce41f7f90cfdb94b2ff263ff5742c3d89339db99b17ad82cc3f44"
+        }
+      ],
+      "sources": [
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "LICENSE.txt",
+          "path": "LICENSE.txt",
+          "bytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "pyproject.toml",
+          "path": "pyproject.toml",
+          "bytes": 1342,
+          "sha256": "7556572d6ee97efc04bb8afd9459bd6f2f90c31ee68c34d2e3e6e1272f5d6930"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/__init__.py",
+          "path": "src/sopro/__init__.py",
+          "bytes": 193,
+          "sha256": "1a2bf89b8363cee20ffc6b5d28ccd6aa62964c0990ff4323009e4845fad1c89a"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/audio.py",
+          "path": "src/sopro/audio.py",
+          "bytes": 10163,
+          "sha256": "c445a79862c2cea0334c2a60baa655d7d4bf8840144d3588303f2e58c62debaf"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/cli.py",
+          "path": "src/sopro/cli.py",
+          "bytes": 3492,
+          "sha256": "38604145670f4f13fafdd375655b4bc16cdd5f29c13c35ed1a80590ed6f4c2b3"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/config.py",
+          "path": "src/sopro/config.py",
+          "bytes": 4757,
+          "sha256": "700678bbe971eb12b32ff2e83c1e0ca3acc375222dcbba24668e351c3c60ab8a"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/encoders/__init__.py",
+          "path": "src/sopro/encoders/__init__.py",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/encoders/semantic.py",
+          "path": "src/sopro/encoders/semantic.py",
+          "bytes": 5647,
+          "sha256": "31ab664da48da7d0666142f01c67892c5642b62bf10b334c7f26050248b244a6"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/encoders/speaker.py",
+          "path": "src/sopro/encoders/speaker.py",
+          "bytes": 6861,
+          "sha256": "1c5c8cf30334d0825b82df4c7063592369912a6cc0655c28b98350f26776536d"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/hub.py",
+          "path": "src/sopro/hub.py",
+          "bytes": 1285,
+          "sha256": "944316dda7b57c0825264b35a043a9b8bb26d8717306248e0a185f0a98265412"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/model.py",
+          "path": "src/sopro/model.py",
+          "bytes": 18205,
+          "sha256": "1bc153a6690b45de4c29167db102864651b0f64d46edf9dde0e72fa5ea16f0f3"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/nn/__init__.py",
+          "path": "src/sopro/nn/__init__.py",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/nn/acoustic.py",
+          "path": "src/sopro/nn/acoustic.py",
+          "bytes": 22955,
+          "sha256": "a43ce54bcdac01a34996a0d2fefff444cbb3d3a6c840126eabf3936069c10653"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/nn/ar.py",
+          "path": "src/sopro/nn/ar.py",
+          "bytes": 8907,
+          "sha256": "15abfee047df479237fd6b870edcda35d837fbf3d1cd9ec9407e2d840a526b10"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/nn/decode.py",
+          "path": "src/sopro/nn/decode.py",
+          "bytes": 2957,
+          "sha256": "ac088ead76d04c2bf54468d58b497ee58c7ceef0169b61d415393617fd8578f1"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/nn/layers.py",
+          "path": "src/sopro/nn/layers.py",
+          "bytes": 2530,
+          "sha256": "3aabce187377405181d8caddec344203717e9ee54fefd3a7cc4be5cb5073cc60"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/nn/model.py",
+          "path": "src/sopro/nn/model.py",
+          "bytes": 4175,
+          "sha256": "7f02f822d628bd37773781e8bffb00bf26f8f6ad1bdf8287e4d0a6856fe4b341"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/nn/quant.py",
+          "path": "src/sopro/nn/quant.py",
+          "bytes": 2208,
+          "sha256": "1a9042f5a1a8ddec4e477f357ca8f12d020615d20bc346bb14770440a958c9da"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/sampling.py",
+          "path": "src/sopro/sampling.py",
+          "bytes": 1331,
+          "sha256": "c05ebe98c28bc3db0f9986f2471ddc3967371a6e639dbaa125bfee1c6d325542"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/server.py",
+          "path": "src/sopro/server.py",
+          "bytes": 10832,
+          "sha256": "2f7830d55c3ed5f15abf470018428698bcd24ac8bdda91c5b3e7b2460bdea7fb"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/streaming.py",
+          "path": "src/sopro/streaming.py",
+          "bytes": 5540,
+          "sha256": "3e09611300a7c5c5c0bd326ecf46f6f11e0ab51bc7f8e9fab2dad4446a2f9966"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/text.py",
+          "path": "src/sopro/text.py",
+          "bytes": 3628,
+          "sha256": "d459fd8748f8420404370ee97c76fc795e812afc0eb2a9fb1532cb7cf85e74e1"
+        },
+        {
+          "repo": "samuel-vitorino/sopro",
+          "revision": "7bfcf9a0539d274f6593959a21da948f506ceee1",
+          "file": "src/sopro/vocoder.py",
+          "path": "src/sopro/vocoder.py",
+          "bytes": 10942,
+          "sha256": "c79776e0f4a552808b6d1e869ae01fe07b7a5784a8b0604fa7af6f4bf8c22d13"
+        }
+      ],
+      "sampleRate": 24000,
+      "nativeEvents": [],
+      "timingMethod": "unavailable"
+    },
+    {
+      "id": "moss",
+      "status": "experiment-only",
+      "codeRevision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+      "codeLicense": "Apache-2.0",
+      "weightsLicense": "Apache-2.0",
+      "assets": [
+        {
+          "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+          "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+          "file": "README.md",
+          "path": "MOSS-TTS-Nano-100M-ONNX/README.md",
+          "bytes": 6095,
+          "sha256": "5147043da4b756d8599ceed41d2f4b34b0151d81be72ceca3a3db1e06b0e15da"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+          "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+          "file": "browser_poc_manifest.json",
+          "path": "MOSS-TTS-Nano-100M-ONNX/browser_poc_manifest.json",
+          "bytes": 503354,
+          "sha256": "097d80e993dc29f0bae427590b4f77084a161cb578b50d82c29f455d5faa9eee"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+          "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+          "file": "moss_tts_decode_step.onnx",
+          "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_decode_step.onnx",
+          "bytes": 291483,
+          "sha256": "698cbc2fc1c2feca16e5895614ed52bbb32ded10f236c076f477b2e69abf32d8"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+          "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+          "file": "moss_tts_global_shared.data",
+          "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_global_shared.data",
+          "bytes": 440813568,
+          "sha256": "bce8312c3df6a44545302cae229b61054fe0672e0b252ba59cba47adeed831dc"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+          "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+          "file": "moss_tts_local_cached_step.onnx",
+          "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_local_cached_step.onnx",
+          "bytes": 53685,
+          "sha256": "aa9035fefc1c138a951a8bcfc0374fb03a25f1ece67f7f7f53bce349b84a1dd5"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+          "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+          "file": "moss_tts_local_decoder.onnx",
+          "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_local_decoder.onnx",
+          "bytes": 49231,
+          "sha256": "51aa754301b38550a5f9adda0ad93bd3dc95819afb511e6dcabf4a90b345a454"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+          "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+          "file": "moss_tts_local_fixed_sampled_frame.onnx",
+          "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_local_fixed_sampled_frame.onnx",
+          "bytes": 471262,
+          "sha256": "40cdb00efc171c450cf91468e01429caa41b0252222cd308e978f58fe354afa8"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+          "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+          "file": "moss_tts_local_shared.data",
+          "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_local_shared.data",
+          "bytes": 229678080,
+          "sha256": "bae7782032c0fb12490ab42afe009f87ae6c75a0f0596fc7b5c08e4d5ee93916"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+          "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+          "file": "moss_tts_prefill.onnx",
+          "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_prefill.onnx",
+          "bytes": 283305,
+          "sha256": "d56126dcd0574c2f15d98fc6b35eda68d0386b5bd9c5e38e28548d6f2ea8f3db"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+          "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+          "file": "tokenizer.model",
+          "path": "MOSS-TTS-Nano-100M-ONNX/tokenizer.model",
+          "bytes": 470897,
+          "sha256": "c353ee1479b536bf414c1b247f5542b6607fb8ae91320e5af1781fee200fddff"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX",
+          "revision": "f52645cb467506d8e18e746ddd59482685b74e58",
+          "file": "tts_browser_onnx_meta.json",
+          "path": "MOSS-TTS-Nano-100M-ONNX/tts_browser_onnx_meta.json",
+          "bytes": 4487,
+          "sha256": "3edf25232dcd0af3d061c837e9a968a39e2f8592e06777d740503c4f2244f95c"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+          "revision": "ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae",
+          "file": "README.md",
+          "path": "MOSS-Audio-Tokenizer-Nano-ONNX/README.md",
+          "bytes": 4892,
+          "sha256": "3c7b9e9ef1c8c5e5c829a077a1d32c1f7aea1668f2bf17ead318ff04bf1e6fe4"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+          "revision": "ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae",
+          "file": "codec_browser_onnx_meta.json",
+          "path": "MOSS-Audio-Tokenizer-Nano-ONNX/codec_browser_onnx_meta.json",
+          "bytes": 17036,
+          "sha256": "3e291c883bb7d11ff2fe8e964e3e495519760358859f35c951254c7741592731"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+          "revision": "ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae",
+          "file": "moss_audio_tokenizer_decode_full.onnx",
+          "path": "MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_full.onnx",
+          "bytes": 681902,
+          "sha256": "0fbbafe3fd4afa2a019af5c5ced204af6e2d1db044fa40f021525d2aee95b4ac"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+          "revision": "ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae",
+          "file": "moss_audio_tokenizer_decode_shared.data",
+          "path": "MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_shared.data",
+          "bytes": 44198912,
+          "sha256": "e69d52e0f4e84ca27850557ee54face46632d3a5a16c89bd246c7c408466dcad"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+          "revision": "ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae",
+          "file": "moss_audio_tokenizer_decode_step.onnx",
+          "path": "MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_step.onnx",
+          "bytes": 351400,
+          "sha256": "9527c86a29e1837edec1f74db57d5eeaadb3a715af3382703566460afed25855"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+          "revision": "ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae",
+          "file": "moss_audio_tokenizer_encode.data",
+          "path": "MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_encode.data",
+          "bytes": 44507136,
+          "sha256": "aa751265b2bab2887eac224484546b194875aa7494b607115439b3dc6b228a2c"
+        },
+        {
+          "repo": "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX",
+          "revision": "ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae",
+          "file": "moss_audio_tokenizer_encode.onnx",
+          "path": "MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_encode.onnx",
+          "bytes": 815775,
+          "sha256": "eadea4a645abdcf98714c7aead122ee2ce7da6e080f9f80b977cd1ca8e19473a"
+        }
+      ],
+      "sources": [
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "LICENSE",
+          "path": "LICENSE",
+          "bytes": 11374,
+          "sha256": "1dc6904a1959e039b44569c6a726a611f75287051284de1b6cc0dc7712b14d11"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "app.py",
+          "path": "app.py",
+          "bytes": 110382,
+          "sha256": "77e7dba1a6a5deac097d11ac42e4d7fb3d1065c200452f4ce2b0755960456167"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "app_onnx.py",
+          "path": "app_onnx.py",
+          "bytes": 28611,
+          "sha256": "65b5924ccc8a49bb22419fd11e6ca66faea1f3a07bfd2dbe0e9404f432168580"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "infer.py",
+          "path": "infer.py",
+          "bytes": 14618,
+          "sha256": "8b55566c9198d383bccc483f0e07ec1680f7e7ed0e22de9e648417afe8351b00"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "infer_onnx.py",
+          "path": "infer_onnx.py",
+          "bytes": 8612,
+          "sha256": "7721054ce6a47c46d9926d8397332c05465951568a9d83cb150467a346771e55"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "moss_tts_nano/__init__.py",
+          "path": "moss_tts_nano/__init__.py",
+          "bytes": 49,
+          "sha256": "e2dfdcaf386b2ee9befa8ca8c14331b63053cd4b56a7ba114c5db67b012f246e"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "moss_tts_nano/__main__.py",
+          "path": "moss_tts_nano/__main__.py",
+          "bytes": 129,
+          "sha256": "910190acc099a616808ecd3e4323c9acab897897057dbaf8dab2044d8675bc08"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "moss_tts_nano/cli.py",
+          "path": "moss_tts_nano/cli.py",
+          "bytes": 14159,
+          "sha256": "be1bbe6d964b5586646c9bcbde04c6f1fc0d7e1e5a0bfce46a336f0895d2abff"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "moss_tts_nano/defaults.py",
+          "path": "moss_tts_nano/defaults.py",
+          "bytes": 350,
+          "sha256": "a559ab8042bf69ba6a05515e7f3f421e288e02d3a12a87222ebde4615c77a2a2"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "moss_tts_nano_runtime.py",
+          "path": "moss_tts_nano_runtime.py",
+          "bytes": 34820,
+          "sha256": "696abcc54dae09e0f8eda701a3ad45e1a28277fd1516379a77ef9ec97c51cfc3"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "onnx_tts_runtime.py",
+          "path": "onnx_tts_runtime.py",
+          "bytes": 29099,
+          "sha256": "712d6737949fb18cc08c6d2802ebaf0876afd2636945ac560073bc2fd38264b9"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "ort_cpu_runtime.py",
+          "path": "ort_cpu_runtime.py",
+          "bytes": 40665,
+          "sha256": "99477efaff28c12c0c8e16a6b4aab4e880a70851693fa303d932415ba180cbd5"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "pyproject.toml",
+          "path": "pyproject.toml",
+          "bytes": 1046,
+          "sha256": "00747097915da5e0d1a61e49083f0f2200113afaf7c6d4529d1388ef3d893702"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "text_normalization_pipeline.py",
+          "path": "text_normalization_pipeline.py",
+          "bytes": 11909,
+          "sha256": "38bd27cb560b10fadf3d59745802fa99f20d86887da43c17cde6d2145bec03ad"
+        },
+        {
+          "repo": "OpenMOSS/MOSS-TTS-Nano",
+          "revision": "8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+          "file": "tts_robust_normalizer_single_script.py",
+          "path": "tts_robust_normalizer_single_script.py",
+          "bytes": 17272,
+          "sha256": "28c55a2f0d63586eb6706ff39fea80e334b107b8fd40a859795d7fb232d717f7"
+        }
+      ],
+      "sampleRate": 48000,
+      "nativeEvents": [],
+      "timingMethod": "unavailable",
+      "channels": 2
+    }
+  ],
+  "defaultsChanged": false,
+  "inferenceDownloads": false
+}

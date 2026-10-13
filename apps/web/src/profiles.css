@@ -1,0 +1,21 @@
+/* SPDX-FileCopyrightText: 2026 BambiOS
+ * SPDX-License-Identifier: AGPL-3.0-only */
+#profiles-dialog{width:min(760px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;padding:24px;box-sizing:border-box}
+#profiles-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+#profiles-dialog header h2{margin:0}
+#profiles-dialog section{margin:20px 0}
+#profiles-dialog label{display:block;margin:12px 0}
+#profiles-dialog label.check{display:flex;gap:10px;align-items:flex-start}
+#profiles-dialog input:not([type=checkbox]),#profiles-dialog textarea{width:100%;box-sizing:border-box;margin-top:6px}
+#profiles-dialog input[type=text],#profiles-dialog input[type=password]{color:#f4e7f6;border:1px solid #ffffff24;border-radius:8px;background:#24182e;padding:10px 11px;min-height:42px}
+#profiles-dialog textarea{min-height:80px;resize:vertical}
+#profiles-dialog .profile-actions{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+#profiles-dialog fieldset{border:1px solid var(--line,#594151);border-radius:12px;padding:14px;margin:16px 0;min-width:0}
+#profiles-dialog legend{padding:0 6px}
+#profiles-dialog details{margin:12px 0;overflow-wrap:anywhere}
+#profiles-dialog table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:13px}
+#profiles-dialog th,#profiles-dialog td{text-align:left;padding:8px 5px;vertical-align:top;border-bottom:1px solid var(--line,#594151);overflow-wrap:anywhere;white-space:pre-wrap}
+#profiles-status{position:sticky;bottom:0;background:var(--panel,#211822);padding:12px;border-radius:10px;margin-bottom:0;overflow-wrap:anywhere}
+#profiles-recovery-list{list-style:none;padding:0}
+#profiles-recovery-list button{text-align:left;max-width:100%;white-space:normal}
+@media(max-width:480px){#profiles-dialog{padding:16px}#profiles-dialog .profile-actions button{flex:1 1 150px}#profiles-dialog th,#profiles-dialog td{padding:7px 3px;font-size:12px}}

@@ -13,7 +13,7 @@ export function wipeNarrationFacts(event: BambiEvent, atMs: number, preferences?
   if (preferences?.effectsEnabled === false) return 'The wipe effect is disabled. Override any wipe description: use a simple imagined quiet point; do not claim that a word is being erased, that a wiper is moving, or that rubbing sounds are playing.';
   const visual = preferences?.visualsEnabled === false ? 'Visuals are disabled; do not describe a visible wiper or text.'
     : preferences?.reducedMotion ? `The word ${JSON.stringify(wipe.text)} fades gently, without a moving wiper.`
-      : `A dark rubber windshield blade on a pink-accented metal arm sweeps in an arc from a fixed bottom pivot, erasing the word ${JSON.stringify(wipe.text)} over the retained background, alternating direction with acoustic strokes and resting at the endpoints between them.`;
+      : `Two dark rubber windshield blades on pink-accented metal arms sweep together in overlapping arcs from hidden pivots below the image, erasing the word ${JSON.stringify(wipe.text)} over the retained background, alternating direction with acoustic strokes and travelling completely out of the image at both reversal points before sweeping back in.`;
   return `${visual} The selected rubbing sound accompanies this engine-owned wipe. Use short original clauses about the present scene; do not decide its pace or duration.`;
 }
 
@@ -90,11 +90,12 @@ export function presentationAt(snapshot: EngineSnapshot, current: CompiledEvent 
       const envelope = { start, duration: action.durationMs, from: fromGain, to: action.gain };
       envelopes.set(action.bus, envelope); gains[action.bus] = sample(envelope, atMs);
     }
-    for (const action of current.event.visual) {
+    const canvasCeiling=values.canvas;
+    for (const action of [...current.event.visual].sort((a,b)=>a.offsetMs-b.offsetMs)) {
       const start = current.event.atMs + action.offsetMs;
       if (start > atMs || start < sinceFrame) continue;
       const t = action.durationMs ? unit((atMs - start) / action.durationMs) : 1;
-      if (action.opacity !== undefined) values.canvas *= lerp(1, action.opacity, t);
+      if (action.opacity !== undefined) values.canvas = lerp(values.canvas, canvasCeiling * action.opacity, t);
       if (action.motion !== undefined) values.motion = lerp(values.motion, action.motion, t);
       if (action.blurPx !== undefined) blurPx = lerp(blurPx, action.blurPx, t);
       if (action.zoom !== undefined) zoom = lerp(zoom, action.zoom, t);
@@ -112,7 +113,7 @@ export function presentationAt(snapshot: EngineSnapshot, current: CompiledEvent 
     ? ({ 'blink:cue': 'BLINK', 'blink:long_close': 'CLOSE', 'blink:reopen': 'OPEN' } as Record<string, string>)[frame.label]
     : undefined;
   const recipe = target.motifMotion;
-  const scanner = recipe && atMs >= recipe.startMs && values.motif > 0 && target.visualState !== 'sparse' && target.visualState !== 'black'
+  const scanner = recipe?.kind==='coin_scan' && atMs >= recipe.startMs && values.motif > 0 && target.visualState !== 'sparse' && target.visualState !== 'black'
     ? { rotationY: Math.sin((atMs - recipe.startMs) / recipe.periodMs * Math.PI * 2) * 72,
         offset: Math.cos((atMs - recipe.startMs) / recipe.periodMs * Math.PI * 2) * 32,
         opacity: recipe.strength * values.motif * unit((atMs - recipe.startMs) / 1200) }

@@ -58,13 +58,16 @@ test('desktop loader is an encoded file URL and launches through paths containin
  const result=spawnSync(process.execPath,[local[0],local[1],'--input-type=module','-e','if(!globalThis.__fixtureImported)process.exit(1)'],{encoding:'utf8',timeout:10000});
  assert.equal(result.status,0,result.stderr);
 });
-test('Windows llama selection rejects CUDA, daemon and traversal while retaining CPU variants, Vulkan and notices',()=>{
+test('Windows llama selection includes complete CUDA 12/13 while excluding drivers, daemon and traversal',()=>{
  const required=['llama-server.exe','ggml.dll','ggml-base.dll','ggml-cpu-x64.dll','libllama.dll','libllama-server-impl.dll'];
- const listing=[...required,'ggml-cpu-zen4.dll','libc++.dll','DLFCN_WIN32_COPYING','LLAMA_CPP_LICENSE','vulkan/ggml-vulkan.dll','vulkan/msvcp140.dll','cuda_v12/ggml-cuda.dll','cuda_v13/cublas64_13.dll','libllama-quantize-impl.dll','llama-quantize.exe','../evil.dll'].map(path=>'lib/ollama/'+path);
+ const cuda=[...[12,13].flatMap(version=>['ggml-cuda.dll',`cublas64_${version}.dll`,`cublasLt64_${version}.dll`,'msvcp140.dll','vcruntime140_1.dll'].map(name=>`cuda_v${version}/${name}`)),'cuda_v12/cudart64_12.dll'];
+ const listing=[...required,...cuda,'ggml-cpu-zen4.dll','libc++.dll','DLFCN_WIN32_COPYING','LLAMA_CPP_LICENSE','vulkan/ggml-vulkan.dll','vulkan/msvcp140.dll','cuda_v13/nvcuda.dll','cuda_v13/cublas64_12.dll','cuda_v12/../evil.dll','cuda_v13/extra.dll','libllama-quantize-impl.dll','llama-quantize.exe','../evil.dll'].map(path=>'lib/ollama/'+path);
  listing.push('ollama.exe');const result=llamaEntries(listing);
  assert(result.includes('lib/ollama/ggml-cpu-zen4.dll'));assert(result.includes('lib/ollama/vulkan/msvcp140.dll'));assert(result.includes('lib/ollama/DLFCN_WIN32_COPYING'));
- assert(!result.some(path=>/cuda|quantize|\.\.|^ollama/.test(path)));
+ for(const path of cuda)assert(result.includes('lib/ollama/'+path));
+ assert(!result.some(path=>/nvcuda|extra|quantize|\.\.|^ollama/.test(path)));assert(!result.includes('lib/ollama/cuda_v13/cublas64_12.dll'));
  assert.throws(()=>llamaEntries(listing.filter(path=>!path.endsWith('llama-server.exe'))),/missing/);
+ for(const path of cuda.filter(path=>!/msvcp|vcruntime/.test(path)))assert.throws(()=>llamaEntries(listing.filter(entry=>entry!=='lib/ollama/'+path)),/missing/);
 });
 test('source allowlist handles Windows separators and excludes local reports, weights and generated assets',()=>{
  for(const path of ['tests\\reports\\result.json','apps\\web\\public\\vad\\model.json','packages\\speech\\models\\private.json','.runtime\\data.json','docs/internal/record.md'])assert(!sourcePathAllowed(path),path);
@@ -100,4 +103,13 @@ test('PE dependency inspection catches omitted DLLs and does not accept a build-
  const path=join(folder,'server.exe');writeFileSync(path,pe('VCRUNTIME140.dll'));assert.deepEqual(peImports(path),['vcruntime140.dll']);
  assert.deepEqual(windowsDependencyReport(folder).unresolved,[{path:'server.exe',dll:'vcruntime140.dll'}]);
  writeFileSync(join(folder,'vcruntime140.dll'),pe('KERNEL32.dll'));assert.equal(windowsDependencyReport(folder).unresolved.length,0);
+ for(const backend of ['cuda_v12','cuda_v13','vulkan'])mkdirSync(join(folder,backend));
+ writeFileSync(join(folder,'cuda_v12/ggml-cuda.dll'),pe('NVCUDA.dll'));
+ writeFileSync(join(folder,'cuda_v13/ggml-cuda.dll'),pe('MSVCP140.dll'));
+ writeFileSync(join(folder,'vulkan/ggml-vulkan.dll'),pe('VULKAN-1.dll'));
+ writeFileSync(join(folder,'vulkan/msvcp140.dll'),pe('KERNEL32.dll'));
+ const isolated=windowsDependencyReport(folder);
+ assert.deepEqual(isolated.unresolved,[{path:'cuda_v13/ggml-cuda.dll',dll:'msvcp140.dll'}]);
+ assert.deepEqual(isolated.optionalDriver,[{path:'cuda_v12/ggml-cuda.dll',dll:'nvcuda.dll'},{path:'vulkan/ggml-vulkan.dll',dll:'vulkan-1.dll'}]);
+ writeFileSync(join(folder,'cuda_v13/msvcp140.dll'),pe('KERNEL32.dll'));assert.equal(windowsDependencyReport(folder).unresolved.length,0);
 });

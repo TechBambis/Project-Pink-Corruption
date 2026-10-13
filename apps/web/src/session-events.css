@@ -20,3 +20,7 @@
 .event-figure svg{display:block;width:100%;height:100%}
 .event-figure[hidden],.event-motif[data-form="heart"]>.event-orb,.event-motif[data-form="gears"]>.event-orb{display:none}
 #event-status{color:var(--teal)}
+
+.event-surround{position:absolute;left:50%;top:50%;width:min(108cqh,94cqw);aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
+.event-surround svg{display:block;width:100%;height:100%}
+.event-surround[hidden]{display:none}

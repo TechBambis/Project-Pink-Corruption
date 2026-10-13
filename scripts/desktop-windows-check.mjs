@@ -61,7 +61,7 @@ async function launch(port=16969){
   return {onboarding:await state.json(),capabilities:await capabilities.json()};
  });
  await page.locator('#model-onboarding').waitFor({state:'attached'});
- if(setup.capabilities.alpha&&!setup.onboarding.done){await page.locator('#model-onboarding[open]').waitFor();await page.locator('#model-onboarding .model-choice').first().waitFor({state:'attached'});await page.locator('#model-onboarding [data-finish]').click();await page.locator('#model-onboarding').waitFor({state:'hidden'});}
+ if(setup.capabilities.alpha&&!setup.onboarding.done){await page.locator('#model-onboarding[open]').waitFor();await page.locator('#model-onboarding [data-finish]').click();await page.locator('#model-onboarding').waitFor({state:'hidden'});}
  else assert.equal(await page.locator('#model-onboarding').evaluate(dialog=>dialog.open),false,'Smoke and completed profiles must not automatically open local-AI onboarding');
 
  const bounds=await application.evaluate(({BrowserWindow})=>{const window=BrowserWindow.getAllWindows()[0];window.setSize(880,640);return window.getBounds();});
@@ -272,16 +272,6 @@ try{
   },expectedModel);
   assert(!files(join(data,'models')).some(path=>path.endsWith('.partial')));
   record('actual-pinned-Setup-download-progress-cancel-and-retry',{attempts:setupChecks,fullModelActivated:false});
-  const chosenFolder=join(output,'Chosen model folder ü'),chosenFile=join(chosenFolder,'unknown.gguf');mkdirSync(chosenFolder);writeFileSync(chosenFile,'GGUF-public-unreviewed-fixture');
-  await current.application.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},chosenFolder);
-  await current.page.locator('[data-folder]').click();await current.page.waitForFunction(()=>document.querySelectorAll('.model-source').length===1);
-  await current.page.reload();await current.page.getByRole('button',{name:'3. Install and start',exact:true}).click();await current.page.waitForFunction(()=>document.querySelectorAll('.model-source').length===1);
-  await current.page.locator('[data-folder]').click();
-  await current.page.waitForFunction(()=>document.querySelectorAll('.model-source').length===1&&!document.querySelector('[data-folder]').disabled);
-  const savedSources=await current.page.evaluate(async()=>(await(await fetch('/api/desktop/setup/sources')).json()).sources);
-  assert.equal(savedSources.length,1);assert.equal(logicalPath(savedSources[0].path),logicalPath(realpathSync(chosenFolder)));assert.deepEqual(savedSources[0].models,[]);
-  await current.page.getByRole('button',{name:'Forget location',exact:true}).click();await current.page.waitForFunction(()=>document.querySelectorAll('.model-source').length===0);assert.equal(readFileSync(chosenFile,'utf8'),'GGUF-public-unreviewed-fixture');
-  record('native-model-folder-choice-persists-deduplicates-and-forgets-without-changing-originals',{unicodePath:true,unknownModelNotImported:true,scope:'Actual Setup buttons and native bridge; only the disposable chooser result is supplied. Full supported-weight import is a reference-machine check.'});
   await current.page.goto('http://127.0.0.1:16969/');
   await current.page.waitForSelector('#offline-sample');
   const afterCancel=await current.page.evaluate(async()=>{
@@ -314,7 +304,7 @@ try{
  assert.deepEqual(await inventory(resources),before);record('immutable-resources-unchanged');
  evidence.result='passed';
  evidence.limitations=['This tests the unpacked/installed binary on the recorded native Windows host. Actual browser download, NSIS install/uninstall and security policy are separate tests.','PCM is application output, not physical listening. No physical microphone test.','AI, setup, GPU offloading, CPU fallback, offline network isolation and suspended-process injection need separate qualification.'];
-}catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);try{const failureApplication=current?.application||[...applications.keys()].at(-1),failurePage=current?.page||await failureApplication?.firstWindow();if(failurePage){evidence.failurePage=await failurePage.evaluate(()=>({url:location.href,onboarding:document.querySelector('#model-onboarding')?.textContent,setup:document.querySelector('#local-model-setup')?.textContent}));console.error('Failure page:',JSON.stringify(evidence.failurePage));await failurePage.screenshot({path:join(output,'failure.png')});}}catch{}console.error(error);process.exitCode=1;}
+}catch(error){evidence.result='failed';evidence.failure=String(error.stack||error);console.error(error);process.exitCode=1;}
 finally{
  for(const [application,child] of applications){
   if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');

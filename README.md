@@ -2,11 +2,11 @@
 
 Bambi Local is a free local companion for the hypnosis community: chat, voice, spirals, your own media and Session Studio.
 
-[**Download for Windows or Linux**](https://github.com/TechBambis/Project-Pink-Corruption/releases/tag/v0.1.0-alpha.23)
+[**Download for Windows, Linux or Mac**](https://github.com/TechBambis/Project-Pink-Corruption/releases)
 
-Windows: install the **.exe**. Linux: open the **.AppImage**. Choose and download a model inside the app. No developer tools needed.
+Windows: install the **.exe**. Linux: open the **.AppImage**. Apple Silicon Mac: extract the **macos-arm64.zip**. Choose and download a model inside the app. No developer tools needed.
 
-This is an alpha. Windows 11 GPU/CPU/offline use and physical audio still need tester checks; macOS is not available yet. Private downloads require repository access.
+This is an alpha. Kokoro’s Bambi Mix is the default voice. GPU/CPU/offline use, microphone, physical audio and sleep/wake need testing on each recipient’s machine. Private downloads require repository access.
 
 [Getting started](docs/AI_ALPHA_TESTING.md) · [Settings & presets](docs/SETTINGS_BACKUP.md) · [Report a bug](https://github.com/TechBambis/Project-Pink-Corruption/issues) · [Discussions](https://github.com/TechBambis/Project-Pink-Corruption/discussions)
 

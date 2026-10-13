@@ -27,9 +27,9 @@ export class InferenceQueue {
   next.resolve(()=>{if(released)return;released=true;this.busy=false;this.drain();});
  }
  async run<T>(operation:()=>Promise<T>,signal:AbortSignal,priority=0){const release=await this.acquire(signal,priority);try{signal.throwIfAborted();return await operation();}finally{release();}}
- async *stream(backend:LLMBackend,messages:Message[],model:string,signal:AbortSignal,context:number,maxTokens:number,sampling:SamplingProfile='creative',grammar?:string){
+ async *stream(backend:LLMBackend,messages:Message[],model:string,signal:AbortSignal,context:number,maxTokens:number,sampling:SamplingProfile='creative',grammar?:string,onAcquired?:()=>void){
   const release=await this.acquire(signal);
-  try{signal.throwIfAborted();yield*backend.stream(messages,model,signal,context,maxTokens,sampling,grammar);}finally{release();}
+  try{signal.throwIfAborted();onAcquired?.();yield*backend.stream(messages,model,signal,context,maxTokens,sampling,grammar);}finally{release();}
  }
 }
 

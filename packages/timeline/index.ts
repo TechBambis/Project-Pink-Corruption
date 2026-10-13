@@ -42,4 +42,4 @@ export class TimelineScheduler {
 }
 
 /** State changes and playback accounting survive stalls; transient cues never catch up in a burst. */
-export function presentationEventLateness(event:TimelineEvent){return ['scene','ambient','voice-start','caption','voice-caption','word'].includes(event.type)?undefined:.15;}
+export function presentationEventLateness(event:TimelineEvent){return ['scene','ambient','voice-start','voice-complete','caption','voice-caption','word'].includes(event.type)?undefined:.15;}

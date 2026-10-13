@@ -111,8 +111,9 @@
                     <legend class="sr-only">
 Choose your session
                     </legend>
-                    <button type="button" class="experience-choice" data-experience="conversation" aria-pressed="false"><span>Chat</span><small>Talk, type &amp; listen</small></button>
-                    <button type="button" class="experience-choice" data-experience="guided" aria-pressed="true"><span>Guided session</span><small>An AI-led journey</small></button>
+                    <button type="button" class="experience-choice" data-experience="conversation" aria-pressed="false"><span>Chat</span><small>Questions, ideas &amp; everyday talk</small></button>
+                    <button type="button" class="experience-choice" data-experience="guided" aria-pressed="true"><span>Interactive session</span><small>A journey you can influence</small></button>
+                    <button type="button" class="experience-choice" data-experience="solo" aria-pressed="false"><span>AI takes over</span><small>Choose first, then just listen</small></button>
                     <button type="button" class="experience-choice" data-experience="files" aria-pressed="false"><span>Library</span><small>Files &amp; playlists</small></button>
                     <select id="mode" hidden aria-hidden="true" tabindex="-1">
                       <option value="local">Play my files</option>
@@ -121,6 +122,7 @@ Choose your session
                       <option value="official">External session</option>
                     </select>
                   </fieldset>
+                  <select id="session-interaction" hidden aria-hidden="true" tabindex="-1"><option value="interactive">Interactive</option><option value="uninterrupted">Uninterrupted</option></select>
                   <label id="session-duration-control">Duration <select id="duration"><option value="unlimited" selected>Unlimited</option><option value="300">5 minutes</option><option value="600">10 minutes</option><option value="1200">20 minutes</option><option value="1800">30 minutes</option><option value="3600">60 minutes</option></select></label>
                   <label id="session-intensity-control" class="range-label">Intensity <output id="intensity-label">45</output><input id="intensity" type="range" min="0" max="100" value="45"></label>
                 </div>
@@ -129,25 +131,39 @@ Choose your session
                   <a id="experience-files-link" href="#files" data-target="files" hidden>Open your library</a>
                 </div>
                 <label id="experience-join-label" class="check experience-join" hidden><input id="experience-join" type="checkbox"> Let Bambi join in</label>
+                <div id="chat-quick-settings" class="chat-quick-settings" hidden>
+                  <label>Conversation <select id="conversation-topic"><option value="general">Anything on your mind</option><option value="bambi">Bambi topics &amp; explanations</option><option value="style">Outfit &amp; style ideas</option></select></label>
+                  <label>Replies <select id="chat-output"><option value="voice">Text + voice</option><option value="text">Text only · no voice preparation</option></select></label>
+                  <p id="chat-topic-description" class="hint">Ask a question, talk through an idea, or plan your day.</p>
+                </div>
                 <div class="session-shortcuts" aria-label="Customize session">
-                  <a href="#voice" data-target="voice">Voice <span id="session-voice-name">Heart</span></a>
+                  <a href="#voice" data-target="voice">Voice <span id="session-voice-name">Bambi Mix</span></a>
                   <a href="#sound" data-target="audio-preset">Sound <span id="session-preset-name">Local Clean</span></a>
                   <a href="#visuals" data-target="scene">Visuals <span id="session-scene-name">Spiral Focus</span></a>
                 </div>
                 <section id="session-direction-settings" class="session-direction" data-section="Session direction" aria-labelledby="direction-heading" hidden>
-                  <h2 id="direction-heading">Session direction</h2>
+                  <h2 id="direction-heading">Choose a journey</h2>
                   <fieldset id="direction-controls">
                     <legend class="sr-only">Session style and components</legend>
-                    <label>Style <select id="session-direction" aria-describedby="direction-description direction-influence"><option value="balanced">Balanced</option><option value="custom">Custom</option></select></label>
-                    <p id="direction-description" class="hint">Varied scenes, expressive narration and room between peaks.</p>
-                    <p id="direction-influence" class="hint" hidden></p>
+                    <label class="check"><input id="direction-ai-regie" type="checkbox"> Let AI plan the journey</label>
+                    <label>Journey <select id="session-journey" aria-describedby="journey-description journey-signature"><option value="custom">Custom journey</option></select></label>
+                    <p id="journey-description" class="hint">Choose a creative starting point, then adjust the moments you want.</p>
+                    <p id="journey-signature" class="hint"></p>
                     <details id="direction-details">
                       <summary>Fine-tune this style</summary>
+                      <p id="direction-feedback-hint" class="hint">Build connected scenes from the moments you allow. Your feedback can change what comes next.</p>
+                      <label>Composition style <select id="session-direction" aria-describedby="direction-description direction-influence"><option value="balanced">Balanced</option><option value="custom">Custom</option></select></label>
+                      <p id="direction-description" class="hint">Varied scenes, expressive narration and room between peaks.</p>
+                      <p id="direction-influence" class="hint" hidden></p>
+                      <label>Starting idea <textarea id="direction-intent" maxlength="800" rows="2" placeholder="What should this journey explore?"></textarea></label>
+                      <label class="check"><input id="direction-inner-response" type="checkbox" checked> Include imagined inner answers and pink repeat prompts</label>
+                      <label class="check"><input id="direction-playful-requests" type="checkbox" checked> Include playful requests and earned scene changes</label>
+                      <label class="check"><input id="direction-breathing" type="checkbox" checked> Include paced breathing scenes</label>
                       <div class="settings-grid">
                         <label class="range-label">Contrast <output id="direction-contrast-label">50%</output><input id="direction-contrast" type="range" min="0" max="100" value="50" aria-describedby="direction-contrast-help"></label>
                         <label class="range-label">Repetition <output id="direction-repetition-label">50%</output><input id="direction-repetition" type="range" min="0" max="100" value="50" aria-describedby="direction-repetition-help"></label>
                         <p id="direction-contrast-help" class="hint">Higher contrast favors sparse holds and sharper switches into layered scenes.</p>
-                        <p id="direction-repetition-help" class="hint">Favor recurring anchors and mantra episodes. Each mantra still repeats three times.</p>
+                        <p id="direction-repetition-help" class="hint">Favor recurring anchors and contextual phrases, with space to answer.</p>
                         <label>Voice rhythm <select id="direction-rhythm"><option value="expressive">Expressive / varied</option><option value="slow">Slow / spacious</option><option value="driving">Rhythmic / tighter</option></select></label>
                         <label>Visual motifs <select id="direction-motifs"><option value="mixed">Varied journey</option><option value="ring">Ring &amp; soft reflection</option><option value="heart">Turning heart</option><option value="gears">Linked gears</option></select></label>
                         <label>Narrative focus <select id="direction-theme"><option value="varied">Varied ideas</option><option value="attention">Focused attention</option><option value="imagination">Imagination</option><option value="perspective">Fictional role &amp; perspective</option><option value="ease">Comfort &amp; settling</option></select></label>
@@ -161,7 +177,10 @@ Choose your session
                         <label class="check"><input id="direction-self" type="checkbox" checked> Original / Old Self</label>
                         <label class="check"><input id="direction-mantra" type="checkbox" checked> Mantra loops</label>
                         <label class="check"><input id="direction-peak" type="checkbox" checked> Layered peaks</label>
+                        <label class="check"><input id="direction-withdrawal" type="checkbox" checked> Snap, picture withdrawal &amp; eye reopening</label>
                       </fieldset>
+                      <fieldset class="direction-mechanisms"><legend>Allow these scenes</legend><div id="direction-scene-pool"></div></fieldset>
+                      <fieldset class="direction-mechanisms"><legend>Allow these spiral styles</legend><div id="direction-style-pool"></div></fieldset>
                       <p class="hint">Enabled moments remain subject to the session phase, available voice and reduced motion. Quiet recovery stays part of the journey.</p>
                     </details>
                   </fieldset>
@@ -223,7 +242,7 @@ Open your official session in its own tab, then start the local clock alongside 
                     <option value="ambient">Talk occasionally</option>
                     <option value="interactive">Hands-free conversation</option>
                   </select>
-                  <label>Voice <select id="voice"><option value="af_heart">Heart</option><option value="af_bella">Bella</option><option value="af_sarah">Sarah</option><option value="af_nicole">Nicole</option><option value="af_sky">Sky</option><option value="af_river">River</option><option value="af_aoede">Aoede</option><option value="bambi_classic">Bambi Classic (custom blend)</option></select></label>
+                  <label>Voice <select id="voice"><option value="af_heart">Heart</option><option value="af_bella">Bella</option><option value="af_sarah">Sarah</option><option value="af_nicole">Nicole</option><option value="af_sky">Sky</option><option value="af_river">River</option><option value="af_aoede">Aoede</option><option value="bambi_classic" selected>Bambi Mix</option></select></label>
                   <label>Speaking speed <input id="speed" type="number" min="0.5" max="1.5" step="0.01" value="0.78"></label>
                   <label class="check"><input id="adaptive-delivery" type="checkbox" checked> Classic narration: adaptive pace, pauses &amp; mix</label>
                   <label>Your name <input id="bambi-name" maxlength="50" value="Bambi"></label>
@@ -234,7 +253,7 @@ Open your official session in its own tab, then start the local clock alongside 
               <details id="chat-personality-settings" class="settings-fold" data-section="Chat personality">
                 <summary>Chat personality</summary>
                 <div class="fold-content">
-                  <label>Personality <select id="prompt-template" aria-describedby="chat-personality-help"><option value="bambisleep-classic">BambiSleep Classic</option><option value="gentle-induction">Gentle Induction</option><option value="custom">Custom</option></select></label>
+                  <label>Personality <select id="prompt-template" aria-describedby="chat-personality-help"><option value="bambisleep-classic">BambiSleep Classic</option><option value="gentle-induction">Gentle Induction</option><option value="english-conversation">English Conversation</option><option value="custom">Custom</option></select></label>
                   <p id="prompt-description" class="hint"></p>
                   <label>Your custom personality <textarea id="persona" maxlength="300" rows="2" placeholder="Describe her tone and personality" aria-describedby="chat-personality-help">Soft, playful, dreamy and affectionate</textarea></label>
                   <p id="chat-personality-help" class="hint">For chat replies and classic narration. Choose Custom to use your own personality text. Guided uses Narration style in Session direction.</p>
@@ -319,7 +338,14 @@ Open your official session in its own tab, then start the local clock alongside 
                   <div class="settings-grid">
                     <label>AI model <select id="model"><option value="bambi-qwen35-9b-hauhau:q4_k_m">Qwen3.5 9B · HauhauCS · Q4_K_M</option></select></label>
                     <p id="model-context-status" class="hint" role="status">Preparation checks the complete selected prompt and available conversation space.</p>
+                    <p class="hint">To test MTP, select “4B · MTP on” or “4B · MTP off · Same export”. Both use the same experimental 4B file and keep your personality. Your original Hauhau 4B remains a separate choice. Switching models reloads local AI.</p>
                     <label>Performance <select id="performance"><option value="auto">Auto</option><option value="latency">Low latency</option><option value="balanced">Balanced</option><option value="quality">Quality</option></select></label>
+                    <label class="check"><input id="q8-kv-cache" type="checkbox" aria-describedby="q8-kv-hint q8-kv-status"> Q8 KV cache · Experimental</label>
+                    <p id="q8-kv-hint" class="hint">Uses less graphics memory with the same Hauhau 9B model and context length. May improve speed when memory is tight. Changing this reloads local AI. Compare speed and response quality after a warmup reply.</p>
+                    <p id="q8-kv-status" class="hint" role="status" aria-live="polite">Checking cache availability…</p>
+                    <label class="check"><input id="dflash-4b" type="checkbox" aria-describedby="dflash-hint dflash-status"> DFlash · Hauhau 4B · Experimental</label>
+                    <p id="dflash-hint" class="hint">Compare the same Hauhau 4B model with and without its draft helper. May generate longer replies faster, but can delay the first response. Changing this reloads local AI. Default off.</p>
+                    <p id="dflash-status" class="hint" role="status" aria-live="polite">Checking DFlash availability…</p>
                     <label>Response style <select id="sampling-profile"><option value="qwen">Natural · Balanced</option><option value="creative">Creative · Experimental</option></select></label>
                     <label>Reply length <select id="response-length"><option value="220">Short</option><option value="600">Medium</option><option value="2048">Full passage (2,048)</option><option value="8192" selected>Long script (8,192)</option></select></label>
                   </div>
@@ -676,7 +702,8 @@ Open your official session in its own tab, then start the local clock alongside 
                 <div class="tool-links">
                   <a class="tool-link" href="#conversation-settings" data-target="conversation-settings">Conversation &amp; memories <span>Saved preferences and recent chats</span></a>
                   <a class="tool-link" href="/studio" target="_blank" rel="noopener">Session Studio <span>Create and export sessions</span></a>
-                  <button id="local-models-open" type="button" class="tool-link">Local AI models &amp; setup <span>Hardware recommendations, downloads and first-run guide</span></button>
+                  <button id="local-models-open" type="button" class="tool-link">Download AI &amp; voice models <span>Install everything in the app; no separate model website</span></button>
+                  <button id="profiles-open" type="button" class="tool-link">Profiles &amp; backups <span>Offline setting codes, profile files and encrypted backups</span></button>
                   <button id="privacy-access-open" type="button" class="tool-link">Privacy &amp; access <span id="privacy-access-summary">Optional permissions and local session context</span></button>
                   <a class="tool-link" href="/setup">Setup &amp; diagnostics <span>Check services and reply timing</span></a>
                   <a class="tool-link" href="/voice-lab" target="_blank" rel="noopener">Voice Lab <span>Compare voices and sounds</span></a>
@@ -705,6 +732,51 @@ Open your official session in its own tab, then start the local clock alongside 
         <button id="navigation-notice-close" type="button" class="quiet" aria-label="Dismiss notice">✕</button>
       </div>
     </div>
+    <dialog id="profiles-dialog" aria-labelledby="profiles-heading">
+      <header><h2 id="profiles-heading">Profiles &amp; backups</h2><button id="profiles-close" type="button" class="quiet" aria-label="Close profiles and backups">Close</button></header>
+      <p class="hint">Share your setup or keep a copy for yourself. Codes and files work offline, without an account.</p>
+      <section aria-labelledby="profiles-share-heading">
+        <h3 id="profiles-share-heading">Share settings</h3>
+        <label>Preset name<input id="profiles-name" type="text" maxlength="120" value="Shared settings"></label>
+        <label class="check"><input id="profiles-personal-text" type="checkbox">Include personal names and custom conversation / narration text</label>
+        <p class="hint">Voice, sound, visuals, triggers and session choices are included. Chats, memories, library data, model selection, microphone setup, devices and access permissions are excluded. Anyone with a code can read its settings.</p>
+        <div class="profile-actions"><button id="profiles-generate" type="button">Create offline code</button><button id="profiles-export" type="button" class="quiet">Save shared settings file</button></div>
+        <label>Setting code<textarea id="profiles-code-output" rows="3" readonly spellcheck="false" aria-describedby="profiles-code-hint"></textarea></label>
+        <p id="profiles-code-hint" class="hint">The complete settings are inside the code. Copy and paste it into a message; longer setups make longer codes.</p>
+        <button id="profiles-copy" type="button" class="quiet">Copy code</button>
+      </section>
+      <details><summary>Keep my settings</summary><p class="hint">A personal settings file includes your names and custom text. It contains no chats or media and is not encrypted.</p><button id="profiles-export-personal" type="button" class="quiet">Save my settings file</button></details>
+      <details><summary>Encrypted personal backup</summary>
+        <p class="hint">Your settings are included. Choose whether to add chats, confirmed memories and library notes. Model weights, recordings, local media files and Studio drafts stay separate. Computer-specific settings are retained on the receiving computer.</p>
+        <label class="check"><input id="profiles-backup-memory" type="checkbox">Include chats and memories</label>
+        <label class="check"><input id="profiles-backup-library" type="checkbox">Include library entries, favorites, notes and tags</label>
+        <label>Backup password<input id="profiles-password" type="password" minlength="8" maxlength="1024" autocomplete="new-password"></label>
+        <label>Repeat password<input id="profiles-password-confirm" type="password" minlength="8" maxlength="1024" autocomplete="new-password"></label>
+        <button id="profiles-backup" type="button">Save encrypted backup</button>
+        <p class="hint">Keep the password separately. The app cannot recover a lost password.</p>
+      </details>
+      <section aria-labelledby="profiles-import-heading">
+        <h3 id="profiles-import-heading">Import or restore</h3>
+        <label>Paste a setting code<textarea id="profiles-code-input" rows="3" spellcheck="false"></textarea></label>
+        <button id="profiles-read-code" type="button" class="quiet">Preview code</button>
+        <label>Backup password, if needed<input id="profiles-restore-password" type="password" maxlength="1024" autocomplete="current-password"></label>
+        <label>Choose a profile or encrypted backup<input id="profiles-file" type="file" accept=".json,application/json"></label>
+        <button id="profiles-read-file" type="button" class="quiet">Preview selected file</button>
+      </section>
+      <section id="profiles-preview" aria-labelledby="profiles-preview-title" hidden>
+        <h3 id="profiles-preview-title" tabindex="-1">Review settings</h3><p id="profiles-preview-date" class="hint"></p>
+        <div id="profiles-groups"></div>
+        <label class="check"><input id="profiles-replace" type="checkbox">Replace selected setting groups, including restoring defaults for missing settings</label>
+        <fieldset id="profiles-private-selection" hidden><legend>Private data to restore</legend>
+          <label class="check"><input id="profiles-restore-memory" type="checkbox"><span>Replace chats and memories<br><small id="profiles-memory-count"></small></span></label>
+          <label class="check"><input id="profiles-restore-library" type="checkbox"><span>Replace library metadata<br><small id="profiles-library-count"></small></span></label>
+        </fieldset>
+        <p class="hint">Applying stops the session and reloads the app. Access permissions and computer/device setup are retained; devices stay disarmed. A local recovery point is saved first.</p>
+        <button id="profiles-apply" type="button" disabled>Apply selected settings</button>
+      </section>
+      <details><summary>Recover an earlier profile</summary><p class="hint">The last five recovery points stay on this device. They can contain private chats and notes. Review one below and choose what to restore.</p><ul id="profiles-recovery-list"></ul></details>
+      <p id="profiles-status" role="status" aria-live="polite"></p>
+    </dialog>
     <dialog id="memory-dialog">
       <h2>Your local memories</h2>
       <p>Saved preferences and recent chats.</p>

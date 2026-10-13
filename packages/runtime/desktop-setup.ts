@@ -9,7 +9,7 @@ import {pipeline} from 'node:stream/promises';
 import {resourcePath} from './paths';
 import {ModelSources} from './model-sources';
 import {desktopServices} from './desktop-services';
-import {downloadableModel,modelAsset} from '../ai/model-catalog';
+import {downloadableModel,modelAssets} from '../ai/model-catalog';
 
 export interface Asset {path:string;bytes:number;sha256:string;url:string;license:string}
 export const alphaModels=JSON.parse(readFileSync(resourcePath('config/desktop-alpha-models.json'),'utf8')) as {protocol:number;alias:string;context:number;assets:Asset[]};
@@ -21,36 +21,39 @@ export class DesktopSetup {
  state:{phase:Phase;asset?:string;completed:number;total:number;error?:string;operation?:'download'|'import'|'check'|'prepare';stage?:string;assetCompleted?:number;assetTotal?:number;assetIndex?:number;assetCount?:number;startedAt?:number;updatedAt?:number}={phase:'not-installed',completed:0,total:alphaModels.assets.reduce((n,a)=>n+a.bytes,0)};
  verified=false;private controller:AbortController|null=null;
  model=alphaModels.alias;
+ tryAnyway=false;
  get context(){return downloadableModel(this.model).context;}
  get busy(){return this.controller!==null;}
  get downloadBytes(){return this.assets.reduce((n,a)=>n+a.bytes,0);}
  get snapshot(){
   const runtime=this.includeSpeech?desktopServices.capabilities:undefined;
   const stopped=this.state.phase==='ready'&&runtime?.phase==='failed';
-  return {...this.state,...(stopped?{phase:'failed',error:'Local AI stopped. Prepare local AI to restart.'}:{}),verified:this.verified,model:this.model,downloadBytes:this.downloadBytes,remainingBytes:this.assets.filter(asset=>!this.verifiedPaths.has(asset.path)).reduce((n,a)=>n+a.bytes,0),missing:this.assets.filter(asset=>!this.verifiedPaths.has(asset.path)).map(asset=>asset.path),...(runtime?{runtime}:{})};
+  return {...this.state,...(stopped?{phase:'failed',error:'Local AI stopped. Prepare local AI to restart.'}:{}),verified:this.verified,model:this.model,tryAnyway:this.tryAnyway,downloadBytes:this.downloadBytes,remainingBytes:this.assets.filter(asset=>!this.verifiedPaths.has(asset.path)).reduce((n,a)=>n+a.bytes,0),missing:this.assets.filter(asset=>!this.verifiedPaths.has(asset.path)).map(asset=>asset.path),...(runtime?{runtime}:{})};
  }
  constructor(readonly directory=process.env.BAMBI_MODELS_ROOT!,private assets:Asset[]=alphaModels.assets,readonly includeSpeech=true,private options:{downloadIdleMs?:number}={}){
   this.sources=new ModelSources(directory);
   if(assets===alphaModels.assets||!includeSpeech){
-   try{const saved=JSON.parse(readFileSync(resolve(directory,'selected-model.json'),'utf8'));downloadableModel(saved.model);this.model=saved.model;}catch{}
+   try{const saved=JSON.parse(readFileSync(resolve(directory,'selected-model.json'),'utf8'));downloadableModel(saved.model);this.model=saved.model;this.tryAnyway=saved.tryAnyway===true;}catch{}
    this.assets=this.assetsFor(this.model);
   }
   this.state.total=this.downloadBytes;
  }
- private assetsFor(model:string){return [modelAsset(model),...(this.includeSpeech?alphaModels.assets.slice(1):[])];}
- async select(model:string){
+ private assetsFor(model:string){return [...modelAssets(model),...(this.includeSpeech?alphaModels.assets.slice(1):[])];}
+ async select(model:string,tryAnyway=false){
   downloadableModel(model);if(this.busy)throw Error('Finish or cancel setup before changing models.');
-  if(model===this.model)return;
+  if(model===this.model&&tryAnyway===this.tryAnyway)return;
+  const changed=model!==this.model;
   this.controller=new AbortController();
   try{
    await mkdir(this.directory,{recursive:true,mode:0o700});
-   if(this.includeSpeech)await desktopServices.stop();
+   if(changed&&this.includeSpeech)await desktopServices.stop();
    const selection=resolve(await realpath(this.directory),'selected-model.json'),temporary=selection+'.'+randomUUID()+'.partial';
-   try{await writeFile(temporary,JSON.stringify({model})+'\n',{flag:'wx',mode:0o600});await rename(temporary,selection);}finally{await rm(temporary,{force:true});}
-   this.model=model;this.assets=this.assetsFor(model);this.verified=false;this.verifiedPaths.clear();
-   this.state={phase:'not-installed',completed:0,total:this.downloadBytes};
+   try{await writeFile(temporary,JSON.stringify({model,tryAnyway})+'\n',{flag:'wx',mode:0o600});await rename(temporary,selection);}finally{await rm(temporary,{force:true});}
+   this.tryAnyway=tryAnyway;
+   if(changed){this.model=model;this.assets=this.assetsFor(model);this.verified=false;this.verifiedPaths.clear();
+    this.state={phase:'not-installed',completed:0,total:this.downloadBytes};}
   }finally{this.controller=null;}
-  await this.check();
+  if(changed)await this.check();
  }
  private async verify(asset:Asset,path:string,signal:AbortSignal,installed=true){
   signal.throwIfAborted();const actualParent=await realpath(dirname(path));const actualRoot=installed?await realpath(this.directory):actualParent;if(actualParent!==actualRoot&&!actualParent.startsWith(actualRoot+sep))throw Error('Model data path escapes its private root.');const stat=await lstat(path);if(!stat.isFile()||stat.size!==asset.bytes)throw Error('Asset size/type mismatch: '+asset.path);
@@ -109,12 +112,12 @@ export class DesktopSetup {
   }catch(error){this.state={...this.state,phase:signal.aborted&&!stalled?'cancelled':'failed',error:stalled?'The download stopped receiving data for 90 seconds. Check your connection and retry; verified files are kept.':signal.aborted?'Setup cancelled. Retry to reuse verified assets.':String(error),asset:undefined};}
   finally{clearTimeout(idle);try{if(temporary)await rm(temporary,{force:true});}catch{this.state={...this.state,phase:'failed',error:'The staged file could not be removed. Close the app, check the model folder permissions and retry. Verified files are kept.'};}finally{this.controller=null;}}
  }
- async prepare(signal?:AbortSignal){
+ async prepare(signal?:AbortSignal,kvCache:import('./kv-cache').KvCacheMode='default',tuning?:import('./runtime-tuning.mjs').RuntimeTuning){
   if(!this.verified)throw Error('Complete verified setup before preparing local AI.');
   if(this.controller)throw Error('Setup is already running.');
   this.controller=new AbortController();const prepareSignal=AbortSignal.any([this.controller.signal,...(signal?[signal]:[])]);
   this.state={...this.state,phase:'preparing',operation:'prepare',stage:'starting-runtime',startedAt:Date.now(),updatedAt:Date.now(),error:undefined};
-  try{await desktopServices.prepare(this.model,this.context,prepareSignal);this.state.phase='ready';}
+  try{await desktopServices.prepare(this.model,this.context,prepareSignal,kvCache,this.tryAnyway,tuning);this.state.phase='ready';}
   catch(error){this.state={...this.state,phase:prepareSignal.aborted?'cancelled':'failed',error:String(error)};throw error;}
   finally{this.controller=null;}
  }

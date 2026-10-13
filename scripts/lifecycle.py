@@ -49,6 +49,12 @@ def tts_fingerprint():
  for directory,pattern in [('packages/speech/local','*'),('presets/audio','*.json'),('voices','*')]:
   for path in sorted((root/directory).glob(pattern)):
    if path.is_file():h.update(path.read_bytes())
+ profile=root/'runtime/tts-cpu-profile.json'
+ if profile.is_file():h.update(profile.read_bytes())
+ for path in [root/'config/tts-supertonic-experiment.json',root/'.runtime/supertonic3/helper.py',
+              root/'config/tts-qwen3-experiment.json',root/'.runtime/qwen3tts/build-provenance.json']:
+  if path.is_file():h.update(path.read_bytes())
+ for name in ['BAMBI_TTS_THREADS','BAMBI_TTS_DYNAMIC_BLOCK']:h.update((name+'='+os.environ.get(name,'')).encode())
  return h.hexdigest()
 
 def restart_owned(name,fingerprint,force=False):
@@ -87,6 +93,7 @@ def node_executable():
   except (OSError,subprocess.TimeoutExpired):pass
  raise RuntimeError('No working Node.js executable found; install Node.js 22.13+ and retry.')
 def container_owned():
+ if not shutil.which('podman'):return False
  p=subprocess.run(['podman','inspect','bambi-local-kokoro'],capture_output=True,text=True)
  if p.returncode:return False
  return json.loads(p.stdout)[0]['Config']['Labels'].get('io.bambi-local.owner')==str(root)
@@ -141,7 +148,7 @@ if not request('http://127.0.0.1:8882/health'):
   if not wait('http://127.0.0.1:8882/health',15):print('Offline TTS failed; see runtime/tts.log. Text remains available.')
  else:print('Offline ONNX voice not set up. Run ./scripts/setup-local-tts.sh once online. Text remains available.')
 # The legacy Kokoro container is only needed by the separate STABLE-2.0 services caller.
-if command=='services' and not request('http://127.0.0.1:8880/v1/audio/voices'):
+if command=='services' and shutil.which('podman') and not request('http://127.0.0.1:8880/v1/audio/voices'):
  image='ghcr.io/remsky/kokoro-fastapi-cpu@sha256:7f9a256919eff7a84e9a77b757de0f3fe95c48fcf4fbe1e008deacbc7d9f2985'
  if container_owned():subprocess.run(['podman','start','bambi-local-kokoro'],stdout=subprocess.DEVNULL)
  else:

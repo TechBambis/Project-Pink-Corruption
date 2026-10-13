@@ -14,7 +14,7 @@ export async function requireAccess(key:AccessKey){
  const response=await fetch('/api/access');if(!response.ok)throw Error('Access choices could not be checked.');
  accessState.record=await response.json() as AccessRecord;
  if(!accessAllowed(key)){
-  window.dispatchEvent(new CustomEvent('bambi-open-privacy'));
+  window.dispatchEvent(new CustomEvent('bambi-open-privacy',{detail:{feature:key}}));
   throw Error(`Allow ${names[key]} in Privacy & access, then try again.`);
  }
 }

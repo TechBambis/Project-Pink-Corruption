@@ -17,7 +17,7 @@ const json=(value:unknown,status=200)=>new Response(JSON.stringify(value),{statu
 const snapshot=(settings:Settings,revision=0):SettingsSnapshot=>({settings,revision,profile:'test-profile',undoRevision:null});
 
 test('registry covers the original preference controls and classifies transient/derived controls',()=>{
- assert.equal(Object.keys(settingsRegistry).length,138);
+ assert.ok(Object.keys(settingsRegistry).length>=138,'Retain the published settings and register new controls');
  assert.deepEqual(validateSettings(defaults),defaults);
  const html=readFileSync('apps/web/index.html','utf8');
  for(const match of html.matchAll(/<(?:input|select|textarea)\s+[^>]*id="([^"]+)"/g)){

@@ -27,6 +27,18 @@ test('cancellation after acquiring a slot prevents an obsolete operation from st
  assert.equal(await queue.run(async()=>42,new AbortController().signal),42);
 });
 
+test('generation queue instrumentation runs after acquisition and an instrumentation error still releases the slot',async()=>{
+ const queue=new InferenceQueue(),signal=new AbortController().signal;
+ let release!:()=>void,acquired=0;
+ const blocking=queue.run(()=>new Promise<void>(resolve=>release=resolve),signal);await Promise.resolve();
+ const backend={name:'fixture',async *stream(){yield {text:'Ready.'};}} as unknown as LlamaBackend;
+ const stream=queue.stream(backend,[],'fixture',signal,4096,64,'qwen',undefined,()=>{acquired++;});
+ const next=stream.next();await Promise.resolve();assert.equal(acquired,0);release();await blocking;
+ assert.equal((await next).value?.text,'Ready.');assert.equal(acquired,1);await stream.return(undefined);
+ const broken=queue.stream(backend,[],'fixture',signal,4096,64,'qwen',undefined,()=>{throw Error('Probe failure');});
+ await assert.rejects(broken.next(),/Probe failure/);assert.equal(await queue.run(async()=>42,signal),42);
+});
+
 for(const kind of ['native','ollama'] as const)test(`${kind} yields abort only the current HTTP generation before releasing its inference slot`,async()=>{
  const original=globalThis.fetch,requests:AbortSignal[]=[];let cancelled=0;
  globalThis.fetch=async(_url,init)=>{

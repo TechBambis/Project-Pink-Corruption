@@ -76,7 +76,7 @@ export function initNavigation(beforeExperienceChange: () => void = () => {}) {
 
   function experienceState() {
     return {mode: element<HTMLSelectElement>('mode').value, narration: element<HTMLInputElement>('narration-enabled').checked,
-      events: element<HTMLInputElement>('session-events').checked, aiMode: element<HTMLSelectElement>('ai-mode').value};
+      events: element<HTMLInputElement>('session-events').checked, aiMode: element<HTMLSelectElement>('ai-mode').value,participation:element<HTMLSelectElement>('session-interaction').value,regie:element<HTMLInputElement>('direction-ai-regie').checked};
   }
   function syncSummary() {
     for (const [selectId, outputId] of [['voice', 'session-voice-name'], ['audio-preset', 'session-preset-name'], ['scene', 'session-scene-name']]) {
@@ -92,14 +92,21 @@ export function initNavigation(beforeExperienceChange: () => void = () => {}) {
     element('session-duration-control').hidden = files;
     element('session-intensity-control').hidden = files;
     element('session-flow-settings').hidden = files;
-    element('session-direction-settings').hidden = experience !== 'guided' || !element<HTMLInputElement>('session-events').checked;
-    element('session-launch').hidden = experience !== 'guided';
+    const session=experience==='guided'||experience==='solo';
+    element('session-direction-settings').hidden = !session || !element<HTMLInputElement>('session-events').checked;
+    element('session-launch').hidden = !session;
+    element('session-launch').textContent=experience==='solo'?'Start uninterrupted session':'Start interactive session';
+    element('chat-quick-settings').hidden=experience!=='conversation';
+    element<HTMLSelectElement>('chat-output').value=element<HTMLSelectElement>('ai-mode').value==='text'?'text':'voice';
+    const topic=element<HTMLSelectElement>('conversation-topic').value;
+    element('chat-topic-description').textContent=topic==='bambi'?'Discuss the files, cues and local app with reference-based explanations. Ask for a scene when you want one.':topic==='style'?'Plan a look for your occasion, wardrobe and preferences. Tell Bambi what you have in mind.':'Ask a question, talk through an idea, or plan your day.';
+    element<HTMLInputElement>('direction-ai-regie').disabled=experience==='solo';
     element('experience-join-label').hidden = !['local', 'hybrid'].includes(mode);
     element<HTMLInputElement>('experience-join').checked = mode === 'hybrid';
     const unlimited = element<HTMLSelectElement>('duration').value === 'unlimited';
-    element('experience-description').textContent = experience === 'guided'
+    element('experience-description').textContent = experience==='solo'?'Choose a journey and starting idea, then let Bambi lead. Chat and microphone input are off; Pause and Stop stay available.' : experience === 'guided'
       ? unlimited ? 'An AI-led journey with changing visuals, varied voice pace and quieter returns. Continues until you end it.' : 'An AI-led journey with changing visuals, varied voice pace and a gentle closing. Choose your length, then start.'
-      : mode === 'conversation' ? 'Type a message or turn on the microphone to begin. Bambi leaves room for your replies.' : experienceDescriptions[mode] ?? '';
+      : mode === 'conversation' ? 'Talk about Bambi, ask a useful question, or work out today’s outfit. Choose text only for replies without speech synthesis.' : experienceDescriptions[mode] ?? '';
     element('experience-files-link').hidden = !['local', 'hybrid'].includes(mode);
     const aiMode = element<HTMLSelectElement>('ai-mode').value;
     const narration = element<HTMLInputElement>('narration-enabled').checked && !['off', 'text'].includes(aiMode);
@@ -188,8 +195,9 @@ export function initNavigation(beforeExperienceChange: () => void = () => {}) {
   }
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-experience]')) button.onclick = () => {
     const choice = button.dataset.experience as Experience, state = experienceState();
-    if (needsExperienceChange(choice, state)) {
+    if (needsExperienceChange(choice, state)||choice==='solo'&&element<HTMLFieldSetElement>('direction-controls').disabled) {
       beforeExperienceChange();
+      if(choice==='solo'&&element<HTMLFieldSetElement>('direction-controls').disabled)element('event-program-clear').click();
       for (const [id, value] of Object.entries(experienceSettings(choice, state, element<HTMLInputElement>('experience-join').checked))) {
         const field = element<HTMLInputElement | HTMLSelectElement>(id);
         if (typeof value === 'boolean') (field as HTMLInputElement).checked = value;
@@ -216,6 +224,7 @@ export function initNavigation(beforeExperienceChange: () => void = () => {}) {
     changeSetting('ai-mode', enabled ? current === 'interactive' ? 'interactive' : element<HTMLInputElement>('voice-occasional').checked ? 'ambient' : 'voice' : 'text');
   };
   element<HTMLInputElement>('voice-occasional').onchange = event => changeSetting('ai-mode', (event.target as HTMLInputElement).checked ? 'ambient' : 'voice');
+  element<HTMLSelectElement>('chat-output').onchange=event=>changeSetting('ai-mode',(event.target as HTMLSelectElement).value);
   element('external-session-activate').onclick = () => { changeSetting('mode', 'official'); show('session'); };
 
   function indexSettings(): SearchEntry[] {
@@ -305,7 +314,7 @@ export function initNavigation(beforeExperienceChange: () => void = () => {}) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' || event.key === '/' && !typing) { event.preventDefault(); openSearch(); }
   });
   document.addEventListener('input', event => {
-    if (!['experience-join', 'voice-read-aloud', 'voice-occasional'].includes((event.target as HTMLElement).id)) syncSummary();
+    if (!['experience-join', 'voice-read-aloud', 'voice-occasional','chat-output'].includes((event.target as HTMLElement).id)) syncSummary();
   });
   const notice = element('notice');
   const syncNotice = () => {

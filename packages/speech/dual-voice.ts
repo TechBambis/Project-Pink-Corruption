@@ -39,7 +39,7 @@ export function voiceTagEnd(text:string){
 export class VoiceSentenceChunker {
  private buffer='';private role:VoiceRole='owner';private background='';
  private owner:TriggerSentenceChunker;
- constructor(names:string[]=[],private enabled=false,conversation=false){this.owner=new TriggerSentenceChunker(names,conversation);}
+ constructor(names:string[]=[],private enabled=false,conversation=false,reserveLow:()=>boolean=()=>true,earlyClauses=true){this.owner=new TriggerSentenceChunker(names,conversation,reserveLow,earlyClauses);}
  private ownerText(text:string){return this.owner.push(text);}
  private finishRole(){
   if(this.role==='owner')return this.owner.flush();

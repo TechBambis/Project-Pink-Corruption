@@ -37,6 +37,15 @@ test('reply traces use one monotonic clock and record each stage once without pr
  for(let i=0;i<210;i++)traces.begin(String(i),'local','model');assert.equal(traces.snapshot().length,200);
 });
 
+test('reply timing aggregates are bounded per stage and snapshots cannot change stored measurements',()=>{
+ const traces=new ReplyTraces(()=>100);traces.begin('job','local','model');
+ traces.measure('job','tokenization',12);traces.measure('job','tokenization',8);
+ for(const value of [-1,NaN,Infinity])traces.measure('job','tokenization',value);
+ traces.measure('missing','tokenization',50);
+ const snapshot=traces.snapshot();assert.deepEqual(snapshot[0].timings.tokenization,{count:2,totalMs:20,maxMs:12});
+ snapshot[0].timings.tokenization.totalMs=999;assert.equal(traces.snapshot()[0].timings.tokenization.totalMs,20);
+});
+
 test('presentation pressure has hysteresis and does not trigger on one isolated frame',()=>{
  const governor=new PresentationGovernor();assert.equal(governor.observe(90,100,true),false);assert.equal(governor.observe(90,200,true),false);assert.equal(governor.observe(90,300,true),true);assert.equal(governor.observe(16,400,true),true);assert.equal(governor.observe(16,6000,true),false);
 });

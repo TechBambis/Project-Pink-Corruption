@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "status": "experimental-opt-in",
+  "sourceProvider": "moss",
+  "profile": "moss-int8-alias-v2",
+  "threads": 3,
+  "sampleRate": 48000,
+  "channels": 2,
+  "maxAudioSeconds": 30,
+  "maxTextLength": 1000,
+  "graphs": [
+    {"file": "moss_tts_decode_step.onnx", "bytes": 186896514, "sha256": "fbf13126b906013c908ac58faaba606393d3d3d67c1598b960f4ede89a3a308a"},
+    {"file": "moss_tts_local_cached_step.onnx", "bytes": 133236279, "sha256": "c51fa362b0887a401a91dbec0dd15e1ac2d082611d240a418b02c2469e5fcd2d"},
+    {"file": "moss_tts_local_decoder.onnx", "bytes": 130084331, "sha256": "b8d873377ad0b4e950231ca2172ee3c838a5d50bc60000c338e0a1fbfa80bb05"},
+    {"file": "moss_tts_local_fixed_sampled_frame.onnx", "bytes": 159099296, "sha256": "55e6c855c5e99cf763fac72f3d2611ae7824e7746b71370d07055f41d2ab3593"},
+    {"file": "moss_tts_prefill.onnx", "bytes": 186884843, "sha256": "eb1168e2b019f43946057e8dc8f882db0bf06aa0fdc5af670077f887e97fb159"}
+  ]
+}

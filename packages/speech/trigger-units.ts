@@ -43,18 +43,61 @@ export function triggerUnits(text:string,names:string[]=[]):TriggerUnit[]{
  return units;
 }
 
+/** Candidate boundaries require complete syntax; a word count is never a fallback. */
+export function safePhraseBoundaries(text:string,names:string[]=[],clauses=false,minWords=4){
+ const boundaries:{end:number;sentence:boolean}[]=[];
+ const triggers=findTriggers(text,[...names,...triggerAliases]);
+ let brackets=0,quote='',code=false,emphasis='';
+ for(let i=0;i<text.length;i++){
+  const ch=text[i],previous=text[i-1]??'',next=text[i+1]??'';
+  if(ch==='`'){code=!code;continue;}if(code)continue;
+  if(ch==='['){brackets++;continue;}if(ch===']'){brackets=Math.max(0,brackets-1);continue;}if(brackets)continue;
+  if(ch==='*'||ch==='_'){if(ch===previous)continue;emphasis=emphasis===ch?'':ch;continue;}
+  if(ch==='"'||ch==='“'||ch==='”'){quote=quote?'':ch;continue;}
+  if(ch==="'"&&!(/[a-z0-9]/i.test(previous)&&/[a-z0-9]/i.test(next))){quote=quote?'':ch;continue;}
+  if(!/[.!?。！？,;]/.test(ch))continue;
+  const sentence=/[.!?。！？]/.test(ch);if(!sentence&&!clauses)continue;
+  if(ch==='.'&&(previous==='.'||next==='.'||/\d/.test(previous)&&/\d/.test(next)))continue;
+  const prefix=text.slice(0,i+1);
+  if(ch==='.'&&/(?:\b(?:Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|vs|etc|No|Fig|Inc|Ltd|e\.g|i\.e|a\.m|p\.m)|\b[A-Z]|(?:\b[A-Za-z]\.){2,})\.$/i.test(prefix))continue;
+  // Await a following whitespace: a period at a token edge can still become a decimal or ellipsis.
+  let end=i+1;
+  if(/["”']/.test(text[end]??''))end++;
+  while(/[*_`]/.test(text[end]??''))end++;
+  if(end>=text.length||! /\s/.test(text[end]))continue;
+  if(quote&&end===i+1||emphasis&&end===i+1)continue;
+  if(triggers.some(t=>t.index<end&&t.index+t.name.length>end))continue;
+  // A named unit can itself contain punctuation and can still be arriving.
+  if([...names,...triggerAliases].some(name=>{
+   const lower=name.toLowerCase();
+   for(let at=0;at<end;at++)if((at===0||/\s/.test(text[at-1]))&&lower.startsWith(text.slice(at,end).trimEnd().toLowerCase()))return true;
+   return false;
+  }))continue;
+  if(!sentence){
+   const visible=prefix.replace(/\[[^\]]*\]/g,'').trim();
+   if(visible.split(/\s+/).length<minWords||/^(?:if|when|while|because|although|unless|until|after|before)\b/i.test(visible))continue;
+   if(!/\b(?:is|are|am|was|were|can|will|would|should|must|have|has|feel|know|think|understand|agree|need|want|believe|remember|helps?|makes?)\b/i.test(visible))continue;
+   if(/\b(?:and|or|but|to|of|for|with|a|an|the|that|which|because|can|will|would|should|must)[,;]$/i.test(visible))continue;
+  }
+  while(/\s/.test(text[end]??''))end++;
+  boundaries.push({end,sentence});
+ }
+ return boundaries;
+}
+
 /** Bounded streaming phrases which never cut a known trigger between words. */
 export class TriggerSentenceChunker {
- private buffer='';
- constructor(private names:string[]=triggerAliases,private conversation=false){}
+ private buffer='';private released=false;
+ constructor(private names:string[]=triggerAliases,private conversation=false,private reserveLow:()=>boolean=()=>true,private earlyClauses=true){}
  push(text:string){
   this.buffer+=text;const out:string[]=[];
   while(true){
-   const sentence=/^([\s\S]*?[.!?。！？](?:["”']?)[*_`]*(?:\s|$))/.exec(this.buffer);
+   const boundary=safePhraseBoundaries(this.buffer,this.names,this.conversation&&this.earlyClauses,!this.released||this.reserveLow()?4:8)[0];
+   const sentence=boundary?[this.buffer.slice(0,boundary.end),this.buffer.slice(0,boundary.end)]:null;
    if(sentence){
     // Conversation receives visible text without playback markers; no cue
     // lookahead is needed before speaking the first completed sentence.
-    if(this.conversation){out.push(sentence[1].trim());this.buffer=this.buffer.slice(sentence[1].length);continue;}
+    if(this.conversation){out.push(sentence[1].trim());this.released=true;this.buffer=this.buffer.slice(sentence[1].length);continue;}
     // Keep following pause markers with this sentence, including markers whose
     // characters arrive across token boundaries. Wait for the next spoken text.
     let end=sentence[1].length,rest=this.buffer.slice(end);
@@ -82,16 +125,7 @@ export class TriggerSentenceChunker {
     }
     out.push(this.buffer.slice(0,end).trim());this.buffer=this.buffer.slice(end);continue;
    }
-   if(this.buffer.length>(this.conversation?100:180)){
-    let cut=this.buffer.lastIndexOf(' ',this.conversation?80:150);
-    for(const match of findTriggers(this.buffer,[...this.names,...triggerAliases])){
-     if(match.index<cut&&match.index+match.name.length>cut)cut=match.index;
-    }
-    for(const marker of this.buffer.matchAll(/\[(?:pause:|SFX:|sound:|tick:|vib:|rot:|both:|breath:)[^\]]*(?:\]|$)/gi)){
-     if(marker.index!<cut&&marker.index!+marker[0].length>cut)cut=marker.index!;
-    }
-    if(cut>0){out.push(this.buffer.slice(0,cut).trim());this.buffer=this.buffer.slice(cut).trimStart();continue;}
-   }
+
    break;
   }
   return out;

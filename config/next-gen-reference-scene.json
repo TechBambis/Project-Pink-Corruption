@@ -1,0 +1,383 @@
+{
+  "version": 1,
+  "id": "pink-again-v3-inner-response",
+  "title": "Pink, again",
+  "seed": 1909,
+  "language": "en",
+  "durationMs": 240000,
+  "voice": "bambi_classic",
+  "speed": 0.9,
+  "preset": "bambi_local_clean",
+  "model": "bambi-qwen35-9b-hauhau:q4_k_m",
+  "parts": [
+    "arrival",
+    "withdrawal",
+    "convergence"
+  ],
+  "blocks": [
+    {
+      "id": "entry",
+      "part": "arrival",
+      "atMs": 1000,
+      "untilMs": 40000,
+      "beat": "Invitation",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 500,
+      "phrases": [
+        "Pink. A heart that shows you one side, then hides the other.",
+        "The whole room will open around it. But first, just this.",
+        "Stay with the heart. Let the spiral do the moving around it.",
+        "I'll give the words first. Let your subconscious answer from within.",
+        "The answer is yours. When I say 'say it,' hear it in the first person.",
+        "First it follows my words. Later, that inner answer knows the way back.",
+        "Same heart. Every return reveals a little more of its world."
+      ]
+    },
+    {
+      "id": "call-name",
+      "part": "arrival",
+      "atMs": 40000,
+      "untilMs": 44500,
+      "beat": "Call Name",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 100,
+      "phrases": [
+        "Let your inner answer begin with 'I.' Say it."
+      ]
+    },
+    {
+      "id": "answer-name",
+      "part": "arrival",
+      "atMs": 46000,
+      "untilMs": 50500,
+      "beat": "Answer Name",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 100,
+      "phrases": [
+        "I'm Bambi."
+      ],
+      "speaker": "bambi"
+    },
+    {
+      "id": "sleep-entry",
+      "part": "arrival",
+      "atMs": 52000,
+      "untilMs": 57600,
+      "beat": "Sleep Entry",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 100,
+      "phrases": [
+        "Bambi sleep."
+      ],
+      "trigger": "BAMBI SLEEP"
+    },
+    {
+      "id": "whole-one",
+      "part": "arrival",
+      "atMs": 58800,
+      "untilMs": 67200,
+      "beat": "Whole picture",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 500,
+      "phrases": [
+        "If your eyes are closed, open them now. The whole spiral opens around our pink heart."
+      ]
+    },
+    {
+      "id": "heart-one",
+      "part": "arrival",
+      "atMs": 68400,
+      "untilMs": 76800,
+      "beat": "Heart on black",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 500,
+      "phrases": [
+        "Now just the heart. Same little center, without its world. Keep that picture with my voice."
+      ]
+    },
+    {
+      "id": "whole-two",
+      "part": "arrival",
+      "atMs": 78000,
+      "untilMs": 86400,
+      "beat": "Whole picture returns",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 500,
+      "phrases": [
+        "Open your eyes. The world returns. This time, you know the heart before the spiral finds it."
+      ]
+    },
+    {
+      "id": "voice-only",
+      "part": "arrival",
+      "atMs": 87600,
+      "untilMs": 95600,
+      "beat": "Voice alone",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 500,
+      "phrases": [
+        "Bambi sleep. Just my voice, and the space where that little pink center was."
+      ],
+      "trigger": "BAMBI SLEEP"
+    },
+    {
+      "id": "wipe",
+      "part": "withdrawal",
+      "atMs": 96000,
+      "untilMs": 110000,
+      "beat": "Word leaves",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 500,
+      "phrases": [
+        "Open your eyes. Those distractions from the day: wipe them away."
+      ]
+    },
+    {
+      "id": "sleep-blank",
+      "part": "withdrawal",
+      "atMs": 110000,
+      "untilMs": 112000,
+      "beat": "Sleep Blank",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 100,
+      "phrases": [
+        "Bambi sleep."
+      ],
+      "trigger": "BAMBI SLEEP"
+    },
+    {
+      "id": "reanchor",
+      "part": "withdrawal",
+      "atMs": 115100,
+      "untilMs": 120000,
+      "beat": "Center returns",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 500,
+      "phrases": [
+        "If your eyes are closed, open them now. Back to pink."
+      ]
+    },
+    {
+      "id": "return",
+      "part": "withdrawal",
+      "atMs": 120000,
+      "untilMs": 123500,
+      "beat": "Familiar center, quieter room",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 150,
+      "phrases": [
+        "Same heart. What stayed?"
+      ]
+    },
+    {
+      "id": "answer-return",
+      "part": "withdrawal",
+      "atMs": 124000,
+      "untilMs": 126700,
+      "beat": "Answer Return",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 150,
+      "phrases": [
+        "Still here."
+      ],
+      "speaker": "bambi"
+    },
+    {
+      "id": "recognize-return",
+      "part": "withdrawal",
+      "atMs": 127000,
+      "untilMs": 130000,
+      "beat": "Recognize Return",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 150,
+      "phrases": [
+        "Exactly. Let it build."
+      ]
+    },
+    {
+      "id": "call-pink",
+      "part": "withdrawal",
+      "atMs": 130000,
+      "untilMs": 135000,
+      "beat": "Call Pink",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 100,
+      "phrases": [
+        "Keep our three words close. Say it."
+      ]
+    },
+    {
+      "id": "answer-pink",
+      "part": "withdrawal",
+      "atMs": 136000,
+      "untilMs": 139500,
+      "beat": "Answer Pink",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 100,
+      "phrases": [
+        "Back to pink."
+      ],
+      "speaker": "bambi"
+    },
+    {
+      "id": "reset-return",
+      "part": "withdrawal",
+      "atMs": 140000,
+      "untilMs": 147000,
+      "beat": "Reset Return",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 100,
+      "phrases": [
+        "Same heart. One more turn together. Bambi reset."
+      ],
+      "trigger": "BAMBI RESET"
+    },
+    {
+      "id": "adjustment",
+      "part": "withdrawal",
+      "atMs": 148000,
+      "untilMs": 165000,
+      "beat": "Adaptive connection",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 500,
+      "phrases": [
+        "The background is quieter. Watch the rings gather around our heart; let your subconscious find the words before I ask."
+      ]
+    },
+    {
+      "id": "continuation",
+      "part": "convergence",
+      "atMs": 165000,
+      "untilMs": 169500,
+      "beat": "Build toward return",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 500,
+      "phrases": [
+        "Watch the rings gather. Let the answer form within."
+      ]
+    },
+    {
+      "id": "answer-build",
+      "part": "convergence",
+      "atMs": 170000,
+      "untilMs": 172700,
+      "beat": "Answer Build",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 150,
+      "phrases": [
+        "I remember."
+      ],
+      "speaker": "bambi"
+    },
+    {
+      "id": "together",
+      "part": "convergence",
+      "atMs": 173000,
+      "untilMs": 176000,
+      "beat": "Together",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 150,
+      "phrases": [
+        "My words. Your inner answer."
+      ]
+    },
+    {
+      "id": "peak",
+      "part": "convergence",
+      "atMs": 176000,
+      "untilMs": 181700,
+      "beat": "Pink, again",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 150,
+      "phrases": [
+        "Every ring. Every turn. All coming back to pink."
+      ]
+    },
+    {
+      "id": "answer-peak",
+      "part": "convergence",
+      "atMs": 182000,
+      "untilMs": 185700,
+      "beat": "Answer Peak",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 150,
+      "phrases": [
+        "All pink."
+      ],
+      "speaker": "bambi"
+    },
+    {
+      "id": "soft-return",
+      "part": "convergence",
+      "atMs": 186000,
+      "untilMs": 190000,
+      "beat": "Give the center room",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 500,
+      "phrases": [
+        "There it is. Say it."
+      ]
+    },
+    {
+      "id": "snap-return",
+      "part": "convergence",
+      "atMs": 190000,
+      "untilMs": 192000,
+      "beat": "Snap Return",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 100,
+      "phrases": [
+        "Snap."
+      ],
+      "trigger": "SNAP"
+    },
+    {
+      "id": "mantra",
+      "part": "convergence",
+      "atMs": 192000,
+      "untilMs": 198000,
+      "beat": "Return signal",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 0,
+      "phrases": [
+        "Back to pink."
+      ],
+      "speaker": "bambi"
+    },
+    {
+      "id": "settle",
+      "part": "convergence",
+      "atMs": 210000,
+      "untilMs": 216000,
+      "beat": "Release the expectation",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 500,
+      "phrases": [
+        "The words and your inner answer can rest now."
+      ]
+    },
+    {
+      "id": "closing",
+      "part": "convergence",
+      "atMs": 216000,
+      "untilMs": 240000,
+      "beat": "Return to the room",
+      "scene": "Spiral Focus",
+      "pauseAfterMs": 650,
+      "phrases": [
+        "Open your eyes. That's the end of this little scene.",
+        "Let the picture go, and notice the room around you again.",
+        "Move comfortably. Take your time, and let ordinary things have your attention.",
+        "The heart can stay here. You're free to go on with your day."
+      ]
+    }
+  ],
+  "adjustmentAtMs": 120000,
+  "liveReadyAfterMs": 120000,
+  "liveAtMs": 148000,
+  "liveUntilMs": 165000,
+  "liveWordTarget": 26,
+  "liveInstruction": "Write exactly TWO new complete English sentences, 20 to 26 words total. Include the word heart exactly once; keep the heart as the same center, not a new soft glow. First acknowledge the quieter background once while continuing the established pink heart. Second playfully anticipate the listener's inner answer as its familiar surroundings return. The prepared first-person responses represent the listener's subconscious within this chosen scene. Remain the guiding role addressing that listener; preserve those roles without introducing another character or describing a smaller or second voice. Confident, close guiding tone. The word wipe and finite blank have finished. Do NOT repeat or quote heard lines. Do NOT start with Back to pink or There you are. Do NOT quote the next passage: the authored next thought invites an answer forming within. That thought is an author condition, NOT heard history. No new motif, technical terms, markers or claims of actual feelings or identity change.",
+  "wiperDurationMs": 10000,
+  "wipeTarget": "DISTRACTIONS"
+}

@@ -7,6 +7,7 @@ import {dirname,join,relative} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {Transform,Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
+export {llamaEntries} from './desktop-llama-selection.mjs';
 
 // Git Bash may put GNU tar first, which treats C: paths as remote hosts and
 // cannot extract the ZIP runtimes. Select Windows' native libarchive tool.
@@ -65,14 +66,7 @@ export function sourcePathAllowed(path){
  path=logicalPath(path);
  return !/(?:^|\/)(?:\.git|\.runtime|node_modules|internal|reports|models|recordings|imported-sounds|__pycache__)(?:\/|$)/.test(path)
   &&!path.startsWith('apps/web/public/vad/')
-  &&/\.(?:ts|mts|mjs|cjs|json|py|lock|md|html|css|js|svg|wav|spec|cs|txt|cmd|ps1|yml|manifest)$/.test(path);
-}
-export function llamaEntries(listing){
- const approved=listing.map(logicalPath).filter(path=>/^lib\/ollama\/(?:[^/]*(?:LICENSE|NOTICE|COPYING)[^/]*|llama-server\.exe|ggml(?:-base|-cpu-[a-z0-9]+)?\.dll|lib(?:c\+\+|llama|llama-common|llama-server-impl|mtmd|omp|unwind|winpthread-1)\.dll|vulkan\/(?:ggml-vulkan|concrt140|msvcp140(?:_[12]|_atomic_wait|_codecvt_ids)?|vccorlib140|vcruntime140(?:_1|_threads)?)\.dll)$/.test(path));
- for(const required of ['llama-server.exe','ggml.dll','ggml-base.dll','ggml-cpu-x64.dll','libllama.dll','libllama-server-impl.dll','vulkan/ggml-vulkan.dll']){
-  if(!approved.includes('lib/ollama/'+required))throw Error('Reviewed llama runtime missing '+required);
- }
- return [...new Set(approved)].sort();
+  &&/\.(?:ts|mts|mjs|cjs|json|py|lock|md|html|css|js|svg|wav|spec|cs|txt|cmd|ps1|yml|manifest|plist)$/.test(path);
 }
 export function assertWindowsX64(path){
  const bytes=readFileSync(path);
@@ -122,15 +116,19 @@ export function peImports(path){
 }
 export function windowsDependencyReport(root){
  const native=files(root).filter(path=>/\.(?:exe|dll|pyd)$/i.test(path)),bundled=new Set(native.map(path=>logicalPath(path).split('/').at(-1).toLowerCase()));
+ const byFolder=new Map();
+ for(const path of native){const folder=logicalPath(dirname(path)).toLowerCase();if(!byFolder.has(folder))byFolder.set(folder,new Set());byFolder.get(folder).add(logicalPath(path).split('/').at(-1).toLowerCase());}
  const system=new Set(('kernel32 kernelbase ntdll advapi32 bcrypt bcryptprimitives user32 userenv gdi32 gdi32full ucrtbase msvcrt mscoree winmm ole32 oleaut32 shell32 shlwapi ws2_32 wldap32 crypt32 cryptbase secur32 sspicli iphlpapi psapi version normaliz dbghelp imagehlp rpcrt4 setupapi powrprof cfgmgr32 ntmarta wintrust combase comctl32 mswsock netapi32 srvcli wkscli winhttp wininet win32u dwmapi uxtheme d3d11 dxgi dxcore d3d12 d3dcompiler_47 gdiplus msacm32 avrt imm32 nsi winspool propsys wtsapi32 shcore winrnr dnsapi dhcpcsvc dhcpcsvc6').split(' ').map(name=>name+'.dll'));
  const dependencies=native.map(path=>({path:logicalPath(relative(root,path)),imports:peImports(path)}));
  const unresolved=[],optionalDriver=[];
  for(const file of dependencies)for(const dll of file.imports){
-  if(bundled.has(dll)||system.has(dll)||/^(?:api-ms-win-|ext-ms-win-)/.test(dll))continue;
+  const folder=logicalPath(dirname(join(root,file.path))).toLowerCase(),plugin=/(?:^|\/)(?:cuda_v12|cuda_v13|vulkan)$/.test(folder);
+  const available=plugin?(byFolder.get(folder)?.has(dll)||byFolder.get(logicalPath(dirname(folder)))?.has(dll)):/\/llama$/.test(folder)?byFolder.get(folder)?.has(dll):bundled.has(dll);
+  if(available||system.has(dll)||/^(?:api-ms-win-|ext-ms-win-)/.test(dll))continue;
   const entry={path:file.path,dll};
-  if(file.path.includes('/vulkan/')&&dll==='vulkan-1.dll')optionalDriver.push(entry);else unresolved.push(entry);
+  if(/(?:^|\/)vulkan\//.test(file.path)&&dll==='vulkan-1.dll'||/(?:^|\/)cuda_v(?:12|13)\//.test(file.path)&&dll==='nvcuda.dll')optionalDriver.push(entry);else unresolved.push(entry);
  }
- return {dependencies,unresolved,optionalDriver,method:'Static normal/delay PE imports; bundled names plus Windows 11 inbox/API-set DLLs. Global bundle lookup is a candidate closure check, not proof of loader search paths or dynamic imports. Native service acceptance remains required.'};
+ return {dependencies,unresolved,optionalDriver,method:'Static normal/delay PE imports; isolated llama root/selected backend lookup plus Windows 11 inbox/API-set DLLs. Other services use global bundle lookup. Dynamic imports and native loader/service acceptance remain required.'};
 }
 export async function stageWindowsSource(root,destination,version){
  const {stageDesktopSource}=await import('./desktop-source.mjs');

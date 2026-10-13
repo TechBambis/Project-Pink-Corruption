@@ -7,6 +7,9 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {stageDesktopSource,releaseIdentity,writeSourceManifest} from './desktop-source.mjs';
+import {llamaEntries,stageLinuxLlama} from './desktop-llama-selection.mjs';
+import {hashFile} from './desktop-windows-support.mjs';
+import {verifyCudaNotices} from './desktop-cuda-notices.mjs';
 
 const root=resolve(fileURLToPath(new URL('../',import.meta.url)));process.chdir(root);
 if(process.argv.includes('--help')){console.log('Smoke: node scripts/desktop-build.mjs. Alpha: node scripts/desktop-alpha-build.mjs 0.1.0-alpha.N');process.exit(0);}
@@ -35,17 +38,19 @@ if(digest(readFileSync(archive))!==nodeSha)throw Error('Pinned Node archive chec
 run(process.execPath,['scripts/prepare-vad.mjs']);rmSync(resolve('dist/web'),{recursive:true,force:true});run(process.execPath,['node_modules/vite/bin/vite.js','build','apps/web','--outDir','../../dist/web']);
 rmSync(stage,{recursive:true,force:true});mkdirSync(backend,{recursive:true});mkdirSync(notices,{recursive:true});
 if(alpha){
+ await verifyCudaNotices(root);
  run(resolve('.runtime/alpha-freeze-env/bin/python'),['scripts/freeze-desktop-speech.py']);
  const nativeSource=resolve('.runtime/alpha-speech/bambi-speech');
  function nativeFiles(path){return readdirSync(path,{withFileTypes:true}).flatMap(e=>{const full=join(path,e.name);if(e.isDirectory())return nativeFiles(full);const real=realpathSync(full);if(!real.startsWith(nativeSource+'/')||!statSync(real).isFile())throw Error('Escaping native runtime link');return [full];});}
  for(const file of nativeFiles(nativeSource))copy(realpathSync(file),join(backend,'native/speech',relative(nativeSource,file)));
  const llamaArchive=resolve('.runtime/ollama.tar.zst');
  const llamaSha='9fcd79ac4575b2bd31b992eee18b1000c8ad126b451627c8f8cd091714cfbb10';
- if(digest(readFileSync(llamaArchive))!==llamaSha)throw Error('Pinned llama archive mismatch');
+ if(await hashFile(llamaArchive)!==llamaSha)throw Error('Pinned llama archive mismatch');
  const listing=execFileSync('tar',['--zstd','-tf',llamaArchive],{encoding:'utf8'}).trim().split('\n');
- const approved=listing.filter(p=>/^lib\/ollama\/(?:[^/]*(?:LICENSE|NOTICE)|llama-server|lib(?:ggml|llama|mtmd)[^/]*|vulkan\/libggml-vulkan\.so)$/.test(p)&&!p.includes('quantize'));
+ const approved=llamaEntries(listing,'linux');
  const extracted=join(stage,'llama-extracted');mkdirSync(extracted);run('tar',['--zstd','-xf',llamaArchive,'-C',extracted,...approved]);
- const origin=join(extracted,'lib/ollama');for(const path of approved){const local=relative('lib/ollama',path),full=join(origin,local),real=realpathSync(full);if(!real.startsWith(origin+'/'))throw Error('Escaping llama link');copy(real,join(backend,'native/llama',local));}
+ const shipped=stageLinuxLlama(extracted,join(backend,'native/llama'),approved);
+ writeFileSync(join(notices,'LLAMA-SELECTION.json'),JSON.stringify({archiveSha256:llamaSha,entries:approved,files:shipped},null,2)+'\n');
  for(const asset of JSON.parse(readFileSync(resolve('config/desktop-speech-sources.json'),'utf8'))){const path=resolve('.runtime/alpha-third-party',asset.file);if(!existsSync(path)){mkdirSync(dirname(path),{recursive:true});const response=await fetch(asset.url);if(!response.ok)throw Error('Dependency source download failed');writeFileSync(path,Buffer.from(await response.arrayBuffer()));}if(lstatSync(path).size!==asset.bytes||digest(readFileSync(path))!==asset.sha256)throw Error('Dependency source mismatch: '+asset.file);copy(path,join(notices,'speech-source',asset.file));}
  copy(resolve('config/desktop-speech-sources.json'),join(notices,'speech-source/SOURCE-MANIFEST.json'));
  const metadata=resolve('.runtime/alpha-freeze-env/lib/python3.12/site-packages');for(const folder of readdirSync(metadata).filter(p=>p.endsWith('.dist-info')))copyTree(join(metadata,folder),join(notices,'speech-metadata',folder));

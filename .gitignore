@@ -204,3 +204,37 @@ test-results/
 !/scripts/settings-browser-check.mjs
 
 !/docs/SETTINGS_BACKUP.md
+
+# Apple Silicon native packaging and received-artifact checks.
+!/scripts/desktop-macos-build.mjs
+!/scripts/desktop-macos-check.mjs
+!/scripts/desktop-macos-support.mjs
+!/scripts/desktop-macos-native.mjs
+!/scripts/desktop-macos-runtime-check.mjs
+!/scripts/desktop-macos-ai-check.mjs
+
+!/scripts/desktop-llama-selection.mjs
+
+!/scripts/desktop-cuda-notices.mjs
+
+!/scripts/resource-plan.mjs
+
+!/scripts/setup-tts-nano.py
+
+!/scripts/setup-live-voice.py
+
+!/scripts/setup-tts-qwen3.py
+
+!/scripts/setup-tts-supertonic.py
+
+!/scripts/speculative-benchmark.py
+
+!/scripts/tts-experiment-intelligibility.py
+
+/node_modules
+
+!/scripts/profiles-browser-check.mjs
+
+!/scripts/tts-supertonic-benchmark.py
+
+!/scripts/tts-nano-benchmark.py

@@ -22,7 +22,7 @@ test('readiness never treats a build, speech check or another version/platform a
  assert.equal(status([{target:'windows-x64',runtime:{...runtime,platform:'linux'}}]).status,'source-mismatch');
  assert.equal(status([{target:'windows-x64',runtime,qualification:{...qualification,sourceDigest:'old'}}]).status,'evidence-mismatch');
  assert.equal(status([{target:'windows-x64',runtime,qualification:{...qualification,gates:{packaging:'failed'}}}]).status,'failed');
- assert.equal(releaseReport(spec).ready,false);assert.equal(releaseReport(spec).targets.find(t=>t.target==='macos-arm64').status,'not-implemented');
+ assert.equal(releaseReport(spec).ready,false);assert.equal(releaseReport(spec).targets.find(t=>t.target==='macos-arm64').status,'not-built');
  assert.throws(()=>releaseReport(spec,[{target:'windows-x64',runtime,qualification:{...qualification,gates:{unknown:'passed'}}}]),/Invalid/);
  assert.throws(()=>releaseReport(spec,[{target:'windows-x64',runtime},{target:'windows-x64',runtime}]),/Duplicate/);
 });
@@ -30,7 +30,10 @@ test('readiness never treats a build, speech check or another version/platform a
 test('native target selection rejects cross-platform execution and unimplemented targets',()=>{
  assert.doesNotThrow(()=>assertNativeTarget(spec,'windows-x64','win32','x64'));
  assert.throws(()=>assertNativeTarget(spec,'windows-x64','linux','x64'),/native/);
- assert.throws(()=>assertNativeTarget(spec,'macos-arm64','darwin','arm64'),/not implemented/);
+ assert.doesNotThrow(()=>assertNativeTarget(spec,'macos-arm64','darwin','arm64'));
+ assert.throws(()=>assertNativeTarget({...spec,phase:'future'},'macos-arm64','darwin','arm64'),/phase is not implemented/);
+ assert.doesNotThrow(()=>assertNativeTarget({...spec,phase:'smoke'},'macos-arm64','darwin','arm64'));
+ assert.throws(()=>assertNativeTarget({...spec,phase:'smoke'},'macos-arm64','darwin','x64'),/native/);
 });
 
 test('source checks cannot be reused after a source/version/host change or failed suite',()=>{
@@ -41,7 +44,7 @@ test('source checks cannot be reused after a source/version/host change or faile
 });
 
 test('missing current features or proven platform sources block a release instead of silently shipping an older app',()=>{
- const paths=[...Object.values(configuration.features).flat(),...configuration.windowsRequired];
+ const paths=[...Object.values(configuration.features).flat(),...configuration.windowsRequired,...configuration.macosRequired];
  const manifest={version:spec.version,files:paths.map(path=>({path}))};assert.doesNotThrow(()=>validateReleaseSource(manifest,spec));
  assert.throws(()=>validateReleaseSource({...manifest,files:manifest.files.filter(f=>f.path!=='apps/web/src/privacy.ts')},spec),/privacyAccess/);
  assert.throws(()=>validateReleaseSource({...manifest,files:manifest.files.filter(f=>f.path!=='apps/desktop/speech.manifest')},spec),/qualified Windows/);
@@ -55,7 +58,7 @@ test('shared source snapshots retain notices and have equal application identity
  for(const path of ['package.json','package-lock.json','tsconfig.json','.gitignore','desktop-builder.cjs','desktop-alpha-builder.cjs','desktop-windows-builder.cjs','LICENSE','LICENSING.md','README.md'])put(path,'fixture\n');
  put('.gitignore','/scripts/*\n!/scripts/public-check.mjs\n');put('scripts/public-check.mjs','public CI fixture\n');put('scripts/local-benchmark.mjs','local authoring fixture\n');
  for(const path of ['apps/desktop/AppRun','apps/desktop/AppRun.alpha','CLA.md','docs/anubis-model.json','docs/community-models.json'])put(path,'public fixture\n');
- const fixtureConfiguration={...configuration,features:{},windowsRequired:[]};put('config/desktop-release.json',JSON.stringify(fixtureConfiguration));
+ const fixtureConfiguration={...configuration,features:{},windowsRequired:[],macosRequired:[]};put('config/desktop-release.json',JSON.stringify(fixtureConfiguration));
  put('apps/test.ts','public\nsource\n');put('docs/licenses/vendor.txt','Original notice\r\n');put('packages/speech/models/private.json','private');put('apps/web/public/vad/model.json','generated');put('scripts/reports/private.json','private');put('docs/internal/private.md','private');
  const first=join(folder,'first'),a=await stageDesktopSource(source,first,spec.version);writeSourceManifest(first,a);
  assert(!existsSync(join(first,'packages/speech/models/private.json')));assert(!existsSync(join(first,'apps/web/public/vad/model.json')));assert(!existsSync(join(first,'scripts/reports/private.json')));assert(!existsSync(join(first,'docs/internal/private.md')));

@@ -8,13 +8,14 @@ import {snapshotSession} from './session-state';
 import {sessionPhases} from '../session-director/phases';
 import {devicePrompt} from '../devices/commands';
 import type {Interaction} from './request';
+import type {ConversationTopic} from '../content/conversation';
 
 export interface PreflightSettings {
  context:number;maxTokens:number;safetyTokens:number;soundDesign:boolean;
  selectedTriggers:string[];narration:boolean;
  tokenCount:'exact'|'estimate';
  checkpointPrefix?:string;
- interaction?:Interaction;dualVoice?:boolean;
+ interaction?:Interaction;dualVoice?:boolean;conversationTopic?:ConversationTopic;
 }
 export interface PreflightBudget {mode:'conversation'|'narration';phase:string;inputTokens:number;maxTokens:number;historyRoomTokens:number}
 /** Check actual reply instructions before warming. Counts use the already selected backend/template.
@@ -25,7 +26,7 @@ export async function preflightReplyContext(base:string,settings:PreflightSettin
   for(const phase of mode==='narration'?sessionPhases:['induction'] as const){
    const session={...snapshotSession({elapsedSeconds:0,totalSeconds:1200,scene:'Spiral Focus',intensityPercent:45,activeTriggers:settings.selectedTriggers,lastTrigger:null}),phase};
    const narration=mode==='narration',request=narration?'Hello Bambi.':'Please explain the current session.';
-   const system=buildReplyPrompt(base,request,narration&&settings.soundDesign,devicePrompt(false),session,'',!narration,narration,settings.interaction,'',settings.dualVoice);
+   const system=buildReplyPrompt(base,request,narration&&settings.soundDesign,devicePrompt(false),session,'',!narration,narration,settings.interaction,'',settings.dualVoice,settings.conversationTopic);
    try{
     const plan=await fitContext(system,[],request,count,settings.context,settings.maxTokens,settings.safetyTokens,narration&&settings.interaction!=='situational'?2048:Math.min(512,settings.maxTokens),'',{checkpointPrefix:settings.checkpointPrefix});
     budgets.push({mode,phase,inputTokens:plan.inputTokens,maxTokens:plan.maxTokens,historyRoomTokens:Math.max(0,settings.context-plan.inputTokens-settings.safetyTokens-plan.maxTokens)});

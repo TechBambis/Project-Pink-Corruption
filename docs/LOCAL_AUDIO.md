@@ -83,3 +83,5 @@ BAMBI_BROWSER_STREAMING=1 npm run test:integration
 ```
 
 Install Playwright Chromium or set `BAMBI_BROWSER_BINARY`. This injected recording checks partial/final ordering, one committed input and Mute; it does not test a physical microphone. Compare English recognition with Whisper on your own names/noise. VAD pause settings still determine when speech ends.
+
+The desktop alpha defaults to **Bambi Mix** (`bambi_classic`): the original verified Nicole 15% / Bella 42.5% / Heart 42.5% embedding. It uses Local Clean at speed 0.78 and neutral pitch. Existing explicit voice choices remain saved. Optional voice experiments are not provisioned by ordinary desktop setup.

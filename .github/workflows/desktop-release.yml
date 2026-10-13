@@ -4,7 +4,7 @@ on:
     inputs:
       target:
         type: choice
-        options: [windows-x64, linux-x64]
+        options: [windows-x64, linux-x64, macos-arm64]
         default: windows-x64
       phase:
         type: choice

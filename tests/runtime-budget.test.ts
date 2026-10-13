@@ -48,7 +48,7 @@ test('every unique authored line and section of every installed template is avai
   for(const line of [prompt.main,prompt.strategy,prompt.collar_addon].flatMap(text=>text.split('\n')).map(line=>line.trim()).filter(Boolean))assert.ok(compiled.includes(line),`${prompt.id}: an authored line was removed in ${phase}`);
  }
  assert.equal(modelContext(communityQwen,'bambisleep-classic'),24576);
- assert.equal(modelContext(communityQwen36,'bambisleep-classic'),16384);
+ assert.equal(modelContext(communityQwen36,'bambisleep-classic'),24576);
  assert.equal(modelContext('ollama-fixture','bambisleep-classic'),24576);
  assert.equal(modelContext('ollama-fixture','custom'),4096);
  assert.equal(modelContext(sthenoV32,'bambisleep-classic'),8192);

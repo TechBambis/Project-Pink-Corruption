@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {lstat,realpath,readdir,mkdir,writeFile,rename,rm} from 'node:fs/promises';
 import {basename,dirname,resolve,sep} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {localModelCatalog} from '../ai/model-catalog';
+import {localModelCatalog,canDownloadModel} from '../ai/model-catalog';
 
 type Source={id:string;path:string;kind:'file'|'folder'};
 /** Paths originate in the native chooser, never in renderer-provided import requests. */
@@ -27,7 +27,7 @@ export class ModelSources {
  async remove(id:string){const previous=this.entries;this.entries=this.entries.filter(value=>value.id!==id);try{await this.save();}catch(error){this.entries=previous;throw error;}}
  private async scan(source:Source){
   const matches:{model:string;file:string}[]=[],root=await realpath(source.path),pending=[{path:root,depth:0}];let examined=0,limited=false;
-  const inspect=async(file:string)=>{const info=await lstat(file);if(!info.isFile()||!file.toLowerCase().endsWith('.gguf'))return;for(const model of localModelCatalog.filter(value=>value.desktopSupported&&value.license==='apache-2.0'))if(info.size===model.bytes)matches.push({model:model.alias,file});};
+  const inspect=async(file:string)=>{const info=await lstat(file);if(!info.isFile()||!file.toLowerCase().endsWith('.gguf'))return;for(const model of localModelCatalog.filter(canDownloadModel))if(info.size===model.bytes)matches.push({model:model.alias,file});};
   if(source.kind==='file')await inspect(root);
   else while(pending.length&&examined<5000){
    const next=pending.shift()!;for(const item of await readdir(next.path,{withFileTypes:true})){if(++examined>5000){limited=true;break;}if(item.isSymbolicLink())continue;const file=resolve(next.path,item.name);if(item.isFile())await inspect(file);else if(item.isDirectory()&&!['.git','node_modules','.venv','venv'].includes(item.name)){if(next.depth<3)pending.push({path:file,depth:next.depth+1});else limited=true;}}

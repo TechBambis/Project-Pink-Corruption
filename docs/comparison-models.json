@@ -1,5 +1,25 @@
 [
   {
+    "alias": "bambi-qwen35-4b-hauhau:q4_k_m",
+    "repo": "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
+    "revision": "c09cdbcdb1fefad6d335809d445621b5f5ba0c6e",
+    "file": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+    "bytes": 2707513696,
+    "sha256": "79e28ecacf84e75b6056cf4059636d435aa9eb67795780f7b7dbc7d32a962741",
+    "license": "apache-2.0",
+    "backend": "llama.cpp",
+    "text_only": true,
+    "context": 24576,
+    "allowed_contexts": [
+      8192,
+      16384,
+      24576
+    ],
+    "runtime": {
+      "cache_type": "f16"
+    }
+  },
+  {
     "repo": "DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF",
     "revision": "8b192a8e203440d6492a133f6cdfa4bf7bffac98",
     "file": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-IQ4_XS.gguf",
@@ -27,5 +47,51 @@
     "context": 16384,
     "text_only": true,
     "license": "apache-2.0"
+  },
+  {
+    "repo": "AIOpsInSpace/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-MTP",
+    "revision": "3542ee23c6418c38ca9eec77acc69ac047343a27",
+    "file": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-MTP-Q4_K_M.gguf",
+    "bytes": 2788710496,
+    "sha256": "1443de63a550a7bd18905589dcebfa5c307da8b2ef86db858a7691fb9a3c15cc",
+    "license": "apache-2.0",
+    "alias": "bambi-qwen35-4b-hauhau-mtp-experiment:q4_k_m",
+    "backend": "llama.cpp",
+    "text_only": true,
+    "context": 24576,
+    "allowed_contexts": [
+      8192,
+      16384,
+      24576
+    ],
+    "runtime": {
+      "cache_type": "f16",
+      "ubatch_size": 128,
+      "speculative": {
+        "type": "draft-mtp",
+        "draft_tokens": 3
+      }
+    }
+  },
+  {
+    "repo": "AIOpsInSpace/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-MTP",
+    "revision": "3542ee23c6418c38ca9eec77acc69ac047343a27",
+    "file": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-MTP-Q4_K_M.gguf",
+    "bytes": 2788710496,
+    "sha256": "1443de63a550a7bd18905589dcebfa5c307da8b2ef86db858a7691fb9a3c15cc",
+    "license": "apache-2.0",
+    "alias": "bambi-qwen35-4b-hauhau-mtp-baseline:q4_k_m",
+    "backend": "llama.cpp",
+    "text_only": true,
+    "context": 24576,
+    "allowed_contexts": [
+      8192,
+      16384,
+      24576
+    ],
+    "runtime": {
+      "cache_type": "f16",
+      "ubatch_size": 128
+    }
   }
 ]
