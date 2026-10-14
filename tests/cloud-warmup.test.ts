@@ -53,7 +53,7 @@ test('real remote preparation can finish beyond the former fixed deadline and st
   const startupDeadline=performance.now()+15000;
   let ready=false;while(performance.now()<startupDeadline){
    if(child.exitCode!==null)throw Error('Fixture server failed: '+logs);
-   try{if((await fetch(base+'/api/health',{signal:AbortSignal.timeout(1000)})).ok){ready=true;break;}}catch{}
+   try{if((await fetch(base+'/api/preferences',{signal:AbortSignal.timeout(1000)})).ok){ready=true;break;}}catch{}
    await new Promise(done=>setTimeout(done,50));
   }
   assert.ok(ready,'Fixture server did not become healthy within 15 seconds: '+logs);
