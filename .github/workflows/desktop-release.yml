@@ -60,7 +60,7 @@ jobs:
           test ! -e /opt/bambi-local-alpha41
           sudo cp -a "$RUNNER_TEMP/received-alpha41/squashfs-root" /opt/bambi-local-alpha41
           sudo chown -R root:root /opt/bambi-local-alpha41
-          sudo chmod 0755 /opt/bambi-local-alpha41
+          sudo chmod -R a+rX,go-w /opt/bambi-local-alpha41
           sudo chmod 4755 /opt/bambi-local-alpha41/chrome-sandbox
           xvfb-run -a node scripts/desktop-alpha-check.mjs /opt/bambi-local-alpha41/AppRun 2>&1 | tee "$RUNNER_TEMP/alpha41-diagnostics/installed-acceptance.log"
       - name: Upload bounded diagnostics and exercise Artifact v7 archive contract
