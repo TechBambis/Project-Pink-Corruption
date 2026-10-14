@@ -10,9 +10,19 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer} from 'node:http';
 import {createRequire} from 'node:module';
-import {buildOptions,downloadPinned,digest,llamaEntries,assertWindowsX64,sourcePathAllowed,inventory,peImports,windowsDependencyReport} from '../scripts/desktop-windows-support.mjs';
+import {buildOptions,downloadPinned,digest,llamaEntries,assertWindowsX64,sourcePathAllowed,inventory,peImports,windowsDependencyReport,copyCompactLicenses} from '../scripts/desktop-windows-support.mjs';
 import {splitBundle} from '../scripts/desktop-windows-transfer.mjs';
 const {runtimeEnvironment}=createRequire(import.meta.url)('../apps/desktop/runtime-environment.cjs');
+
+test('Windows license packaging retains deep paths and duplicate basenames as short indexed byte-identical files',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'Bambi license paths ü '));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const origin=join(root,'source'),destination=join(root,'notices/source-licenses');
+ const paths=['macos-python-3.12.13/install/lib/python3.12/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt','macos-python-3.12.13/install/lib/python3.12/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt'];
+ for(const [index,path] of paths.entries()){mkdirSync(join(origin,path,'..'),{recursive:true});writeFileSync(join(origin,path),'Original copyright and license '+index+'\n');}
+ const entries=await copyCompactLicenses(origin,destination);assert.equal(entries.length,paths.length);assert.equal(new Set(entries.map(e=>e.file)).size,paths.length);
+ for(const entry of entries){assert(entry.file.length<=57&&!entry.file.includes('/'));const original=readFileSync(join(origin,entry.originalPath));assert.deepEqual(readFileSync(join(destination,entry.file)),original);assert.equal(entry.sha256,digest(original));assert.equal(entry.bytes,original.length);}
+ const index=JSON.parse(readFileSync(join(destination,'INDEX.json'),'utf8'));assert.deepEqual(index.files,entries);assert.equal(index.sourceRoot,'docs/licenses');
+});
 
 test('bounded frozen-release transport retains matching evidence and rejects another source or failed gates',t=>{
  const root=mkdtempSync(join(tmpdir(),'Bambi release transfer ü '));t.after(()=>rmSync(root,{recursive:true,force:true}));

@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
 import {desktopVersion} from './desktop-release-version.mjs';
-import {createReadStream,createWriteStream,existsSync,lstatSync,mkdirSync,readdirSync,copyFileSync,readFileSync} from 'node:fs';
+import {createReadStream,createWriteStream,existsSync,lstatSync,mkdirSync,readdirSync,copyFileSync,readFileSync,writeFileSync} from 'node:fs';
 import {rename,rm} from 'node:fs/promises';
-import {dirname,join,relative} from 'node:path';
+import {dirname,join,relative,basename} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {Transform,Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
@@ -56,6 +56,21 @@ export function copy(from,to){
 }
 export function copyTree(from,to,accept=()=>true){
  for(const file of files(from)){const path=logicalPath(relative(from,file));if(accept(path))copy(file,join(to,path));}
+}
+/** Keep every license byte while avoiding deeply nested NSIS/MAX_PATH entries. */
+export async function copyCompactLicenses(origin,destination){
+ const inputs=files(origin),entries=[],names=new Set();mkdirSync(destination,{recursive:true});
+ for(const file of inputs){
+  const originalPath=logicalPath(relative(origin,file));
+  const name=digest(Buffer.from(originalPath)).slice(0,16)+'-'+basename(file).slice(0,40);
+  const target=join(destination,name);
+  if(names.has(name)||existsSync(target))throw Error('Colliding compact license path: '+originalPath);
+  names.add(name);const sha256=await hashFile(file);copy(file,target);
+  if(await hashFile(target)!==sha256)throw Error('Copied license differs: '+originalPath);
+  entries.push({originalPath,file:name,bytes:lstatSync(file).size,sha256});
+ }
+ writeFileSync(join(destination,'INDEX.json'),JSON.stringify({schema:1,sourceRoot:'docs/licenses',files:entries},null,2)+'\n');
+ return entries;
 }
 export async function inventory(root){
  const result=[];

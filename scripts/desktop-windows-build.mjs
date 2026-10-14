@@ -7,7 +7,7 @@ import {resolve,dirname,join,relative,isAbsolute} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {releaseIdentity} from './desktop-source.mjs';
-import {archiveTool,buildOptions,downloadPinned,hashFile,files,copy,copyTree,inventory,logicalPath,sourcePathAllowed,llamaEntries,assertNativeTree,assertWindowsX64,stageWindowsSource,windowsDependencyReport} from './desktop-windows-support.mjs';
+import {archiveTool,buildOptions,downloadPinned,hashFile,files,copy,copyTree,copyCompactLicenses,inventory,logicalPath,sourcePathAllowed,llamaEntries,assertNativeTree,assertWindowsX64,stageWindowsSource,windowsDependencyReport} from './desktop-windows-support.mjs';
 
 const root=resolve(fileURLToPath(new URL('../',import.meta.url)));
 process.chdir(root);
@@ -87,7 +87,7 @@ async function build(){
  for(const name of ['express','ws','zod','tsx'])dependency(name);
  for(const [path] of dependencies)copyTree(path,join(backend,relative(root,path)),file=>!file.split('/').includes('node_modules'));
  for(const path of ['LICENSE','LICENSING.md','docs/LICENSE.stable2','docs/STABLE_CONTENT.md','docs/LOCAL_AUDIO_LICENSES.md'])copy(resolve(path),join(notices,path));
- copyTree(resolve('docs/licenses'),join(notices,'docs/licenses'));
+ await copyCompactLicenses(resolve('docs/licenses'),join(notices,'source-licenses'));
  copy(resolve('voices/bambi_classic.json'),join(notices,'voices/bambi_classic.json'));
  writeFileSync(join(notices,'DEPENDENCIES.json'),JSON.stringify([...dependencies].map(([path,pkg])=>({path:logicalPath(relative(root,path)),name:pkg.name,version:pkg.version,license:pkg.license,repository:pkg.repository})),null,2)+'\n');
  const {writeSamples}=await import('./desktop-windows-sample.mjs');writeSamples(join(backend,'dist/web/samples'),alpha);
