@@ -8,7 +8,7 @@ Windows: install the **.exe**. Ubuntu 24.04: install the **.deb**. Other Linux s
 
 This is an alpha. Full-model Windows 11 and Mac GPU/CPU/offline use, physical audio and sleep/wake still need tester checks. Downloads are public and need no GitHub sign-in. Windows is unsigned; Mac is not notarized. Keep OS security controls enabled.
 
-[Getting started](docs/AI_ALPHA_TESTING.md) · [Settings & presets](docs/SETTINGS_BACKUP.md) · [Report a bug](https://github.com/TechBambis/Project-Pink-Corruption/issues) · [Discussions](https://github.com/TechBambis/Project-Pink-Corruption/discussions)
+[Getting started](docs/AI_ALPHA_TESTING.md) · [Models & performance](docs/MODEL_SETUP.md) · [Settings & presets](docs/SETTINGS_BACKUP.md) · [Report a bug](https://github.com/TechBambis/Project-Pink-Corruption/issues) · [Discussions](https://github.com/TechBambis/Project-Pink-Corruption/discussions)
 
 ## Development
 
