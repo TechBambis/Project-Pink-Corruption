@@ -8,7 +8,7 @@ import {createServer, request, type IncomingHttpHeaders} from 'node:http';
 import {spawn} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
 import {once} from 'node:events';
-import {mkdtempSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, rmSync, symlinkSync, writeFileSync, existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {localRequestAllowed} from '../packages/safety/local-access';
@@ -53,7 +53,7 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
  const directory=mkdtempSync(join(tmpdir(),'bambi-local-access-'));
  const reservation=createServer();reservation.listen(0,'127.0.0.1');await once(reservation,'listening');
  const port=(reservation.address() as {port:number}).port;await new Promise<void>(done=>reservation.close(()=>done()));
- for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])symlinkSync(resolve(name),join(directory,name),process.platform==='win32'?'junction':'dir');
+ for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])if(existsSync(resolve(name)))symlinkSync(resolve(name),join(directory,name),process.platform==='win32'?'junction':'dir');
  writeFileSync(join(directory,'package.json'),'{"type":"module"}');
  writeFileSync(join(directory,'bootstrap.mjs'),`
   import dgram from 'node:dgram';
