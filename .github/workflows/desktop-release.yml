@@ -8,7 +8,7 @@ permissions:
 jobs:
   received-package:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - name: Check authorized account and public repository
         env:
@@ -25,6 +25,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npx playwright install-deps chromium
       - name: Receive and verify exact draft asset
+        id: receive
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -41,12 +42,27 @@ jobs:
           sysctl kernel.apparmor_restrict_unprivileged_userns >> "$RUNNER_TEMP/alpha41-diagnostics/host.txt" || true
           ls -l squashfs-root/chrome-sandbox >> "$RUNNER_TEMP/alpha41-diagnostics/host.txt"
       - name: Verify finished package and normal sandboxed startup
+        id: portable
         env:
           BAMBI_SMOKE_OUTPUT: ${{ runner.temp }}/alpha41-diagnostics
           DEBUG: pw:browser*
         run: |
           set -o pipefail
           xvfb-run -a node scripts/desktop-alpha-check.mjs "$RUNNER_TEMP/received-alpha41/squashfs-root/AppRun" 2>&1 | tee "$RUNNER_TEMP/alpha41-diagnostics/acceptance.log"
+      - name: Verify normal root-owned installation with Chromium SUID sandbox
+        if: failure() && steps.receive.outcome == 'success'
+        id: installed
+        env:
+          BAMBI_SMOKE_OUTPUT: ${{ runner.temp }}/alpha41-diagnostics
+          DEBUG: pw:browser*
+        run: |
+          set -o pipefail
+          test ! -e /opt/bambi-local-alpha41
+          sudo cp -a "$RUNNER_TEMP/received-alpha41/squashfs-root" /opt/bambi-local-alpha41
+          sudo chown -R root:root /opt/bambi-local-alpha41
+          sudo chmod 0755 /opt/bambi-local-alpha41
+          sudo chmod 4755 /opt/bambi-local-alpha41/chrome-sandbox
+          xvfb-run -a node scripts/desktop-alpha-check.mjs /opt/bambi-local-alpha41/AppRun 2>&1 | tee "$RUNNER_TEMP/alpha41-diagnostics/installed-acceptance.log"
       - name: Upload bounded diagnostics and exercise Artifact v7 archive contract
         if: always()
         id: diagnostics
