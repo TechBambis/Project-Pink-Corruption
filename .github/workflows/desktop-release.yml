@@ -27,7 +27,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/received-alpha41" "$RUNNER_TEMP/alpha41-diagnostics"
-          gh release download v0.1.0-alpha.41 --repo "$GITHUB_REPOSITORY" --pattern '*.AppImage' --dir "$RUNNER_TEMP/received-alpha41"
+          uname -a > "$RUNNER_TEMP/alpha41-diagnostics/host.txt"
+          gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/639602492" > "$RUNNER_TEMP/received-alpha41/bambi-local-0.1.0-alpha.41-x86_64.AppImage"
           cd "$RUNNER_TEMP/received-alpha41"
           echo 'eea9ff12aa67590697494c179b7531b91722b68d7178703f4b096163b961c391  bambi-local-0.1.0-alpha.41-x86_64.AppImage' | sha256sum --check
           chmod +x bambi-local-0.1.0-alpha.41-x86_64.AppImage
