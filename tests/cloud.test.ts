@@ -66,7 +66,7 @@ test('cloud streams split SSE, uses configured identity, supports JSON planning 
     assert.equal(authentication,'Bearer test-secret');assert.equal(bodies.at(-1)?.model,'served-model');
     assert.equal(gatewayHeaders.length,5);assert.ok(gatewayHeaders.every(value=>value==='gateway-test-secret'));
     assert.equal(bodies.at(-1)?.dry_multiplier,0);
-    await new Promise(resolve=>setTimeout(resolve,20));assert.equal(closed,true);
+    const closeDeadline=performance.now()+1000;while(!closed&&performance.now()<closeDeadline)await new Promise(resolve=>setTimeout(resolve,10));assert.equal(closed,true,'Returning from the stream closes the server request before its five-second completion');
   }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
@@ -128,7 +128,7 @@ test('remote Ollama uses its configured identity and context, disables thinking 
     assert.ok(bodies.every(body=>body.model==='remote-qwen:latest'&&body.think===false&&body.options.num_ctx===8192));
     assert.equal(bodies.at(-1)?.options.num_predict,24);assert.equal(bodies.at(-1)?.options.top_k,20);
     assert.equal(bodies.at(-1)?.options.temperature,1);assert.equal(bodies.at(-1)?.options.dry_multiplier,undefined);
-    await new Promise(resolve=>setTimeout(resolve,20));assert.equal(closed,true);
+    const closeDeadline=performance.now()+1000;while(!closed&&performance.now()<closeDeadline)await new Promise(resolve=>setTimeout(resolve,10));assert.equal(closed,true,'Returning from the stream closes the server request before its five-second completion');
   }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
