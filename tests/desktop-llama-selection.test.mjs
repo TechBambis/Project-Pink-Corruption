@@ -31,9 +31,13 @@ test('Linux staging flattens selected CUDA SONAMEs exactly once and refuses esca
   assert(lstatSync(path).isFile());assert(readFileSync(path,'utf8').includes(`.so.${version}.1.2`));assert(!existsSync(path+'.1.2'));
  }
  assert.equal(shipped.length,linux.length-6);
+ const alias=join(root,'extracted-alias');symlinkSync(extracted,alias,'dir');
+ assert.deepEqual(stageLinuxLlama(alias,join(root,'aliased-native'),llamaEntries(linux,'linux')),shipped);
+ assert.equal(readFileSync(join(root,'aliased-native/cuda_v12/libcublas.so.12'),'utf8'),readFileSync(join(destination,'cuda_v12/libcublas.so.12'),'utf8'));
  const link=join(extracted,'lib/ollama/cuda_v12/libcublas.so.12');rmSync(link);
  const foreign=join(root,'foreign.so');writeFileSync(foreign,'foreign');symlinkSync(foreign,link);
  assert.throws(()=>stageLinuxLlama(extracted,join(root,'rejected'),linux),/Escaping/);assert(!existsSync(join(root,'rejected')));
+ assert.throws(()=>stageLinuxLlama(alias,join(root,'rejected-alias'),linux),/Escaping/);assert(!existsSync(join(root,'rejected-alias')));
  rmSync(link);writeFileSync(join(extracted,'lib/ollama/unselected.so'),'unselected');symlinkSync('../unselected.so',link);
  assert.throws(()=>stageLinuxLlama(extracted,join(root,'rejected'),linux),/unselected/);
 });

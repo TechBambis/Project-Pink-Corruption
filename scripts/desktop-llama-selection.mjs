@@ -38,11 +38,14 @@ export function linuxLlamaFiles(entries){
  return entries.filter(path=>!/^lib\/ollama\/cuda_v(?:12|13)\/lib(?:cublas(?:Lt)?|cudart)\.so\.\d+\./.test(path));
 }
 export function stageLinuxLlama(extracted,destination,entries){
- const origin=realpathSync(resolve(extracted,'lib/ollama')),selected=new Set(entries.map(path=>resolve(extracted,path)));
+ // Canonicalize the extraction root before comparing selected archive paths.
+ // macOS aliases /var through /private/var; callers can also use directory links.
+ const extraction=realpathSync(resolve(extracted));
+ const origin=realpathSync(resolve(extraction,'lib/ollama')),selected=new Set(entries.map(path=>resolve(extraction,path)));
  const files=linuxLlamaFiles(entries);
  // Resolve every link before copying; only selected internal archive targets qualify.
  const resolved=files.map(path=>{
-  const source=resolve(extracted,path),real=realpathSync(source);
+  const source=resolve(extraction,path),real=realpathSync(source);
   if(!real.startsWith(origin+'/')||!selected.has(real)||!statSync(real).isFile())throw Error('Escaping or unselected llama link: '+path);
   return {source:real,target:join(destination,relative(origin,source))};
  });
