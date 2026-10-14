@@ -101,14 +101,15 @@ jobs:
           Categories=AudioVideo;
           DESKTOP
           cp "$deb_root/opt/bambi-local-alpha41/bambi-local.png" "$deb_root/usr/share/icons/hicolor/512x512/apps/bambi-local.png"
-          dpkg-deb --build --root-owner-group -Zxz -z6 --threads-max=2 "$deb_root" "$deb_file"
+          dpkg-deb --build --root-owner-group -Zxz -z6 --threads-max=4 "$deb_root" "$deb_file"
           test "$(stat -c %s "$deb_file")" -lt 2147483648
           sudo dpkg --install "$deb_file"
           test "$(stat -c '%U:%G:%a' /opt/bambi-local-alpha41/chrome-sandbox)" = root:root:4755
           xvfb-run -a node scripts/desktop-alpha-check.mjs /opt/bambi-local-alpha41/AppRun 2>&1 | tee "$RUNNER_TEMP/alpha41-diagnostics/deb-acceptance.log"
           sha256sum "$deb_file" > "$RUNNER_TEMP/alpha41-diagnostics/deb-sha256.txt"
           dpkg-deb --info "$deb_file" > "$RUNNER_TEMP/alpha41-diagnostics/deb-info.txt"
-          gh release upload v0.1.0-alpha.41 "$deb_file" --repo "$GITHUB_REPOSITORY" --verify-tag
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v0.1.0-alpha.41" --jq '.object.type')" = tag
+          gh release upload v0.1.0-alpha.41 "$deb_file" --repo "$GITHUB_REPOSITORY"
       - name: Upload bounded diagnostics and exercise Artifact v7 archive contract
         if: always()
         id: diagnostics
