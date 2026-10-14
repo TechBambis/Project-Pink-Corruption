@@ -1,4 +1,4 @@
-# Project Pink Corruption 🦌💕
+# Project Pink Corruption 💕
 
 Bambi Local is a free local companion for the hypnosis community: chat, voice, spirals, your own media and Session Studio.
 
