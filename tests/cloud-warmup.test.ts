@@ -33,6 +33,16 @@ test('real remote preparation can finish beyond the former fixed deadline and st
  for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])if(existsSync(resolve(name)))symlinkSync(resolve(name),join(fixture,name),process.platform==='win32'?'junction':'dir');
  writeFileSync(join(fixture,'package.json'),'{"type":"module"}');
  writeFileSync(join(fixture,'bootstrap.mjs'),`
+  // Admission/cloud fixtures never launch native hardware discovery. Windows
+  // descendants can otherwise retain the fixture directory after app teardown.
+  import childProcess from 'node:child_process';
+  import {syncBuiltinESMExports} from 'node:module';
+  childProcess.execFile=(_command,_args,options,callback)=>{
+   const finish=typeof options==='function'?options:callback;
+   queueMicrotask(()=>finish(Object.assign(Error('Native commands are excluded from this fixture'),{code:'ENOENT'}),'',''));
+   return {kill:()=>false};
+  };
+  syncBuiltinESMExports();
   import dgram from 'node:dgram';
   import {EventEmitter} from 'node:events';
   dgram.createSocket=()=>{const socket=new EventEmitter();socket.bind=(_p,_h,callback)=>callback?.();socket.unref=()=>socket;socket.send=()=>{};socket.close=()=>{};return socket;};
