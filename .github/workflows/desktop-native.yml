@@ -97,7 +97,7 @@ jobs:
           const dir=process.env.BAMBI_RELEASE_OUTPUT;
           const size=readdirSync(dir).filter(name=>/\.(exe|AppImage|gz|json|md)$/.test(name)||name==="SHA256SUMS").reduce((n,name)=>n+statSync(join(dir,name)).size,0);
           if(size>Number(process.env.BAMBI_REMAINING_ARTIFACT_MIB)*2**20*.95) throw Error("Upload exceeds confirmed remaining shared storage.");'
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: inputs.upload_packages && !inputs.transfer_packages
         with:
           name: bambi-${{ inputs.target }}-${{ inputs.version }}
@@ -125,7 +125,7 @@ jobs:
       - name: Upload bounded temporary part 0
         id: part0
         if: always() && steps.space0.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bambi-windows-transfer-${{ github.run_id }}-0
           path: ${{ steps.transfer.outputs.root }}/0/*
@@ -147,7 +147,7 @@ jobs:
       - name: Upload bounded temporary part 1
         id: part1
         if: always() && steps.space1.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bambi-windows-transfer-${{ github.run_id }}-1
           path: ${{ steps.transfer.outputs.root }}/1/*
@@ -169,7 +169,7 @@ jobs:
       - name: Upload bounded temporary part 2
         id: part2
         if: always() && steps.space2.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bambi-windows-transfer-${{ github.run_id }}-2
           path: ${{ steps.transfer.outputs.root }}/2/*
@@ -191,7 +191,7 @@ jobs:
       - name: Upload bounded temporary part 3
         id: part3
         if: always() && steps.space3.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bambi-windows-transfer-${{ github.run_id }}-3
           path: ${{ steps.transfer.outputs.root }}/3/*
@@ -213,7 +213,7 @@ jobs:
       - name: Upload bounded temporary part 4
         id: part4
         if: always() && steps.space4.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bambi-windows-transfer-${{ github.run_id }}-4
           path: ${{ steps.transfer.outputs.root }}/4/*
@@ -235,7 +235,7 @@ jobs:
       - name: Upload bounded temporary part 5
         id: part5
         if: always() && steps.space5.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bambi-windows-transfer-${{ github.run_id }}-5
           path: ${{ steps.transfer.outputs.root }}/5/*
@@ -257,7 +257,7 @@ jobs:
       - name: Upload bounded temporary part 6
         id: part6
         if: always() && steps.space6.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bambi-windows-transfer-${{ github.run_id }}-6
           path: ${{ steps.transfer.outputs.root }}/6/*
@@ -279,7 +279,7 @@ jobs:
       - name: Upload bounded temporary part 7
         id: part7
         if: always() && steps.space7.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bambi-windows-transfer-${{ github.run_id }}-7
           path: ${{ steps.transfer.outputs.root }}/7/*
