@@ -35,7 +35,7 @@ export class Store {
    const target=join(directory,'before-storage-v1-'+randomUUID()+'.sqlite'),staged=target+'.partial';
    try{
     this.db.prepare('VACUUM INTO ?').run(staged);if(process.platform!=='win32')chmodSync(staged,0o600);
-    const snapshot=openSync(staged,'r');try{fsyncSync(snapshot);}finally{closeSync(snapshot);}renameSync(staged,target);
+    const snapshot=openSync(staged,'r+');try{fsyncSync(snapshot);}finally{closeSync(snapshot);}renameSync(staged,target);
     if(process.platform!=='win32'){const directoryHandle=openSync(directory,'r');try{fsyncSync(directoryHandle);}finally{closeSync(directoryHandle);}}
    }catch(error){rmSync(staged,{force:true});this.db.close();throw error;}
   }

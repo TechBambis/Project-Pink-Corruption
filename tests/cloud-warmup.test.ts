@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
-import {mkdtempSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {mkdtempSync,rmSync,symlinkSync,writeFileSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {CLOUD_MODEL_ALIAS} from '../packages/ai/cloud';
@@ -30,7 +30,7 @@ test('real remote preparation can finish beyond the former fixed deadline and st
  const providerPort=(provider.address() as {port:number}).port;
  const reservation=createServer();reservation.listen(0,'127.0.0.1');await once(reservation,'listening');
  const port=(reservation.address() as {port:number}).port;await new Promise<void>(done=>reservation.close(()=>done()));
- for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])symlinkSync(resolve(name),join(fixture,name),process.platform==='win32'?'junction':'dir');
+ for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])if(existsSync(resolve(name)))symlinkSync(resolve(name),join(fixture,name),process.platform==='win32'?'junction':'dir');
  writeFileSync(join(fixture,'package.json'),'{"type":"module"}');
  writeFileSync(join(fixture,'bootstrap.mjs'),`
   import dgram from 'node:dgram';

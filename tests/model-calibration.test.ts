@@ -106,7 +106,7 @@ test('private profiles are atomic, bounded, expire and reject malformed, future 
  const directory=await mkdtemp(join(tmpdir(),'bambi-calibration-')),path=join(directory,'profiles.json'),profiles=new CalibrationProfiles(path);
  try{
   const f=fixture(),calibration=new ModelCalibration();calibration.start(input,f.operations);await calibration.settled();const profile=f.saved[0];
-  await profiles.save(profile,new AbortController().signal);assert.equal((await lstat(path)).mode&0o777,0o600);assert.equal((await profiles.find(input.key))?.winner,3);
+  await profiles.save(profile,new AbortController().signal);if(process.platform!=='win32')assert.equal((await lstat(path)).mode&0o777,0o600);assert.equal((await profiles.find(input.key))?.winner,3);
   const signal=AbortSignal.abort();await assert.rejects(profiles.save({...profile,key:calibrationHash('cancelled')},signal));assert.equal((await profiles.list()).length,1);
   await writeFile(path,JSON.stringify([{...profile,createdAt:Date.now()-8*86400000}]));assert.equal(await profiles.find(input.key),undefined);
   await writeFile(path,JSON.stringify([{...profile,createdAt:Date.now()+86400000}]));assert.equal(await profiles.find(input.key),undefined);

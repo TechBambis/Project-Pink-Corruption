@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
 import {readFileSync,readdirSync,realpathSync,existsSync,statSync,lstatSync,mkdirSync,copyFileSync,chmodSync} from 'node:fs';
-import {join,dirname,resolve} from 'node:path';
+import {join,dirname,resolve,relative,isAbsolute,sep} from 'node:path';
 import {execFileSync} from 'node:child_process';
 
 export function assertMachArm64(path){
@@ -30,10 +30,10 @@ export function machOInfo(bytes){
  return {dependencies,rpaths};
 }
 export function macNativeReport(root){
- root=realpathSync(root);const entries=[];
+ root=realpathSync(root);const within=path=>{const local=relative(root,realpathSync(path));return local!==''&&!isAbsolute(local)&&local!=='..'&&!local.startsWith('..'+sep);};const entries=[];
  const walk=folder=>{for(const entry of readdirSync(folder,{withFileTypes:true})){
   const path=join(folder,entry.name);
-  if(entry.isSymbolicLink()){if(!realpathSync(path).startsWith(root+'/'))throw Error('Native link escapes packaged runtime: '+path);continue;}
+  if(entry.isSymbolicLink()){if(!within(path))throw Error('Native link escapes packaged runtime: '+path);continue;}
   if(entry.isDirectory()){walk(path);continue;}if(!entry.isFile())throw Error('Unexpected native filesystem entry: '+path);
   const bytes=readFileSync(path);
   if(bytes.length>=4&&bytes.readUInt32LE(0)===0xfeedfacf)entries.push({path,...machOInfo(bytes)});
@@ -44,7 +44,7 @@ export function macNativeReport(root){
  for(const entry of entries)for(const dependency of entry.dependencies){
   if(dependency.startsWith('/System/Library/')||dependency.startsWith('/usr/lib/'))continue;
   const candidates=dependency.startsWith('@rpath/')?entry.rpaths.map(rpath=>join(expand(rpath,entry.path),dependency.slice(7))):[expand(dependency,entry.path)];
-  if(!candidates.some(path=>existsSync(path)&&realpathSync(path).startsWith(root+'/')))unresolved.push({path:entry.path,dependency});
+  if(!candidates.some(path=>existsSync(path)&&within(path)))unresolved.push({path:entry.path,dependency});
  }
  return {root,entries,unresolved};
 }
