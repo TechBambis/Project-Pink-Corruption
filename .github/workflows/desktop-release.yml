@@ -1,51 +1,66 @@
-name: Manual desktop release
+name: Verify received Alpha 41 on Ubuntu
 on:
   workflow_dispatch:
-    inputs:
-      target:
-        type: choice
-        options: [windows-x64, linux-x64, macos-arm64]
-        default: windows-x64
-      phase:
-        type: choice
-        options: [smoke, alpha]
-        default: smoke
-      version:
-        description: New immutable version matching the selected phase
-        type: string
-        required: true
-      quota_checked:
-        type: boolean
-        default: false
-      quota_record:
-        description: Actual check time/account and remaining private Actions allowance
-        type: string
-        required: true
-      upload_packages:
-        type: boolean
-        default: false
-      transfer_packages:
-        description: Receive private Windows alpha parts locally within checked storage
-        type: boolean
-        default: false
-      remaining_artifact_mib:
-        type: string
-        default: '0'
 permissions:
   contents: read
-  actions: read
-concurrency:
-  group: desktop-release-${{ inputs.target }}-${{ github.ref }}
-  cancel-in-progress: false
 jobs:
-  native:
-    uses: ./.github/workflows/desktop-native.yml
-    with:
-      target: ${{ inputs.target }}
-      phase: ${{ inputs.phase }}
-      version: ${{ inputs.version }}
-      quota_checked: ${{ inputs.quota_checked }}
-      quota_record: ${{ inputs.quota_record }}
-      upload_packages: ${{ inputs.upload_packages }}
-      transfer_packages: ${{ inputs.transfer_packages }}
-      remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}
+  received-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check authorized account and public repository
+        env:
+          ACTOR_ID: ${{ github.actor_id }}
+          REPO_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$ACTOR_ID" = 337824705 && test "$REPO_PRIVATE" = false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: e18bb5694a94057895c9e0c61badf50ff87de23b
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.18.1
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install-deps chromium
+      - name: Receive and verify exact draft asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/received-alpha41" "$RUNNER_TEMP/alpha41-diagnostics"
+          gh release download v0.1.0-alpha.41 --repo "$GITHUB_REPOSITORY" --pattern '*.AppImage' --dir "$RUNNER_TEMP/received-alpha41"
+          cd "$RUNNER_TEMP/received-alpha41"
+          echo 'eea9ff12aa67590697494c179b7531b91722b68d7178703f4b096163b961c391  bambi-local-0.1.0-alpha.41-x86_64.AppImage' | sha256sum --check
+          chmod +x bambi-local-0.1.0-alpha.41-x86_64.AppImage
+          ./bambi-local-0.1.0-alpha.41-x86_64.AppImage --appimage-extract > "$RUNNER_TEMP/alpha41-diagnostics/extract.log"
+          cat squashfs-root/resources/notices/RUNTIME-MANIFEST.json > "$RUNNER_TEMP/alpha41-diagnostics/runtime.json"
+          uname -a > "$RUNNER_TEMP/alpha41-diagnostics/host.txt"
+          cat /etc/os-release >> "$RUNNER_TEMP/alpha41-diagnostics/host.txt"
+          sysctl kernel.apparmor_restrict_unprivileged_userns >> "$RUNNER_TEMP/alpha41-diagnostics/host.txt" || true
+          ls -l squashfs-root/chrome-sandbox >> "$RUNNER_TEMP/alpha41-diagnostics/host.txt"
+      - name: Verify finished package and normal sandboxed startup
+        env:
+          BAMBI_SMOKE_OUTPUT: ${{ runner.temp }}/alpha41-diagnostics
+          DEBUG: pw:browser*
+        run: |
+          set -o pipefail
+          xvfb-run -a node scripts/desktop-alpha-check.mjs "$RUNNER_TEMP/received-alpha41/squashfs-root/AppRun" 2>&1 | tee "$RUNNER_TEMP/alpha41-diagnostics/acceptance.log"
+      - name: Upload bounded diagnostics and exercise Artifact v7 archive contract
+        if: always()
+        id: diagnostics
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: alpha41-ubuntu-diagnostics
+          path: |
+            ${{ runner.temp }}/alpha41-diagnostics/*.json
+            ${{ runner.temp }}/alpha41-diagnostics/*.txt
+            ${{ runner.temp }}/alpha41-diagnostics/*.log
+            ${{ runner.temp }}/alpha41-diagnostics/*/evidence.json
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 9
+      - name: Record Artifact v7 outputs
+        if: always()
+        env:
+          ARTIFACT_ID: ${{ steps.diagnostics.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.diagnostics.outputs.artifact-digest }}
+        run: test -n "$ARTIFACT_ID" && test -n "$ARTIFACT_DIGEST" && printf 'Artifact ID %s SHA256 %s\n' "$ARTIFACT_ID" "$ARTIFACT_DIGEST"
