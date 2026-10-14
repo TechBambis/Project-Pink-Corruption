@@ -30,6 +30,7 @@ try{
  evidence.measurements.startupMs=performance.now()-started;record('isolated-start',{startupMs:evidence.measurements.startupMs});
  await page.goto('http://127.0.0.1:17969/setup');await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='not-installed');
  await application.evaluate(({dialog},directory)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[directory]});},process.env.BAMBI_ALPHA_DATA_SOURCE||root);
+ await page.getByRole('button',{name:'2. Choose a model',exact:true}).click();await page.locator('input[name="model-choice"][value="bambi-qwen35-9b-hauhau:q4_k_m"]').check();
  await page.getByRole('button',{name:'3. Install and start',exact:true}).click();
  const denied=await page.evaluate(async()=>{const response=await fetch('/api/desktop/setup/install',{method:'POST'});let microphone;try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(track=>track.stop());microphone='granted';}catch(error){microphone=error.name;}return {download:response.status,microphone};});
  assert.equal(denied.download,403);assert.equal(denied.microphone,'NotAllowedError');record('packaged-denied-download-and-microphone-access',{denied});
@@ -40,7 +41,7 @@ try{
  }
  await page.locator('[data-folder]').click();await until(()=>page.locator('.model-source').count().then(count=>count===1));
  const saved=await page.evaluate(async()=>(await(await fetch('/api/desktop/setup/sources')).json()).sources);assert.equal(saved.length,1);assert(saved[0].models.includes('bambi-qwen35-9b-hauhau:q4_k_m'));
- await page.goto('http://127.0.0.1:17969/setup');await page.getByRole('button',{name:'3. Install and start',exact:true}).click();await until(()=>page.locator('.model-source').count().then(count=>count===1));
+ await page.goto('http://127.0.0.1:17969/setup');await page.getByRole('button',{name:'2. Choose a model',exact:true}).click();await page.locator('input[name="model-choice"][value="bambi-qwen35-9b-hauhau:q4_k_m"]').check();await page.getByRole('button',{name:'3. Install and start',exact:true}).click();await until(()=>page.locator('.model-source').count().then(count=>count===1));
  await page.locator('[data-folder]').click();await until(()=>page.evaluate(async()=>(await(await fetch('/api/desktop/setup/sources')).json()).sources.length===1));record('native-chosen-model-folder-persists-and-deduplicates',{supportedModels:saved[0].models});
  const installStart=performance.now();await page.locator('#setup-copy').click();
  await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='installed',{},{timeout:180000});

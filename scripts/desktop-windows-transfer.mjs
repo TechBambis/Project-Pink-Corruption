@@ -11,7 +11,7 @@ import {archiveTool,hashFile} from './desktop-windows-support.mjs';
 export function splitBundle(bundle,output,partBytes){
  if(!Number.isSafeInteger(partBytes)||partBytes<1024**2)throw Error('Invalid bounded transfer part size.');
  const total=statSync(bundle).size,count=Math.ceil(total/partBytes);
- if(count<1||count>8)throw Error('Package needs more than eight bounded parts. No upload prepared.');
+ if(count<1||count>12)throw Error('Package needs more than twelve bounded parts. No upload prepared.');
  mkdirSync(output,{recursive:true});
  const input=openSync(bundle,'r'),buffer=Buffer.alloc(1024**2),parts=[];
  try{

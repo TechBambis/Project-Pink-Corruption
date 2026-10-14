@@ -320,3 +320,91 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" wait '${{ steps.part7.outputs.artifact-id }}'
+      - name: Recheck shared storage before temporary part 8
+        id: space8
+        if: always() && steps.transfer.outcome == 'success' && steps.receipt7.outcome == 'success' && fromJSON(steps.transfer.outputs.count) > 8
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" check '${{ steps.transfer.outputs.root }}/8' "$BAMBI_REMAINING_ARTIFACT_MIB"
+      - name: Upload bounded temporary part 8
+        id: part8
+        if: always() && steps.space8.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bambi-windows-transfer-${{ github.run_id }}-8
+          path: ${{ steps.transfer.outputs.root }}/8/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Wait for verified local receipt of part 8
+        id: receipt8
+        if: always() && steps.part8.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" wait '${{ steps.part8.outputs.artifact-id }}'
+      - name: Recheck shared storage before temporary part 9
+        id: space9
+        if: always() && steps.transfer.outcome == 'success' && steps.receipt8.outcome == 'success' && fromJSON(steps.transfer.outputs.count) > 9
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" check '${{ steps.transfer.outputs.root }}/9' "$BAMBI_REMAINING_ARTIFACT_MIB"
+      - name: Upload bounded temporary part 9
+        id: part9
+        if: always() && steps.space9.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bambi-windows-transfer-${{ github.run_id }}-9
+          path: ${{ steps.transfer.outputs.root }}/9/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Wait for verified local receipt of part 9
+        id: receipt9
+        if: always() && steps.part9.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" wait '${{ steps.part9.outputs.artifact-id }}'
+      - name: Recheck shared storage before temporary part 10
+        id: space10
+        if: always() && steps.transfer.outcome == 'success' && steps.receipt9.outcome == 'success' && fromJSON(steps.transfer.outputs.count) > 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" check '${{ steps.transfer.outputs.root }}/10' "$BAMBI_REMAINING_ARTIFACT_MIB"
+      - name: Upload bounded temporary part 10
+        id: part10
+        if: always() && steps.space10.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bambi-windows-transfer-${{ github.run_id }}-10
+          path: ${{ steps.transfer.outputs.root }}/10/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Wait for verified local receipt of part 10
+        id: receipt10
+        if: always() && steps.part10.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" wait '${{ steps.part10.outputs.artifact-id }}'
+      - name: Recheck shared storage before temporary part 11
+        id: space11
+        if: always() && steps.transfer.outcome == 'success' && steps.receipt10.outcome == 'success' && fromJSON(steps.transfer.outputs.count) > 11
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" check '${{ steps.transfer.outputs.root }}/11' "$BAMBI_REMAINING_ARTIFACT_MIB"
+      - name: Upload bounded temporary part 11
+        id: part11
+        if: always() && steps.space11.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bambi-windows-transfer-${{ github.run_id }}-11
+          path: ${{ steps.transfer.outputs.root }}/11/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Wait for verified local receipt of part 11
+        id: receipt11
+        if: always() && steps.part11.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" wait '${{ steps.part11.outputs.artifact-id }}'

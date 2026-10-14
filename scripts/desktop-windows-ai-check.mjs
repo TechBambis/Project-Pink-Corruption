@@ -42,6 +42,7 @@ try{
  const before=await inventory(resources);evidence.measurements.startupMs=await launch();record('isolated-alpha-start',{startupMs:evidence.measurements.startupMs});
  await page.goto(`http://127.0.0.1:${port}/setup`);await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='not-installed');
  await application.evaluate(({dialog},directory)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[directory]});},source);
+ await page.getByRole('button',{name:'2. Choose a model',exact:true}).click();await page.locator('input[name="model-choice"][value="bambi-qwen35-9b-hauhau:q4_k_m"]').check();
  await page.getByRole('button',{name:'3. Install and start',exact:true}).click();
  const installStart=performance.now();await page.locator('#setup-copy').click();
  await page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='installed',{},{timeout:300000});evidence.measurements.verifiedCopyMs=performance.now()-installStart;record('explicit-model-copy-and-verification',{ms:evidence.measurements.verifiedCopyMs,downloadTest:false});

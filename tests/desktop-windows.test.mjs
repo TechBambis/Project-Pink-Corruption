@@ -11,6 +11,7 @@ import {join} from 'node:path';
 import {createServer} from 'node:http';
 import {createRequire} from 'node:module';
 import {buildOptions,downloadPinned,digest,llamaEntries,assertWindowsX64,sourcePathAllowed,inventory,peImports,windowsDependencyReport} from '../scripts/desktop-windows-support.mjs';
+import {splitBundle} from '../scripts/desktop-windows-transfer.mjs';
 const {runtimeEnvironment}=createRequire(import.meta.url)('../apps/desktop/runtime-environment.cjs');
 
 test('bounded frozen-release transport retains matching evidence and rejects another source or failed gates',t=>{
@@ -112,4 +113,13 @@ test('PE dependency inspection catches omitted DLLs and does not accept a build-
  assert.deepEqual(isolated.unresolved,[{path:'cuda_v13/ggml-cuda.dll',dll:'msvcp140.dll'}]);
  assert.deepEqual(isolated.optionalDriver,[{path:'cuda_v12/ggml-cuda.dll',dll:'nvcuda.dll'},{path:'vulkan/ggml-vulkan.dll',dll:'vulkan-1.dll'}]);
  writeFileSync(join(folder,'cuda_v13/msvcp140.dll'),pe('KERNEL32.dll'));assert.equal(windowsDependencyReport(folder).unresolved.length,0);
+});
+
+test('large installer and portable ZIP transport preserves bytes across twelve ordered bounded parts',t=>{
+ const root=mkdtempSync(join(tmpdir(),'Bambi large transfer ü '));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const bundle=join(root,'handoff.tar'),body=Buffer.alloc(11*1024**2+31);for(let i=0;i<body.length;i++)body[i]=i%251;
+ writeFileSync(bundle,body);const parts=splitBundle(bundle,join(root,'parts'),1024**2);
+ assert.equal(parts.length,12);assert(parts.every((part,index)=>part.index===index&&part.bytes<=1024**2));
+ assert.deepEqual(Buffer.concat(parts.map(part=>readFileSync(part.path))),body);
+ writeFileSync(bundle,Buffer.alloc(12*1024**2+1));assert.throws(()=>splitBundle(bundle,join(root,'overflow'),1024**2),/twelve bounded parts/);assert(!existsSync(join(root,'overflow')));
 });
