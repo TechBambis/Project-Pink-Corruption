@@ -84,7 +84,7 @@ const stub=createServer(async(req,res)=>{
 });
 stub.listen(0,'127.0.0.1');await once(stub,'listening');const stubPort=stub.address().port;
 const reservation=createServer();reservation.listen(0,'127.0.0.1');await once(reservation,'listening');const port=reservation.address().port;await new Promise(resolve=>reservation.close(resolve));
-const base=`http://127.0.0.1:${port}`,errors=[];let browser,logs='';
+const base=`http://127.0.0.1:${port}`,errors=[];let browser,logs='',closing=false;
 // A separate working directory excludes private .env files, recordings and caches.
 const fixture=mkdtempSync(join(tmpdir(),'bambi-browser-check-'));
 for(const name of ['packages','presets','voices','apps','docs','config','node_modules'])
@@ -122,7 +122,14 @@ try{
   // refreshes in flight, which can overwrite the streaming capability later.
   const recognitionHealth=data=>({...data,whisper:true,streamingSpeech:true});
   await page.route('**/api/health',async route=>{
-   const response=await route.fetch();await route.fulfill({response,json:recognitionHealth(await response.json())});
+   try{
+    // This idempotent health forwarding may race a closed keep-alive socket.
+    // Retry only network resets; persistent failures still fail the fixture.
+    const response=await route.fetch({maxRetries:2});await route.fulfill({response,json:recognitionHealth(await response.json())});
+   }catch(error){
+    if(!closing)errors.push('Health forwarding failed: '+String(error));
+    await route.abort().catch(()=>{});
+   }
   });
   await page.routeWebSocket('**/ws',socket=>{
    const server=socket.connectToServer();
@@ -655,5 +662,5 @@ try{
 }catch(error){
  mkdirSync('runtime',{recursive:true});writeFileSync('runtime/high-impact-browser-check.json',JSON.stringify({ok:false,error:String(error),errors,serverLog:logs.slice(-20000)},null,2));throw error;
 }finally{
- await browser?.close();app.kill('SIGTERM');await Promise.race([once(app,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);if(app.exitCode===null)app.kill('SIGKILL');stub.closeAllConnections();await new Promise(resolve=>stub.close(resolve));rmSync(fixture,{recursive:true,force:true});
+ closing=true;await browser?.close();app.kill('SIGTERM');await Promise.race([once(app,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);if(app.exitCode===null)app.kill('SIGKILL');stub.closeAllConnections();await new Promise(resolve=>stub.close(resolve));rmSync(fixture,{recursive:true,force:true});
 }
