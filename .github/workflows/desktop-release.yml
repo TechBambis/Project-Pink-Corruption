@@ -2,7 +2,9 @@ name: Verify received Alpha 41 on Ubuntu
 on:
   workflow_dispatch:
 permissions:
-  contents: read
+  # GitHub requires write-level repository access to read unpublished assets.
+  # The token is used only to download this immutable asset ID.
+  contents: write
 jobs:
   received-package:
     runs-on: ubuntu-24.04
