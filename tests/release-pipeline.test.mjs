@@ -146,7 +146,9 @@ test('target staging refuses old tar-only Linux evidence even when its generic p
 async function publicationMock(directory,{privateRepo=true,badDigest=false,existing=false,existingDraft=false,tagChanges=false}={}){
  const commands=[];let created=false,tagReads=0;
  const assets=[];for(const filename of readdirSync(directory))assets.push({name:filename,size:readFileSync(join(directory,filename)).length,digest:'sha256:'+await hashFile(join(directory,filename))});
- return {commands,
+ const project=join(directory,'..');mkdirSync(join(project,'release-notes'),{recursive:true});
+ write(join(project,'release-notes',build.tag+'.md'),"A little desktop update is ready to try.\n\n- The offline sample is ready for another test run.\n");
+ return {commands,project,
   api:async path=>{
    if(path.includes('/git/ref/'))return {object:{type:'commit',sha:tagChanges&&++tagReads>1?'d'.repeat(40):build.commit}};
    if(path.includes('/releases/tags/'))return undefined; // Actual draft-by-tag REST behavior.
@@ -167,16 +169,24 @@ test('draft discovery paginates authenticated releases and fails closed on unrea
 test('private publication skips unsupported attestations, confirms remote digests and publishes the draft last',async t=>{
  const {base,input}=await fixture(t),directory=join(base,'publish');await assemble(input,directory,build);const mock=await publicationMock(directory);await publish(directory,build,mock);
  assert.deepEqual(mock.commands.map(c=>c.slice(0,2)),[['release','create'],['release','edit']]);assert(mock.commands[0].includes('--verify-tag'));assert(mock.commands[0].includes('--prerelease'));assert(mock.commands[1].includes('--draft=false'));assert(mock.commands[1].includes('--latest=false'));
- const notes=readFileSync(join(base,'release-notes.md'),'utf8'),names=downloadNames(build),first=notes.split('\n')[0];
- assert(first.includes(`[Download for Windows (x64)](https://github.com/${build.repository}/releases/download/${build.tag}/${names.windows})`));
- assert(first.includes(`[Download for Linux (x64)](https://github.com/${build.repository}/releases/download/${build.tag}/${names.linux})`));
- assert(notes.includes('Local AI and speech are not included.'));assert(notes.includes('matching source (optional ZIP)'));
+ const notes=readFileSync(join(base,'release-notes.md'),'utf8'),names=downloadNames(build);
+ assert(notes.startsWith('A little desktop update is ready to try.'));
+ assert(notes.includes(`[Windows download](https://github.com/${build.repository}/releases/download/${build.tag}/${names.windows})`));
+ assert(notes.includes(`[Linux download](https://github.com/${build.repository}/releases/download/${build.tag}/${names.linux})`));
+ assert(notes.includes("Local AI and voice aren't included yet."));
+ assert(!mock.commands[0].includes('--generate-notes'));
 });
 
 test('public publication verifies every asset against workflow/ref/commit before creating its draft',async t=>{
  const {base,input}=await fixture(t),directory=join(base,'publish');await assemble(input,directory,build);const mock=await publicationMock(directory,{privateRepo:false});await publish(directory,build,mock);
  const verifies=mock.commands.filter(c=>c[0]==='attestation');assert.equal(verifies.length,readdirSync(directory).length);assert(verifies.every(c=>c.includes('--source-digest')&&c.includes(build.commit)&&c.includes('--signer-workflow')));
  assert.equal(mock.commands.at(-1)[1],'edit');
+});
+
+test('missing release notes stop publication before any release or attestation writes',async t=>{
+ const {base,input}=await fixture(t),directory=join(base,'publish');await assemble(input,directory,build);
+ const mock=await publicationMock(directory);rmSync(join(mock.project,'release-notes',build.tag+'.md'));
+ await assert.rejects(publish(directory,build,mock),/Codex must write/);assert.equal(mock.commands.length,0);
 });
 
 test('failed provenance, existing releases, upload corruption or moved tags leave releases unpublished',async t=>{

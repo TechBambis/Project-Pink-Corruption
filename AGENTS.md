@@ -1,0 +1,8 @@
+# Release communication
+
+The user develops this repository with Codex. During every release preparation, Codex must write `release-notes/<exact-tag>.md` internally as part of the task. This includes manual AI alpha releases. Do not ask the user to write it and do not add an external AI API or a bot service.
+
+- Use the same short, useful text for GitHub Releases and Discord. Write casual, sweet, natural English for the English-speaking server: a brief opening, 1–5 concrete changes, relevant limitations and download links. Aim for 40–110 words. No emojis, mentions, technical commit dumps, implementation jargon or exaggerated claims. Explain what the user can do or what feels better. Keep important test-build/platform limitations explicit.
+- Verify the changes against the previous release and the actual shipped packages. A release is incomplete without its matching note. See `release-notes/README.md` and preview with `node scripts/release-notes.mjs preview TAG` before tagging or publishing. For manual releases use `--notes-file release-notes/TAG.md`, never generated release notes.
+- Discord channel ID `1559980104560681035` receives the published GitHub body via webhook. Preserve its hidden delivery receipt. Workflow-created releases using `GITHUB_TOKEN` must invoke the sender after publication; they do not trigger the separate published-release workflow.
+- Before GitHub writes, verify the authenticated account has numeric ID `337824705` (BambiOS). Preserve the user's configured Git author/committer identity and omit AI coauthor/attribution trailers. Never commit webhook URLs or bot credentials.

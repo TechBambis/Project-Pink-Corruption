@@ -6,6 +6,7 @@ import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {archiveTool,hashFile,digest} from './desktop-windows-support.mjs';
 import {releaseTag} from './desktop-release-version.mjs';
+import {renderReleaseNotes} from './release-notes.mjs';
 import {releaseReport,sourceChecksMatch} from './desktop-release-support.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
@@ -242,7 +243,8 @@ export async function findRelease(repo,tag,api=githubApi){
  throw Error('Release inventory exceeds supported inspection.');
 }
 
-export async function publish(directory,build,{api=githubApi,gh=(args)=>execFileSync('gh',args,{stdio:'inherit'})}={}){
+export async function publish(directory,build,{project=root,api=githubApi,gh=(args)=>execFileSync('gh',args,{stdio:'inherit'})}={}){
+ const communityNotes=renderReleaseNotes(build,project);
  const entries=await verifyPublication(directory,build),repo='repos/'+build.repository;
  let ref=await api(repo+'/git/ref/tags/'+encodeURIComponent(build.tag));
  if(!ref)throw Error('Remote release tag does not exist.');
@@ -254,8 +256,7 @@ export async function publish(directory,build,{api=githubApi,gh=(args)=>execFile
  // including the aggregate metadata/checksums, before obtaining a release URL.
  if(!repository.private)for(const filename of readdirSync(directory).sort())gh(['attestation','verify',join(directory,filename),'--repo',build.repository,'--signer-workflow',build.repository+'/'+build.workflowPath,'--source-ref','refs/tags/'+build.tag,'--source-digest',build.commit]);
  const notes=join(directory,'..','release-notes.md');
- const names=downloadNames(build),download=`https://github.com/${build.repository}/releases/download/${build.tag}/`;
- writeFileSync(notes,`[Download for Windows (x64)](${download+names.windows}) · [Download for Linux (x64)](${download+names.linux})\n\nDownload one file for your system: the .exe installer or .AppImage.\n\n**Smoke build:** offline sample and desktop shell. Local AI and speech are not included.\n\n[Technical details and matching source (optional ZIP)](${download+names.details}) · [Checksums](${download}SHA256SUMS)\n`);
+ writeFileSync(notes,communityNotes);
  gh(['release','create',build.tag,...readdirSync(directory).sort().map(n=>join(directory,n)),'--repo',build.repository,'--verify-tag','--draft','--title',`Bambi Local ${build.version} (smoke)`,'--notes-file',notes,...(build.prerelease?['--prerelease']:[])]);
  const draft=await findRelease(repo,build.tag,api);
  const expected=[...entries,await asset(join(directory,'SHA256SUMS'))];
@@ -274,6 +275,7 @@ export async function publish(directory,build,{api=githubApi,gh=(args)=>execFile
 
 async function preflight(build,environment){
  assertTagCommit(build);
+ renderReleaseNotes(build); // Fail before native jobs when Codex has not prepared the matching notes.
  const policy=json(join(root,'config/release-pipeline.json')),event=json(environment.GITHUB_EVENT_PATH);
  if(typeof event.repository?.private!=='boolean')throw Error('Repository visibility is unknown.');
  if(event.repository.private&&environment.BAMBI_FREE_ALLOWANCE_CONFIRMED!=='true')throw Error('Confirm remaining account allowance and zero paid usage in RELEASE_FREE_ALLOWANCE_CONFIRMED before a private tag release.');
