@@ -210,6 +210,29 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/release-pipeline.mjs publish "$RUNNER_TEMP/bambi-publish"
+  announce:
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    concurrency:
+      group: discord-release-changelog
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.18.1'
+      - name: Post the same published release notes to Discord
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/discord-release.mjs "$RELEASE_TAG"
   cleanup:
     needs: publish
     # A skipped public-only ancestor must not skip successful private cleanup.

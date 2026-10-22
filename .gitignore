@@ -204,3 +204,8 @@ test-results/
 !/scripts/settings-browser-check.mjs
 
 !/docs/SETTINGS_BACKUP.md
+
+# Reviewed release communication; credentials stay outside the repository.
+!/AGENTS.md
+!/scripts/release-notes.mjs
+!/scripts/discord-release.mjs
