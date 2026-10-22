@@ -17,7 +17,7 @@ if(spec.phase!=='alpha'||runtime.version!==spec.version||runtime.platform!=='win
 writeFileSync(join(output,'SOURCE-CHECKS.json'),JSON.stringify(checks,null,2)+'\n');
 const payload=[];
 for(const filename of readdirSync(output).filter(name=>/\.(?:exe|zip|tar\.gz)$/.test(name)||['RUNTIME-MANIFEST.json','SOURCE-CHECKS.json'].includes(name)))payload.push({filename,sha256:await hashFile(join(output,filename))});
-const gates={sourceChecks:'passed'},qualification={schema:1,version:spec.version,target:'windows-x64',applicationDigest:spec.applicationDigest,sourceDigest:runtime.sourceDigest,payload,gates,testedAt:new Date().toISOString(),qualificationDriver:{commit:process.env.GITHUB_SHA,runId:process.env.GITHUB_RUN_ID,changes:'Wait for setup initialization and explicitly select the unchanged full reference model before testing download controls; application source is the unchanged release tag.'}};
+const gates={sourceChecks:'passed'},qualification={schema:1,version:spec.version,target:'windows-x64',applicationDigest:spec.applicationDigest,sourceDigest:runtime.sourceDigest,payload,gates,testedAt:new Date().toISOString(),qualificationDriver:{commit:process.env.GITHUB_SHA,runId:process.env.GITHUB_RUN_ID,changes:'Wait for setup initialization and explicitly select the unchanged full reference model before testing download controls; use a read-only observer with limited query rights and bounded identity retries; application source is the unchanged release tag.'}};
 const testOutput=mkdtempSync(join(output,'qualification-'));
 try{
  try{execFileSync(process.execPath,[join(root,'scripts/desktop-windows-install-check.mjs'),output],{cwd:root,env:{...process.env,BAMBI_WINDOWS_TEST_OUTPUT:testOutput},stdio:'inherit'});}

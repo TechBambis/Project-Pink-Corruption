@@ -38,7 +38,7 @@ export async function observeRows(roots,windows=false){
  if(!roots.length||roots.some(pid=>!Number.isSafeInteger(pid)||pid<=0))throw Error('Specify owned process IDs for observation.');
  const rows=await requestObservation(roots.join(',')+(windows?' --windows':''));return windows?rows:rows.map(row=>({...row,command:''}));
 }
-export async function observeOwnedRows(owner,{identityTimeoutMs=2000}={}){
+export async function observeOwnedRows(owner,{identityTimeoutMs=5000}={}){
  const deadline=performance.now()+identityTimeoutMs;
  while(true){
   try{return ownedRows(owner,await observeRows([owner]));}
@@ -84,7 +84,7 @@ export function ownedRows(owner,rows=processRows([owner])){
  return rows.filter(row=>owned.has(row.pid)).map(row=>{assertCreation(row);return row;});
 }
 class MissingProcessIdentity extends Error {}
-function assertCreation(row){if(!row.created||!row.executable)throw new MissingProcessIdentity('Cannot verify native process identity for PID '+row.pid);}
+function assertCreation(row){if(!row.created||!row.executable)throw new MissingProcessIdentity('Cannot verify native process identity for PID '+row.pid+' (Win32 query error '+(row.queryError??'unknown')+')');}
 export async function processSnapshot(owner){
  const rows=await observeOwnedRows(owner);
  // Command lines contain private service tokens. Never persist them in evidence.

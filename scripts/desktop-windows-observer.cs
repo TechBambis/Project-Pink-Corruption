@@ -32,8 +32,8 @@ public static class BambiWindowsObserver
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool Process32NextW(IntPtr snapshot, ref Entry entry);
     [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
     [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
-    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags, StringBuilder path, ref uint length);
-    [DllImport("kernel32.dll")] static extern bool GetProcessTimes(IntPtr process, out Time created, out Time exited, out Time kernel, out Time user);
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags, StringBuilder path, ref uint length);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetProcessTimes(IntPtr process, out Time created, out Time exited, out Time kernel, out Time user);
     [DllImport("psapi.dll")] static extern bool GetProcessMemoryInfo(IntPtr process, ref Memory memory, uint size);
     delegate bool WindowCallback(IntPtr window, IntPtr parameter);
     [DllImport("user32.dll")] static extern bool EnumWindows(WindowCallback callback, IntPtr parameter);
@@ -132,15 +132,17 @@ public static class BambiWindowsObserver
         foreach (Entry entry in entries)
         {
             if (!selected.Contains(entry.Pid)) continue;
-            string image = null, creation = null; ulong cpu = 0, rss = 0, commit = 0;
-            // Request query rights only; never request termination or mutation.
-            IntPtr process = OpenProcess(0x1000 | 0x0400, false, entry.Pid);
+            string image = null, creation = null; ulong cpu = 0, rss = 0, commit = 0; int queryError = 0;
+            // Modern Windows supports all three read APIs with limited query rights.
+            // Full query rights can be denied for sandboxed renderer children.
+            IntPtr process = OpenProcess(0x1000, false, entry.Pid);
+            if (process == IntPtr.Zero) queryError = Marshal.GetLastWin32Error();
             if (process != IntPtr.Zero) try
             {
                 uint length = 32768; StringBuilder path = new StringBuilder((int)length);
-                if (QueryFullProcessImageNameW(process, 0, path, ref length)) image = path.ToString();
+                if (QueryFullProcessImageNameW(process, 0, path, ref length)) image = path.ToString(); else queryError = Marshal.GetLastWin32Error();
                 Time created, exited, kernel, user;
-                if (GetProcessTimes(process, out created, out exited, out kernel, out user)) { creation = Number(created).ToString(CultureInfo.InvariantCulture); cpu = Number(kernel) + Number(user); }
+                if (GetProcessTimes(process, out created, out exited, out kernel, out user)) { creation = Number(created).ToString(CultureInfo.InvariantCulture); cpu = Number(kernel) + Number(user); } else queryError = Marshal.GetLastWin32Error();
                 Memory memory = new Memory(); memory.Size = (uint)Marshal.SizeOf(typeof(Memory));
                 if (GetProcessMemoryInfo(process, ref memory, memory.Size)) { rss = memory.WorkingSet.ToUInt64(); commit = memory.PrivateUsage.ToUInt64(); }
             }
@@ -148,7 +150,7 @@ public static class BambiWindowsObserver
             if (!first) output.Append(','); first = false;
             output.Append("{\"pid\":").Append(entry.Pid).Append(",\"parent\":").Append(entry.Parent)
                 .Append(",\"executable\":").Append(Json(image)).Append(",\"created\":").Append(Json(creation))
-                .Append(",\"cpu100ns\":").Append(cpu).Append(",\"rssBytes\":").Append(rss).Append(",\"privateCommitBytes\":").Append(commit).Append('}');
+                .Append(",\"queryError\":").Append(queryError).Append(",\"cpu100ns\":").Append(cpu).Append(",\"rssBytes\":").Append(rss).Append(",\"privateCommitBytes\":").Append(commit).Append('}');
         }
         Console.OutputEncoding = new UTF8Encoding(false);
         Console.WriteLine(output.Append(']').ToString()); return 0;
