@@ -1,23 +1,130 @@
 {
   "schema": 1,
   "targets": {
-    "linux-x64": {"platform": "linux", "architecture": "x64", "implemented": true},
-    "windows-x64": {"platform": "win32", "architecture": "x64", "implemented": true},
-    "macos-arm64": {"platform": "darwin", "architecture": "arm64", "implemented": false}
+    "linux-x64": {
+      "platform": "linux",
+      "architecture": "x64",
+      "implemented": true
+    },
+    "windows-x64": {
+      "platform": "win32",
+      "architecture": "x64",
+      "implemented": true
+    },
+    "macos-arm64": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "implemented": true,
+      "phases": [
+        "smoke",
+        "alpha"
+      ]
+    }
   },
   "features": {
-    "settingsTransfer": ["packages/settings/index.ts", "packages/settings/transfer.ts", "apps/web/src/settings-persistence.ts", "apps/web/src/settings-transfer.ts", "docs/SETTINGS_BACKUP.md"],
-    "privacyAccess": ["apps/web/src/privacy.ts", "packages/safety/access.ts", "apps/desktop/permission-policy.cjs"],
-    "nativeSourceCompleteness": ["apps/desktop/AppRun", "apps/desktop/AppRun.alpha", "CLA.md", "docs/anubis-model.json", "docs/community-models.json"],
-    "modelSelection": ["apps/web/src/model-setup.ts", "config/local-model-catalog.json", "packages/ai/model-catalog.ts"],
-    "situationalConversation": ["packages/ai/situational.ts", "packages/ai/character.ts", "packages/content/interaction.ts"],
-    "modelLifecycle": ["packages/runtime/service-lifecycle.ts", "packages/runtime/desktop-services.ts", "packages/runtime/accelerator-policy.mjs", "packages/runtime/accelerator-runtime.mjs", "scripts/accelerator-plan.mjs", "scripts/accelerator_bridge.py"],
-    "signedUpdateFoundation": ["packages/runtime/update-manifest.ts", "scripts/desktop-update.ts"],
-    "turnGrammarExperiment": ["packages/ai/turn-grammar.ts"]
+    "settingsTransfer": [
+      "packages/settings/index.ts",
+      "packages/settings/transfer.ts",
+      "apps/web/src/settings-persistence.ts",
+      "apps/web/src/settings-transfer.ts",
+      "docs/SETTINGS_BACKUP.md"
+    ],
+    "privacyAccess": [
+      "apps/web/src/privacy.ts",
+      "packages/safety/access.ts",
+      "apps/desktop/permission-policy.cjs"
+    ],
+    "nativeSourceCompleteness": [
+      "apps/desktop/AppRun",
+      "apps/desktop/AppRun.alpha",
+      "CLA.md",
+      "docs/anubis-model.json",
+      "docs/community-models.json"
+    ],
+    "modelSelection": [
+      "apps/web/src/model-setup.ts",
+      "config/local-model-catalog.json",
+      "packages/ai/model-catalog.ts"
+    ],
+    "situationalConversation": [
+      "packages/ai/situational.ts",
+      "packages/ai/character.ts",
+      "packages/content/interaction.ts"
+    ],
+    "modelLifecycle": [
+      "packages/runtime/service-lifecycle.ts",
+      "packages/runtime/desktop-services.ts",
+      "packages/runtime/accelerator-policy.mjs",
+      "packages/runtime/accelerator-runtime.mjs",
+      "scripts/accelerator-plan.mjs",
+      "scripts/accelerator_bridge.py"
+    ],
+    "signedUpdateFoundation": [
+      "packages/runtime/update-manifest.ts",
+      "scripts/desktop-update.ts"
+    ],
+    "turnGrammarExperiment": [
+      "packages/ai/turn-grammar.ts"
+    ],
+    "spokenOutput": [
+      "packages/speech/contract.ts",
+      "packages/ai/spoken-blocks.ts",
+      "packages/ai/language-style.ts"
+    ],
+    "focusedCharacter": [
+      "packages/content/companion.ts",
+      "packages/session-director/regie/draft.ts",
+      "packages/session-director/regie/story.ts",
+      "packages/session-director/regie/story-contract.ts"
+    ],
+    "localPlayer": [
+      "apps/web/src/bootstrap.ts",
+      "apps/web/src/player-runtime.ts",
+      "apps/web/src/navigation-driver.ts",
+      "apps/web/src/react-player.tsx",
+      "apps/web/src/react-composer.tsx",
+      "apps/web/src/react-audio-controls.tsx"
+    ]
   },
-  "windowsRequired": ["apps/desktop/speech.manifest", "packages/speech/desktop-windows.lock", "scripts/desktop-windows-native.mjs", "scripts/desktop-windows-install-check.mjs", "scripts/desktop-windows-runtime-slice.mjs", "scripts/desktop-windows-observer.cs", "docs/licenses/windows-python-3.12.13/PROVENANCE.json"],
+  "windowsRequired": [
+    "apps/desktop/speech.manifest",
+    "packages/speech/desktop-windows.lock",
+    "scripts/desktop-windows-native.mjs",
+    "scripts/desktop-windows-install-check.mjs",
+    "scripts/desktop-windows-runtime-slice.mjs",
+    "scripts/desktop-windows-observer.cs",
+    "docs/licenses/windows-python-3.12.13/PROVENANCE.json"
+  ],
+  "macosRequired": [
+    "desktop-macos-builder.cjs",
+    "apps/desktop/macos-entitlements.plist",
+    "scripts/desktop-macos-build.mjs",
+    "scripts/desktop-macos-check.mjs",
+    "scripts/desktop-macos-support.mjs",
+    "scripts/desktop-macos-native.mjs",
+    "scripts/desktop-macos-runtime-check.mjs",
+    "packages/speech/desktop-macos.lock",
+    "config/desktop-macos-runtime.json",
+    "docs/licenses/macos-python-3.12.13/PROVENANCE.json",
+    "scripts/desktop-macos-ai-check.mjs"
+  ],
   "gates": {
-    "smoke": ["sourceChecks", "packaging", "installer"],
-    "alpha": ["sourceChecks", "packaging", "installer", "speech", "localConversation", "offlineConversation", "physicalAudio", "recipientInstallation", "permissions", "modelSelection"]
+    "smoke": [
+      "sourceChecks",
+      "packaging",
+      "installer"
+    ],
+    "alpha": [
+      "sourceChecks",
+      "packaging",
+      "installer",
+      "speech",
+      "localConversation",
+      "offlineConversation",
+      "physicalAudio",
+      "recipientInstallation",
+      "permissions",
+      "modelSelection"
+    ]
   }
 }

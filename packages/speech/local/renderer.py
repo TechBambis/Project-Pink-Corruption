@@ -29,8 +29,11 @@ def mix_buses(buses, levels, ceiling):
     return limit(output, ceiling), peak
 
 class Renderer:
-    def __init__(self, provider):
+    def __init__(self, provider, split_clauses=True, split_sentences=True, max_chars=180):
         self.provider = provider
+        self.split_clauses = split_clauses
+        self.split_sentences = split_sentences
+        self.max_chars = max_chars
 
     def vocal_unit(self, phrase, config, trigger=False, with_timestamps=False):
         rate = config['sampleRate']
@@ -80,7 +83,11 @@ class Renderer:
     def chunks(self, text, config, cancel=lambda: False, trigger=False):
         """One phrase at a time, with silence and real backpressure at the HTTP stream."""
         offset = 0
-        for phrase in phrases(text, config['timing']):
+        # Let the voice model speak commas and semicolons in context. Splitting
+        # an address such as "Stay here, Bambi, and listen." into three renders
+        # adds a preset pause and another synthesis boundary at every comma.
+        # Sentence boundaries, explicit pauses and the phrase size limit remain.
+        for phrase in phrases(text, config['timing'], split_clauses=False):
             if cancel():
                 return
             buses, spoken_seconds, timestamps = self.vocal_unit(phrase, config, trigger=trigger, with_timestamps=True)
@@ -103,7 +110,8 @@ class Renderer:
         timeline = []
         offset = 0
         rate = config['sampleRate']
-        for phrase in phrases(text, config['timing']):
+        for phrase in phrases(text, config['timing'], split_clauses=self.split_clauses,
+                              split_sentences=self.split_sentences, max_chars=self.max_chars):
             if cancel():
                 raise InterruptedError('Local render cancelled')
             buses, duration = self.vocal_unit(phrase, vocal_config)

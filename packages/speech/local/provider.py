@@ -14,6 +14,7 @@ from .config import ROOT, DATA, MODELS
 from .voices import VoiceRegistry
 from .spoken import spoken_input, pronunciation_input
 from .alignment import word_timings
+from .cpu import cpu_runtime_options
 
 class KokoroProvider:
     """CPU-only provider, resident embeddings/model and bounded disk phrase cache."""
@@ -24,14 +25,19 @@ class KokoroProvider:
         self.bundle = Path(bundle or MODELS / 'kokoro/voices-v1.0.bin')
         if not self.model.is_file() or not self.bundle.is_file():
             raise FileNotFoundError('Local Kokoro model missing. Run ./scripts/setup-local-tts.sh once while online.')
+        with self.model.open('rb') as source:
+            self.model_id = hashlib.file_digest(source, 'sha256').hexdigest()
+        self.cpu_options = cpu_runtime_options(self.model_id)
         options = ort.SessionOptions()
         ort.disable_telemetry_events()
-        options.intra_op_num_threads = int(os.environ.get('BAMBI_TTS_THREADS', '4'))
+        options.intra_op_num_threads = self.cpu_options['threads']
         options.inter_op_num_threads = 1
         # Let inference workers sleep between phrases so audio/UI and the desktop
         # can use the cores while the GPU prepares the next reply.
         options.add_session_config_entry('session.intra_op.allow_spinning', '0')
         options.add_session_config_entry('session.inter_op.allow_spinning', '0')
+        if self.cpu_options['dynamicBlock']:
+            options.add_session_config_entry('session.dynamic_block_base', str(self.cpu_options['dynamicBlock']))
         options.enable_cpu_mem_arena = True
         session = ort.InferenceSession(str(self.model), options, providers=['CPUExecutionProvider'])
         self.engine = Kokoro.from_session(session, str(self.bundle))
@@ -41,8 +47,6 @@ class KokoroProvider:
         self.cache = Path(cache or (DATA / 'cache/tts' if os.environ.get('BAMBI_DATA_ROOT') else ROOT / 'runtime/tts-cache'))
         self.cache.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
-        with self.model.open('rb') as source:
-            self.model_id = hashlib.file_digest(source, 'sha256').hexdigest()
         self.cache_hits = 0
         self.cache_misses = 0
 

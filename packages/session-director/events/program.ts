@@ -56,7 +56,7 @@ export function createReferenceProgram(durationMs: number, intensity = .6): Bamb
     if (phase === 'deepening') { add(fraction(phase, cursor, false)); add({ ...make(phase, cursor, 'silence', 3100, ''), state: { ...blank, activeLayers: ['motif_visual'], visualState: 'motif' }, speech: silentSpeech }); }
     if (phase === 'conditioning') {
       add(fraction(phase, cursor, true));
-      add({ ...make(phase, cursor, 'mindwipe', 3100, ''), timing: { prepMs: 8000, activeMs: 3100, returnMs: 4000 }, baseline: { ...baseline, activeLayers: [...baseline.activeLayers, 'transition_sfx'] }, state: blank, wipe: { offsetMs: 0, durationMs: 8000, text: 'THOUGHTS' }, speech: narrate(6000, 'The current fictional scene shows a car-style windshield wiper erasing one word in an arc with a rubbing sound over the retained background. Describe that present image in short original clauses, simplify into a quiet point, and finish before the reserved no-text blank. No invented effects or timing.', 'fragment') });
+      add({ ...make(phase, cursor, 'mindwipe', 3100, ''), timing: { prepMs: 8000, activeMs: 3100, returnMs: 4000 }, baseline: { ...baseline, activeLayers: [...baseline.activeLayers, 'transition_sfx'] }, state: blank, wipe: { offsetMs: 0, durationMs: 8000, text: 'THOUGHTS' }, speech: narrate(6000, 'The current fictional scene shows two car-style windshield wipers erasing one word in an arc with a rubbing sound over the retained background. Describe that present image in short original clauses, simplify into a quiet point, and finish before the reserved no-text blank. No invented effects or timing.', 'fragment') });
       add({ ...make(phase, cursor, 'reset', 7800, 'Close the previous fictional chapter and introduce one fresh, clear starting point.'), timing: { prepMs: 1000, activeMs: 7800, returnMs: 1500 }, state: narrow });
       add({ ...make(phase, cursor, 'original_self', 14300, 'Introduce Original Self / Old Self as a fictional narrative perspective. Maintain one coherent referent. No computer or installation metaphors.'), motifId: 'pink-orb', originalSelf: 'original', state: narrow });
       add({ ...make(phase, cursor, 'mantra', 16200, ''), speech: narrate(1600, 'One original very short calming mantra, supplied only once.', 'mantra'), mantra: { count: 3, periodMs: 5400 } });
@@ -130,7 +130,10 @@ export function withHapticMappings(raw: BambiProgram) {
     else if (event.type === 'reset') { offsets = [event.timing.prepMs]; event.state = armed(event.state); }
     else if (event.type === 'mindwipe') { offsets = [event.timing.prepMs + event.timing.activeMs]; event.baseline = armed(event.baseline); }
     const spokenCues = compileEvent(event).speech.filter(slot => slot.speech.requiredTrigger || slot.speech.fixedCue);
-    if (spokenCues.length && event.type === 'motif_recall') event.state = armed(event.state);
+    if (spokenCues.length) {
+      event.state = armed(event.state);
+      if(event.softReturn)for(const step of event.softReturn.steps)step.state=armed(step.state);
+    }
     const command = { type: 'device', channel: 'vib', operation: 'buzz', intensity: .1, durationMs: 150 } as const;
     event.haptics = spokenCues.length
       ? spokenCues.map(slot => ({ offsetMs: slot.atMs - event.atMs + (slot.speech.triggerAtMs ?? slot.speech.cueAtMs!), speechSlotId: slot.id, command }))

@@ -1,0 +1,16 @@
+{
+  "id": "hauhau-9b-dflash",
+  "status": "experiment-only",
+  "targetAlias": "bambi-qwen35-9b-hauhau:q4_k_m",
+  "context": 24576,
+  "draft": {
+    "repo": "EntityDeletr/Qwen3.5-9B-DFlash-GGUF",
+    "revision": "eded36c38ef0722b951dd427a31910af9106878d",
+    "file": "Qwen3.5-9B-DFlash.gguf",
+    "bytes": 913808992,
+    "sha256": "696c40175f0e5de139e32727245c4c512253eaeb79cc2b5a7fdbbcac49822fbf",
+    "license": "apache-2.0",
+    "sourceTarget": "Qwen/Qwen3.5-9B",
+    "quantization": "Q5_K_M"
+  }
+}

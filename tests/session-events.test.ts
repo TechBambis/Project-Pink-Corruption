@@ -166,22 +166,22 @@ test('reserved catalog cues reach generation and nested cues cannot reject an au
     generate: async prompt => { instruction = prompt; return 'Quiet light.'; },
     render: async () => { rendered++; return {bytes:wav(1000)}; }, knownTriggers:['Bambi','Bambi Sleep','Good Girl'],
   },new AbortController().signal);
-  assert.match(instruction,/Reserved cue phrases: \["Bambi","Bambi Sleep","Good Girl"\]/);
+  assert.match(instruction,/Reserved cue phrases: \["Bambi Sleep","Good Girl"\]/);
   assert.match(instruction,/restrictions override persona examples and listener names/);
   assert.ok(instruction.indexOf('Persona:') < instruction.indexOf('Reserved cue phrases:'));
-  assert.ok(!instruction.includes('Listener label'), 'Reserved listener names are excluded from narration context');
+  assert.ok(instruction.includes('Listener label'), 'Bambi is available as an ordinary listener name');
   assert.match(instruction,/At most 2 words TOTAL/);
   assert.match(instruction,/One short phrase only/);
   assert.ok(!instruction.includes('pink-orb'), 'Internal motif identifiers are not spoken-narration context');
   assert.ok(!instruction.includes('activeLayers'), 'The model receives narration context, not renderer layer identities');
   assert.equal(rendered,1);
   assert.equal(validateEventText('Quiet. Bambi Sleep.',e,'Bambi Sleep',['Bambi','Bambi Reset']),'Quiet. Bambi Sleep.');
-  assert.throws(()=>validateEventText('Bambi, quiet. Bambi Sleep.',e,'Bambi Sleep',['Bambi']),/Unscheduled.*"Bambi"/);
+  assert.equal(validateEventText('Bambi, quiet. Bambi Sleep.',e,'Bambi Sleep',['Bambi']),'Bambi, quiet. Bambi Sleep.');
   assert.throws(()=>validateEventText('Bambi Sleep. Bambi.',e,'Bambi',['Bambi Sleep']),/once/);
   assert.throws(()=>validateEventText('Bambi Sleep.',e,'Bambi',['Bambi Sleep']),/final clause/);
   await assert.rejects(renderEventSpeech(request,{
-    generate:async()=>'Bambi, quiet.',render:async()=>{rendered++;return {bytes:wav(1000)};},knownTriggers:['Bambi'],
-  },new AbortController().signal),/Unscheduled.*"Bambi"/);
+    generate:async()=>'Bambi Reset.',render:async()=>{rendered++;return {bytes:wav(1000)};},knownTriggers:['Bambi','Bambi Reset'],
+  },new AbortController().signal),/Unscheduled/);
   assert.equal(rendered,1,'Invalid speech never reaches TTS');
 });
 test('short scheduled cue windows budget the required phrase and forbid descriptive expansion', async () => {
@@ -226,7 +226,7 @@ test('invalid event text has one bounded correction before a single render; canc
   const e = event('mantra'), slot = compileEvent(e).speech[0]; let generated = 0, rendered = 0;
   const request = EventSpeechRequestSchema.parse({event:e,payloadId:slot.payloadId,allowedTriggers:[]});
   const response = await renderEventSpeech(request, {
-    generate: async prompt => { generated++; if (generated===1) return 'Bambi, quiet.'; assert.match(prompt,/ONE CORRECTION/); return 'Quiet light.'; },
+    generate: async prompt => { generated++; if (generated===1) return 'Pet, quiet.'; assert.match(prompt,/ONE CORRECTION/); return 'Quiet light.'; },
     render: async () => { rendered++; return {bytes:wav(1000)}; }, knownTriggers:['Bambi'],
   },new AbortController().signal);
   assert.equal(generated,2); assert.equal(rendered,1); assert.equal(response.textAttempts,2);
@@ -245,6 +245,7 @@ test('invalid event text has one bounded correction before a single render; canc
 });
 test('engine word/cue grammars reach native event decoding without changing ordinary conversation requests', async () => {
   const grammar = eventTextGrammar(16), exact = eventTextGrammar(2,'Bambi Sleep');
+  assert.equal(eventTextGrammar(16,undefined,['Bambi']),grammar,'A listener name must not be blocked by the native word grammar');
   assert.match(grammar,/\{0,15\}/); assert.equal(exact,'root ::= "Bambi Sleep" [.!?]?');
   assert.throws(()=>eventTextGrammar(0),/word budget/);
   assert.throws(()=>eventTextGrammar(1,'Bambi Sleep'),/exact event phrase/);

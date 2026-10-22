@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
-export type SetupState={phase:string;completed:number;total:number;verified:boolean;model:string;error?:string;asset?:string;operation?:string;stage?:string;assetCompleted?:number;assetTotal?:number;assetIndex?:number;assetCount?:number;remainingBytes?:number;missing?:string[];startedAt?:number;updatedAt?:number;runtime?:{phase:string;ready:boolean;backend:string|null;deviceName?:string;fallbackReason?:string}};
+export type SetupState={phase:string;completed:number;total:number;verified:boolean;model:string;tryAnyway?:boolean;error?:string;asset?:string;operation?:string;stage?:string;assetCompleted?:number;assetTotal?:number;assetIndex?:number;assetCount?:number;remainingBytes?:number;missing?:string[];startedAt?:number;updatedAt?:number;calibration?:import('../../../packages/runtime/model-calibration').CalibrationState;runtime?:{phase:string;ready:boolean;backend:string|null;deviceName?:string;fallbackReason?:string;offloadedLayers?:number;totalLayers?:number}};
 export const setupBusy=(state:SetupState|null)=>!!state&&['downloading','verifying','preparing'].includes(state.phase);
 export const size=(bytes:number)=>bytes<1e9?`${(bytes/1e6).toFixed(1)} MB`:`${(bytes/1e9).toFixed(2)} GB`;
 export function modelProgress(state:SetupState|null,model:string,label:string,now=Date.now(),bytesPerSecond=0){
@@ -20,12 +20,17 @@ export function modelProgress(state:SetupState|null,model:string,label:string,no
   }
   if(file)detail+=' '+file;
   if(state.operation==='download'&&state.updatedAt&&now-state.updatedAt>=30000&&['connecting','transferring'].includes(state.stage??''))detail+=` No new data for ${Math.floor((now-state.updatedAt)/1000)} seconds. You can cancel and retry; setup stops a stalled transfer after 90 seconds.`;
- }else if(state.phase==='partial'){title='Model copied · voice files still needed';detail=`The verified model is saved. Download the remaining ${size(state.remainingBytes??0)}, or import a complete model and voice folder.`;}
+ }else if(state.phase==='partial'){
+  const notice=state.missing?.some(path=>path.endsWith('-LICENSE.txt'));
+  title=notice?'Model copied · setup files still needed':'Model copied · voice files still needed';
+  detail=`The verified model is saved. Download the remaining ${size(state.remainingBytes??0)}, or import a complete model and voice folder.`;
+  if(notice)detail+=' The publisher’s verified license notice is also required.';
+ }
  else if(state.phase==='installed'){title='Files verified · ready to start';detail='No download is running. Choose Start local AI to load the model and voice.';ratio=1;}
  else if(state.phase==='preparing'){title='Starting your local companion';detail=state.runtime?.phase==='probing'?'Checking available graphics acceleration…':'Loading the model and voice, then checking a real AI response. Large models can take a few minutes.';ratio=null;}
  else if(state.phase==='ready'){
   title='Your local companion is ready';const runtime=state.runtime;
-  detail=runtime?.backend==='cpu'?'Chat uses the CPU.':runtime?.backend==='unverified'?'Graphics acceleration has not been confirmed.':'Chat uses the GPU'+(runtime?.deviceName?' · '+runtime.deviceName:'')+'.';
+  detail=runtime?.backend==='cpu'?'Chat uses the CPU.':runtime?.backend&&['cuda','vulkan','hip','sycl','metal'].includes(runtime.backend)?'Chat uses the GPU'+(runtime.deviceName?' · '+runtime.deviceName:'')+'.':'Graphics acceleration has not been confirmed.';
   if(runtime?.fallbackReason&&runtime.backend==='cpu')detail+=' GPU acceleration was unavailable for this start. Verified model files are kept.';ratio=1;
  }else if(state.phase==='cancelled'){title='Setup cancelled';detail=state.error||'No download is running. Retry to reuse verified files.';}
  else {title='Setup needs attention';detail=state.error||'Setup could not finish. Check your connection or model files, then retry.';}

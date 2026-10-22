@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
-import {mkdtempSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
+import {mkdtempSync,rmSync,symlinkSync,writeFileSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {CLOUD_MODEL_ALIAS} from '../packages/ai/cloud';
@@ -30,9 +30,19 @@ test('real remote preparation can finish beyond the former fixed deadline and st
  const providerPort=(provider.address() as {port:number}).port;
  const reservation=createServer();reservation.listen(0,'127.0.0.1');await once(reservation,'listening');
  const port=(reservation.address() as {port:number}).port;await new Promise<void>(done=>reservation.close(()=>done()));
- for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])symlinkSync(resolve(name),join(fixture,name),process.platform==='win32'?'junction':'dir');
+ for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])if(existsSync(resolve(name)))symlinkSync(resolve(name),join(fixture,name),process.platform==='win32'?'junction':'dir');
  writeFileSync(join(fixture,'package.json'),'{"type":"module"}');
  writeFileSync(join(fixture,'bootstrap.mjs'),`
+  // Admission/cloud fixtures never launch native hardware discovery. Windows
+  // descendants can otherwise retain the fixture directory after app teardown.
+  import childProcess from 'node:child_process';
+  import {syncBuiltinESMExports} from 'node:module';
+  childProcess.execFile=(_command,_args,options,callback)=>{
+   const finish=typeof options==='function'?options:callback;
+   queueMicrotask(()=>finish(Object.assign(Error('Native commands are excluded from this fixture'),{code:'ENOENT'}),'',''));
+   return {kill:()=>false};
+  };
+  syncBuiltinESMExports();
   import dgram from 'node:dgram';
   import {EventEmitter} from 'node:events';
   dgram.createSocket=()=>{const socket=new EventEmitter();socket.bind=(_p,_h,callback)=>callback?.();socket.unref=()=>socket;socket.send=()=>{};socket.close=()=>{};return socket;};
@@ -53,9 +63,7 @@ test('real remote preparation can finish beyond the former fixed deadline and st
   const startupDeadline=performance.now()+15000;
   let ready=false;while(performance.now()<startupDeadline){
    if(child.exitCode!==null)throw Error('Fixture server failed: '+logs);
-   // The cloud fixture only needs HTTP readiness. Native hardware discovery in
-   // /api/health may outlive this short poll on Windows and is tested separately.
-   try{if((await fetch(base+'/api/access',{signal:AbortSignal.timeout(1000)})).ok){ready=true;break;}}catch{}
+   try{if((await fetch(base+'/api/preferences',{signal:AbortSignal.timeout(1000)})).ok){ready=true;break;}}catch{}
    await new Promise(done=>setTimeout(done,50));
   }
   assert.ok(ready,'Fixture server did not become healthy within 15 seconds: '+logs);

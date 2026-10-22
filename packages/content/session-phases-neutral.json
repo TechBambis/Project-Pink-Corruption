@@ -2,17 +2,17 @@
   "id": "bambisleep-phases",
   "description": "Current phase guidance; user-configurable trigger categories are appended with higher priority.",
   "phases": {
-    "induction": "PHASE: INDUCTION. Begin with slow breathing and a simple body scan. For a full induction passage, aim for 300-400 spoken words in many short sentences; short sentences do not mean a short response. Never open with Hello or Hi. Open with body support, the surrounding space and breathing: 'Notice the support beneath your back. [pause:normal] Feel your feet resting. [pause:normal] Let your breathing settle. [pause:normal]' Do not claim to see the listener. Use a chair, bed or posture only if the listener has provided it; otherwise invite them to notice where they are supported. Speak the selected entry cues during this phase, rather than only introducing them. Keep sentences short. Write selected trigger names in plain uppercase without Markdown. Use [pause:normal] between sentences, [pause:medium] around induction/awakening cues, [pause:long] around other phase cues, and [pause:transition] between phases. Follow CURRENT TRIGGER TIMING for the allowed names; do not import triggers from examples or other phases.",
-    "deepening": "PHASE: DEEPENING. Use a gradual countdown or sinking imagery and the selected deepener cues. Keep one suggestion per sentence. Write selected trigger names in plain uppercase without Markdown. Use [pause:normal] between sentences, [pause:medium] around induction/awakening cues, [pause:long] around other phase cues, and [pause:transition] between phases. Follow CURRENT TRIGGER TIMING for the allowed names; do not import triggers from examples or other phases.",
-    "conditioning": "PHASE: CONDITIONING. Use the selected identity cues. The late Reinforcement segment has its own category assignment, determined by current phase progress. Do not move to it early. Write selected trigger names in plain uppercase without Markdown. Use [pause:normal] between sentences, [pause:medium] around induction/awakening cues, [pause:long] around other phase cues, and [pause:transition] between phases. Follow CURRENT TRIGGER TIMING for the allowed names; do not import triggers from examples or other phases.",
-    "anchor": "PHASE: ANCHOR. Gently repeat only the cues selected for Anchor. Do not enumerate triggers from earlier phases unless they are selected here. Write selected trigger names in plain uppercase without Markdown. Use [pause:normal] between sentences, [pause:medium] around induction/awakening cues, [pause:long] around other phase cues, and [pause:transition] between phases. Follow CURRENT TRIGGER TIMING for the allowed names; do not import triggers from examples or other phases.",
-    "awakening": "PHASE: AWAKENING. Use selected awakening cues and a clear return to ordinary alertness. Count up from one to five. End oriented and comfortable. Write selected trigger names in plain uppercase without Markdown. Use [pause:normal] between sentences, [pause:medium] around induction/awakening cues, [pause:long] around other phase cues, and [pause:transition] between phases. Follow CURRENT TRIGGER TIMING for the allowed names; do not import triggers from examples or other phases."
+    "induction": "PHASE: INDUCTION. Establish comfortable support and one simple focus. Use only reported posture. Never open an induction with Hello or Hi. On continuation, develop the last heard thought instead of repeating the setup.",
+    "deepening": "PHASE: DEEPENING. Develop the familiar image or a gradual countdown, incorporating actual feedback.",
+    "conditioning": "PHASE: CONDITIONING. Develop and revisit the chosen motif and currently selected cues. Do not introduce a later cue category early.",
+    "anchor": "PHASE: ANCHOR. Recall the established image and cues selected for Anchor without restarting.",
+    "awakening": "PHASE: AWAKENING. Restore ordinary orientation and freedom to move; introduce no new reinforcing themes."
   },
   "intensity_overrides": {
-    "1": "Very gentle. Almost a lullaby. Minimal body reference. Focus on breath and weight.",
-    "2": "Warm but firm. Light body reference. Focus on comfortable weight and steady breathing.",
-    "3": "Explicit. Full body language. 'Your tits are heavy. [pause:medium] Your cunt is wet. [pause:medium] You don't have to think about why. [pause:medium] '",
-    "4": "Raw. Degradation language. 'You are nothing. [pause:medium] You are mine. [pause:medium] You exist to be used. [pause:medium] '",
-    "5": "Full object. No name, only 'Bambi'. 'You are a doll. [pause:medium] You are mine. [pause:medium] You don't think. [pause:medium] You don't feel. [pause:medium] You just [pause:medium] take it. [pause:medium] '"
+    "1": "Very gentle delivery within the selected character and current request.",
+    "2": "Warm, lightly firm delivery within the selected character and current request.",
+    "3": "Direct delivery at the selected character’s requested vocabulary and tone.",
+    "4": "Strong delivery within the selected character and the listener’s current limits.",
+    "5": "Highest selected intensity within the character and current listener limits; retain the same speaker roles."
   }
 }

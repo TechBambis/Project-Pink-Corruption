@@ -16,7 +16,7 @@ function fixture(){
  const settings=EventSpeechRequestSchema.parse({event:runtime.compiled.find(c=>c.event.id===slot.eventId)!.event,payloadId:slot.payloadId,allowedTriggers:['test cue']});
  const cues:{command:unknown;time?:number;origin?:string}[]=[],sources:unknown[]=[];let clearCount=0,allowSpeech=true,allowTriggers=true,haptics=true;
  const engine={context:{currentTime:10},outputTime:10,onDeviceCue(command:unknown,time?:number,origin?:string){cues.push({command,time,origin});},
-  playEventVoice(){const source={onended:null,stop(){}};sources.push(source);return source;},playEventTrigger(){},stopEventCues(){},setEventGains(){}} as unknown as AudioEngine;
+  playEventVoice(){const source={onended:null,stop(){}};sources.push(source);return source;},playEventTrigger(){},setNarrationDelivery(){},stopEventCues(){},setEventGains(){}} as unknown as AudioEngine;
  const hooks:ConstructorParameters<typeof SessionEvents>[2]={audio:()=>engine,visuals:()=>null,settings:()=>settings,clearDevices:()=>{clearCount++;},clearSpeech(){},notice(){},narration(){},displayNarration(){},cue(){},pink(){},allowVisuals:()=>false,paused:()=>false,triggers:()=>({}),haptics:()=>haptics,restore(){},allowSpeech:()=>allowSpeech,allowTriggers:()=>allowTriggers,allowTriggerSound:()=>false};
  // Only element construction is stubbed; scheduling, eligibility and cancellation use the real adapter.
  const oldDocument=globalThis.document;
@@ -26,7 +26,7 @@ function fixture(){
  finally{globalThis.document=oldDocument;}
  const internals=adapter! as unknown as {runtime:EventRuntime;started:boolean;lastSnapshot:ReturnType<EventRuntime['snapshot']>;payloads:Map<string,{response:RenderedEventSpeech;buffer:AudioBuffer}>;request:AbortController|null;speak:(slot:SpeechSlot,atMs:number)=>void};
  internals.runtime=runtime;internals.started=true;internals.lastSnapshot=runtime.snapshot(slot.atMs);internals.request=new AbortController();
- const cache=()=>internals.payloads.set(slot.payloadId,{response:{text:'test cue',triggerOffsetMs:500} as RenderedEventSpeech,buffer:{duration:.8} as AudioBuffer});
+ const cache=()=>internals.payloads.set(slot.payloadId,{response:{payloadId:slot.payloadId,text:'test cue',triggerOffsetMs:500} as RenderedEventSpeech,buffer:{duration:.8} as AudioBuffer});
  return {adapter:adapter!,slot,cues,sources,internals,cache,get clears(){return clearCount;},set allowSpeech(value:boolean){allowSpeech=value;},set allowTriggers(value:boolean){allowTriggers=value;},set haptics(value:boolean){haptics=value;}};
 }
 

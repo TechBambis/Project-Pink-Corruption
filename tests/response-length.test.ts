@@ -4,7 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {isSessionNarration,replyTokenBudget,narrationPassageComplete,spokenWordCount,replyTaskDirection,requestedWordRange} from '../packages/ai/response';
+import {isSessionNarration,replyTokenBudget,narrationPassageComplete,spokenWordCount,replyTaskDirection,requestedWordRange,replyWordBudget} from '../packages/ai/response';
 import {buildReplyPrompt,buildFixedReplyPrompt} from '../packages/ai/prompt';
 import {snapshotSession} from '../packages/ai/session-state';
 import {phaseConfig} from '../packages/content/phases';
@@ -36,6 +36,10 @@ test('continuation follows the preceding task and explicit brevity overrides ful
   assert.ok(replyTaskDirection(request,false).includes('Do not apply a minimum passage length'));
  }
  assert.equal(replyTokenBudget(600,true,false),600,'Latency cannot silently clip a requested explanation');
+ for(const request of ['Continue.','Keep going.','Continue the selected session from the last heard passage. Current phase: induction.']){
+  assert.match(buildReplyPrompt('Complete authored character.',request,false,'',session,'',false,true),/CONTINUATION CONTRACT: The session is already in progress/);
+ }
+ assert.doesNotMatch(replyTaskDirection('Start a new induction.',true),/CONTINUATION CONTRACT/);
 });
 test('explicit word targets have room to finish and replace the default phase ceiling',()=>{
  assert.deepEqual(requestedWordRange('Use 180-220 words.'),{min:180,max:220});
@@ -45,16 +49,18 @@ test('explicit word targets have room to finish and replace the default phase ce
  assert.equal(replyTokenBudget(220,true,false,'Explain this in 180-220 words.'),880);
  assert.equal(narrationPassageComplete('Rest. '.repeat(400),'induction','Use 500 words.'),false);
  assert.equal(narrationPassageComplete('Rest. '.repeat(220),'induction','Use 180-220 words.'),true);
+ assert.equal(narrationPassageComplete('*'+ 'Rest. '.repeat(400).trim()+'*','induction'),true,'Speech formatting must not bypass the passage ceiling');
+ assert.equal(narrationPassageComplete('Rest. '.repeat(400)+'[bambi:Warm. [pause:short]','induction'),false,'Nested markers do not finish an inline voice');
 });
 test('full narration and brief conversation get separate instructions after the same cached prefix',()=>{
  const base='Gentle nonsexual relaxation narrator.';
  const full=buildReplyPrompt(base,'Hello',false,'Devices off',session,'',true,true);
  const short=buildReplyPrompt(base,'Please speak more slowly.',false,'Devices off',session,'',true,false);
  for(const prompt of [full,short])assert.ok(prompt.startsWith(buildFixedReplyPrompt(base)));
- assert.ok(full.includes('Induction 300-400 words'));assert.ok(full.includes('Current response is a complete session passage'));
- assert.ok(full.includes('Never open an induction with Hello or Hi'));assert.ok(full.includes('Do not claim to see the listener'));
+ assert.ok(full.includes('Current response length: 300-400 spoken words TOTAL'));assert.ok(full.includes('Current response is a complete session passage'));
+ assert.ok(full.includes('Never open an induction with Hello or Hi'));assert.ok(full.includes('Do not invent sensor access'));
  assert.ok(!full.includes('continue a long script only when the user requests it'));
- assert.ok(short.includes('this describes each sentence, not the total answer length'));
+ assert.ok(short.includes('Short sentences describe sentence structure, not total response length'));
  assert.ok(!short.includes('naturally and concisely'));
  assert.ok(full.includes(phaseConfig.phases.induction));
  assert.ok(!short.includes(phaseConfig.phases.induction),'A factual or conversational reply must not inherit the extra phase passage directive');
@@ -74,4 +80,24 @@ test('conversational greetings acknowledge presence in-character without startin
   assert.ok(!replyTaskDirection(greeting,true).split('\n').some(line=>line.startsWith('Immediate task:')));
  }
  assert.ok(!replyTaskDirection('Explain volume.',false).split('\n').some(line=>line.startsWith('Immediate task:')));
+});
+
+test('focused, situational, explicit and engine lengths produce one current budget across phases',()=>{
+ for(const interaction of ['reactive','situational'] as const)for(const phase of ['induction','deepening','conditioning','anchor','awakening'] as const){
+  const state={...session,phase};
+  for(const engineWords of [undefined,35,75]){
+   const delivery=engineWords===undefined?undefined:{mode:'guide' as const,words:engineWords};
+   const prompt=buildReplyPrompt('=== BAMBI COMPANION ===\nFocused fixture.','Continue.',false,'',state,'',false,true,interaction,'',true,'general',{},delivery);
+   const budget=replyWordBudget('Continue.',true,{phase,focused:true,interaction,engineWords})!;
+   assert.equal(prompt.split('Current response length:').length-1,1);
+   assert.match(prompt,new RegExp(budget.min+'-'+budget.max+' spoken words TOTAL'));
+   assert.doesNotMatch(prompt,/80–160|300-400|200-350|phase word target/);
+   assert.equal(narrationPassageComplete('Rest. '.repeat(budget.max-1),phase,budget.max+' words'),false);
+   assert.equal(narrationPassageComplete('Rest. '.repeat(budget.max),phase,budget.max+' words'),true);
+   if(delivery)assert.doesNotMatch(prompt,/BREATHING PROTOCOL|\[breath:in\]|Supported pauses/);
+  }
+ }
+ assert.deepEqual(replyWordBudget('Exactly 12 words.',true,{focused:true}),{min:12,max:12});
+ assert.deepEqual(replyWordBudget('Exactly 12 words.',true,{focused:true,engineWords:35}),{min:20,max:35});
+ assert.equal(replyWordBudget('In one sentence.',true,{focused:true}),undefined);
 });

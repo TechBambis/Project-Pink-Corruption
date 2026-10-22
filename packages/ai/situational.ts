@@ -3,8 +3,7 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import type {SessionState} from './session-state';
-import {isBriefRequest,requestedWordRange,spokenWordCount,spokenPassageText} from './response';
-import {triggerTimingDirection} from '../session-director/trigger-timing';
+import {requestedWordRange,spokenWordCount,spokenPassageText} from './response';
 
 export type ConversationAction='respond'|'ask'|'guide'|'close';
 
@@ -14,6 +13,7 @@ export class SituationalTurnStream {
  private headerRecognized=false;private delimiterPending=false;
  action:ConversationAction='respond';
  complete=false;
+ constructor(private framed=false){}
  private contribution(text:string){
   if(this.complete)return '';
   if(!this.bodyStarted){
@@ -21,7 +21,7 @@ export class SituationalTurnStream {
    if(this.delimiterPending&&text){this.delimiterPending=false;if(text.startsWith(':'))text=text.slice(1).trimStart();}
    this.bodyStarted=!!text;
   }
-  const question=this.action==='ask'?text.search(/[?？]/u):-1;
+  const question=this.action==='ask'&&!this.framed?text.search(/[?？]/u):-1;
   if(question>=0){this.complete=true;return text.slice(0,question+1);}
   return text;
  }
@@ -77,33 +77,14 @@ export class SituationalConversation {
  })+'\nUse the actual answer to the heard question. Silence is unknown.';}
 }
 
-export function situationalReplyDirection(request:string,narration:boolean,session?:SessionState,context=''){
- const closing=narration&&session?.phase==='awakening'&&!session.continuous,range=requestedWordRange(request);
- const phase=session?.phase??'induction';
- const phaseDirection={
-  induction:'Introduce comfortable support and one simple focus when a passage is called for. Use only reported posture; otherwise invite noticing the support already present.',
-  deepening:'Develop one familiar image or a gentle countdown, incorporating the listener\'s actual feedback.',
-  conditioning:'Develop and revisit the selected personal motif with a coherent suggestion. Keep imagery explicitly experiential or imagined; do not claim factual changes to identity or memory.',
-  anchor:'Recall the established personal image and selected cues without starting over.',
-  awakening:session?.continuous?'Offer a quiet reorientation toward ordinary surroundings and freedom to move. This unlimited session continues until the listener ends it; do not announce a session end.':'Close the session clearly and return attention to ordinary surroundings and freedom to move. No new questions, promises of more immersion or new themes.',
- }[phase];
+/** Turn choice only. Shared task, budget and session state are supplied by the prompt owner. */
+export function situationalReplyDirection(_request:string,narration:boolean,session?:SessionState,context=''){
+ const closing=narration&&session?.phase==='awakening'&&!session.continuous;
  return [
   '=== SITUATIONAL CONTRIBUTION ===',
   closing?'Choose [turn:close]; finish the session and do not ask a question.':'Choose [turn:respond], [turn:ask] or [turn:guide] for the next contribution.',
-  narration?'ENGINE CONTINUATION, not a listener statement: continue the last heard idea, or ask if a real answer matters now.':
-   'REAL LISTENER INPUT: answer factual questions directly. Incorporate corrections and answers. A greeting gets a brief in-character response, not an induction. No unsolicited session passage.',
-  narration?phaseDirection:'',
-  session?'CURRENT SESSION (read-only facts): '+JSON.stringify(narration?{
-   phase:session.phase,progressPercent:session.phaseProgress,scene:session.scene,intensity:session.intensity,
-   ...(session.deliveryIntensityPercent===undefined?{}:{audiovisualPercent:session.deliveryIntensityPercent}),
-   ...(session.continuous?{continuous:true}:{remainingSeconds:Math.max(0,Math.round((session.totalMin-session.elapsedMin)*60))}),
-   ...(!session.triggerTiming?.enabled?{allowedCues:session.activeTriggers}:{}),
-   ...(session.lastTrigger?{lastCue:session.lastTrigger}:{}),
-  }:{phase:session.phase,scene:session.scene,intensity:session.intensity}):'',
-  narration&&session?.triggerTiming?.enabled?triggerTimingDirection(phase,session.phaseProgress,session.triggerTiming,true):'',
-  isBriefRequest(request)?'Honor the exact brevity request. No extra question.':
-   range?`Use ${range.min}-${range.max} words total; a focused question can be shorter.`:
-   narration?'Guide in 80–160 words unless the engine budget differs. An answer or question can be shorter. No padding.':'Match the answer length to the actual request.',
+  narration?'ENGINE CONTINUATION, not a listener statement: continue the heard idea, or ask if a real answer matters now.':'REAL LISTENER INPUT: Incorporate corrections and answers.',
+  narration&&session?.continuous&&session.phase==='awakening'?'This unlimited session continues until the listener ends it. Reorient without announcing a session end.':'',
   context,
  ].filter(Boolean).join('\n\n');
 }

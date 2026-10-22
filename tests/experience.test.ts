@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {experienceSettings, selectedExperience, needsExperienceChange, sectionScrollTarget} from '../apps/web/src/experience';
+import {experienceSettings, selectedExperience, needsExperienceChange, sectionScrollTarget,sessionInputAllowed,textConversation} from '../apps/web/src/experience';
 
 const chat = {mode: 'conversation', narration: false, events: false, aiMode: 'voice'};
 
@@ -24,8 +24,24 @@ test('guided entry enables speech and the director; chat entry restores room for
     for (const id of ['model', 'voice', 'speed', 'audio-preset', 'background-drone', 'master', 'device-enabled']) assert.equal(id in guided, false);
   }
   assert.deepEqual(experienceSettings('conversation', {...chat, narration: true, events: true, aiMode: 'text'}, false), {
-    mode: 'conversation', 'narration-enabled': false, 'session-events': false, 'conversation-style': 'situational',
+    mode: 'conversation', 'narration-enabled': false, 'session-events': false, 'conversation-style': 'situational','session-interaction':'interactive',
   });
+});
+
+test('uninterrupted sessions require a real director and disable both conversation input paths',()=>{
+ const solo={...chat,narration:true,events:true,participation:'uninterrupted',regie:true};
+ assert.equal(selectedExperience(solo),'solo');assert.equal(sessionInputAllowed(solo),false);
+ assert.equal(needsExperienceChange('solo',solo),false);assert.equal(needsExperienceChange('solo',{...solo,regie:false}),true);
+ const settings=experienceSettings('solo',{...chat,aiMode:'text'},false);
+ assert.equal(settings['direction-ai-regie'],true);assert.equal(settings['session-interaction'],'uninterrupted');assert.equal(settings['ai-mode'],'voice');
+ for(const id of ['model','voice','speed','master','device-enabled','prompt-template'])assert.equal(id in settings,false);
+ assert.equal(experienceSettings('guided',solo,false)['session-interaction'],'interactive');
+ assert.equal(sessionInputAllowed({...solo,mode:'local'}),true,'a saved solo preference cannot lock library input');
+ assert.equal(sessionInputAllowed({...solo,narration:false,events:false}),true,'chat does not inherit a session input lock');
+});
+test('text chat needs neither a session nor voice; text display alone cannot convert a session to chat',()=>{
+ assert.equal(textConversation({...chat,aiMode:'text'}),true);
+ for(const state of [{...chat,aiMode:'voice'},{...chat,aiMode:'text',events:true},{...chat,aiMode:'text',mode:'hybrid'}])assert.equal(textConversation(state),false);
 });
 
 test('recording selection preserves sound and narration preferences for future AI sessions', () => {

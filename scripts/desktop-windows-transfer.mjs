@@ -11,7 +11,7 @@ import {archiveTool,hashFile} from './desktop-windows-support.mjs';
 export function splitBundle(bundle,output,partBytes){
  if(!Number.isSafeInteger(partBytes)||partBytes<1024**2)throw Error('Invalid bounded transfer part size.');
  const total=statSync(bundle).size,count=Math.ceil(total/partBytes);
- if(count<1||count>8)throw Error('Package needs more than eight bounded parts. No upload prepared.');
+ if(count<1||count>12)throw Error('Package needs more than twelve bounded parts. No upload prepared.');
  mkdirSync(output,{recursive:true});
  const input=openSync(bundle,'r'),buffer=Buffer.alloc(1024**2),parts=[];
  try{
@@ -53,7 +53,7 @@ async function prepare(output,transport,allowance){
  writeFileSync(join(output,'CAPABILITY-RECORD.json'),JSON.stringify(capability,null,2)+'\n');
  const guide=`# Bambi Local ${runtime.version} Windows alpha\n\nInstall the per-user x64 installer. No Node, Python, Git or compiler installation is required. Keep Windows security controls enabled; report a blocked download or launch.\n\n1. Open the app and try Load offline sample, Play/Pause, Audio Mute and End session before installing models.\n2. Open Studio and import the prepared sample linked in the app guide; preview, stop, export and reopen it.\n3. Open Setup. Explicitly download the pinned model data, or copy an existing verified model directory. Watch progress; cancel and retry. Only complete hash-verified files become active. The chat model is several GiB and Setup also installs public voice/recognition data.\n4. After Setup completes, prepare the full local model. Keep the approved model, full prompts and 24576-token context. Record actual CPU/Vulkan selection and errors.\n5. Test text conversation, speech, microphone partial/final recognition, Audio Mute, Mic Mute, End session and Quit separately. Audio Mute should silence output; Mic Mute should release capture; End session should cancel current work; Quit should stop owned services.\n6. Restart with the network disconnected and verified model data still present. Try conversation again. Record timing, RAM/VRAM use, physical listening and microphone results on the named Windows 11 reference PC.\n\nSee CAPABILITY-RECORD.json and the native check reports for the exact verified scope. Full model, GPU, physical devices and offline conversation remain pending until reference hardware results are supplied. Do not describe the package as fully qualified before those checks pass. Preserve these reports and SHA256SUMS with the matching source and NOTICES.tar.gz.\n`;
  writeFileSync(join(output,'START-HERE.md'),guide);
- retained.push('CAPABILITY-RECORD.json','START-HERE.md',`bambi-local-${runtime.version}-x64.exe`,`bambi-local-${runtime.version}-source.tar.gz`);
+ retained.push(`bambi-local-${runtime.version}-windows-x64.zip`,'CAPABILITY-RECORD.json','START-HERE.md',`bambi-local-${runtime.version}-x64.exe`,`bambi-local-${runtime.version}-source.tar.gz`);
  const names=retained.filter(name=>existsSync(join(output,name))).sort(),files=[];
  for(const name of names)files.push({name,bytes:statSync(join(output,name)).size,sha256:await hashFile(join(output,name))});
  writeFileSync(join(output,'SHA256SUMS'),files.map(f=>`${f.sha256}  ${f.name}`).join('\n')+'\n');

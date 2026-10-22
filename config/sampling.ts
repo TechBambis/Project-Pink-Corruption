@@ -3,8 +3,8 @@
 // Separate commercial permissions: see LICENSING.md.
 
 export const NATIVE_CONTEXT=24576;
-/** The installed 9B family has room for the complete persona, history and output. */
-export function nativeContextForModel(model:string){return /-9b(?:-|:)/i.test(model)?NATIVE_CONTEXT:16384;}
+/** Qualified context profiles retain the complete persona, history and output. */
+export function nativeContextForModel(model:string){return /^bambi-qwen35-(?:2b|4b)-hauhau(?:-mtp-(?:experiment|baseline))?:q4_k_m$/.test(model)||model==='bambi-lfm25-1.2b:Q4_K_M'||model==='bambi-qwen36-35b-hauhau:iq3_m'||/-9b(?:-|:)/i.test(model)?NATIVE_CONTEXT:16384;}
 /** User-requested comparison profile; these values are experimental, not model defaults. */
 export const BAMBISLEEP_SAMPLING = {
   temperature: 1.0, top_p: .95, top_k: 50, min_p: .05,

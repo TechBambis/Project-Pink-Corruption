@@ -22,7 +22,7 @@ test('readiness never treats a build, speech check or another version/platform a
  assert.equal(status([{target:'windows-x64',runtime:{...runtime,platform:'linux'}}]).status,'source-mismatch');
  assert.equal(status([{target:'windows-x64',runtime,qualification:{...qualification,sourceDigest:'old'}}]).status,'evidence-mismatch');
  assert.equal(status([{target:'windows-x64',runtime,qualification:{...qualification,gates:{packaging:'failed'}}}]).status,'failed');
- assert.equal(releaseReport(spec).ready,false);assert.equal(releaseReport(spec).targets.find(t=>t.target==='macos-arm64').status,'not-implemented');
+ assert.equal(releaseReport(spec).ready,false);assert.equal(releaseReport(spec).targets.find(t=>t.target==='macos-arm64').status,'not-built');
  assert.throws(()=>releaseReport(spec,[{target:'windows-x64',runtime,qualification:{...qualification,gates:{unknown:'passed'}}}]),/Invalid/);
  assert.throws(()=>releaseReport(spec,[{target:'windows-x64',runtime},{target:'windows-x64',runtime}]),/Duplicate/);
 });
@@ -30,7 +30,10 @@ test('readiness never treats a build, speech check or another version/platform a
 test('native target selection rejects cross-platform execution and unimplemented targets',()=>{
  assert.doesNotThrow(()=>assertNativeTarget(spec,'windows-x64','win32','x64'));
  assert.throws(()=>assertNativeTarget(spec,'windows-x64','linux','x64'),/native/);
- assert.throws(()=>assertNativeTarget(spec,'macos-arm64','darwin','arm64'),/not implemented/);
+ assert.doesNotThrow(()=>assertNativeTarget(spec,'macos-arm64','darwin','arm64'));
+ assert.throws(()=>assertNativeTarget({...spec,phase:'future'},'macos-arm64','darwin','arm64'),/phase is not implemented/);
+ assert.doesNotThrow(()=>assertNativeTarget({...spec,phase:'smoke'},'macos-arm64','darwin','arm64'));
+ assert.throws(()=>assertNativeTarget({...spec,phase:'smoke'},'macos-arm64','darwin','x64'),/native/);
 });
 
 test('source checks cannot be reused after a source/version/host change or failed suite',()=>{
@@ -41,7 +44,7 @@ test('source checks cannot be reused after a source/version/host change or faile
 });
 
 test('missing current features or proven platform sources block a release instead of silently shipping an older app',()=>{
- const paths=[...Object.values(configuration.features).flat(),...configuration.windowsRequired];
+ const paths=[...Object.values(configuration.features).flat(),...configuration.windowsRequired,...configuration.macosRequired];
  const manifest={version:spec.version,files:paths.map(path=>({path}))};assert.doesNotThrow(()=>validateReleaseSource(manifest,spec));
  assert.throws(()=>validateReleaseSource({...manifest,files:manifest.files.filter(f=>f.path!=='apps/web/src/privacy.ts')},spec),/privacyAccess/);
  assert.throws(()=>validateReleaseSource({...manifest,files:manifest.files.filter(f=>f.path!=='apps/desktop/speech.manifest')},spec),/qualified Windows/);
@@ -51,26 +54,32 @@ test('shared source snapshots retain notices and have equal application identity
  const folder=mkdtempSync(join(tmpdir(),'bambi-release-source-'));t.after(()=>rmSync(folder,{recursive:true,force:true}));
  const source=join(folder,'input');mkdirSync(source);
  const put=(path,text)=>{mkdirSync(join(source,path,'..'),{recursive:true});writeFileSync(join(source,path),text);};
- for(const dir of ['apps','packages','config','presets','tests','scripts','voices','docs/licenses','assets/sounds','.github'])mkdirSync(join(source,dir),{recursive:true});
+ for(const dir of ['apps','packages','config','presets','tests','scripts','voices','release-notes','docs/licenses','assets/sounds','.github'])mkdirSync(join(source,dir),{recursive:true});
  for(const path of ['package.json','package-lock.json','tsconfig.json','.gitignore','desktop-builder.cjs','desktop-alpha-builder.cjs','desktop-windows-builder.cjs','LICENSE','LICENSING.md','README.md'])put(path,'fixture\n');
  put('.gitignore','/scripts/*\n!/scripts/public-check.mjs\n');put('scripts/public-check.mjs','public CI fixture\n');put('scripts/local-benchmark.mjs','local authoring fixture\n');
  for(const path of ['apps/desktop/AppRun','apps/desktop/AppRun.alpha','CLA.md','docs/anubis-model.json','docs/community-models.json'])put(path,'public fixture\n');
- const fixtureConfiguration={...configuration,features:{},windowsRequired:[]};put('config/desktop-release.json',JSON.stringify(fixtureConfiguration));
- put('apps/test.ts','public\nsource\n');put('docs/licenses/vendor.txt','Original notice\r\n');put('packages/speech/models/private.json','private');put('apps/web/public/vad/model.json','generated');put('scripts/reports/private.json','private');put('docs/internal/private.md','private');
+ const fixtureConfiguration={...configuration,features:{},windowsRequired:[],macosRequired:[]};put('config/desktop-release.json',JSON.stringify(fixtureConfiguration));
+ put('apps/web/test.ts','public\nsource\n');put('docs/licenses/vendor.txt','Original notice\r\n');put('packages/speech/models/private.json','private');put('apps/web/public/vad/model.json','generated');put('scripts/reports/private.json','private');put('docs/internal/private.md','private');
+ put('apps/experimental/source.ts','private application fixture');put('packages/runtime/experimental/source.ts','private runtime fixture');
+ put('release-notes/v'+spec.version+'.md','Public local release note\n');
+ put('apps/web/component.tsx','export const control = <button>Play</button>;\n');
  const first=join(folder,'first'),a=await stageDesktopSource(source,first,spec.version);writeSourceManifest(first,a);
  assert(!existsSync(join(first,'packages/speech/models/private.json')));assert(!existsSync(join(first,'apps/web/public/vad/model.json')));assert(!existsSync(join(first,'scripts/reports/private.json')));assert(!existsSync(join(first,'docs/internal/private.md')));
+ assert(existsSync(join(first,'release-notes','v'+spec.version+'.md')));
  assert(existsSync(join(first,'scripts/public-check.mjs')));assert(!existsSync(join(first,'scripts/local-benchmark.mjs')));
+ assert(!existsSync(join(first,'apps/experimental/source.ts')));assert(!existsSync(join(first,'packages/runtime/experimental/source.ts')));
+ assert.equal(readFileSync(join(first,'apps/web/component.tsx'),'utf8'),'export const control = <button>Play</button>;\n');
  assert.equal(readFileSync(join(first,'docs/licenses/vendor.txt'),'utf8'),'Original notice\r\n');
  assert(existsSync(join(first,'apps/desktop/AppRun')));assert(existsSync(join(first,'CLA.md')));assert(existsSync(join(first,'docs/anubis-model.json')));
- put('apps/test.ts','public\r\nsource\r\n');const b=await stageDesktopSource(source,join(folder,'second'),spec.version);
+ put('apps/web/test.ts','public\r\nsource\r\n');const b=await stageDesktopSource(source,join(folder,'second'),spec.version);
  assert.equal(a.applicationDigest,b.applicationDigest);assert.notEqual(a.sourceDigest,b.sourceDigest);
  const prepared={...fixtureConfiguration,version:spec.version,phase:'alpha',applicationDigest:a.applicationDigest,sourceDigest:a.sourceDigest};
  writeFileSync(join(first,'RELEASE-SPEC.json'),JSON.stringify(prepared));
  assert.equal((await releaseIdentity(first,a)).snapshot,'prepared');await verifySnapshot(first);
  writeFileSync(join(first,'RELEASE-SPEC.json'),JSON.stringify({...prepared,gates:{alpha:[]}}));await assert.rejects(verifySnapshot(first),/contract changed/);
  writeFileSync(join(first,'RELEASE-SPEC.json'),JSON.stringify(prepared));
- writeFileSync(join(first,'apps/new.ts'),'unexpected');await assert.rejects(verifySnapshot(first),/inventory changed/);
- rmSync(join(first,'apps/new.ts'));writeFileSync(join(first,'apps/test.ts'),'edited');await assert.rejects(verifySnapshot(first),/Snapshot changed/);
+ writeFileSync(join(first,'apps/web/new.ts'),'unexpected');await assert.rejects(verifySnapshot(first),/inventory changed/);
+ rmSync(join(first,'apps/web/new.ts'));writeFileSync(join(first,'apps/web/test.ts'),'edited');await assert.rejects(verifySnapshot(first),/Snapshot changed/);
 });
 
 test('qualification is invalidated when the tested installer bytes change',async t=>{

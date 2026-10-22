@@ -16,8 +16,8 @@ permissions:
 jobs:
   native:
     if: inputs.quota_checked && github.actor_id == '337824705'
-    runs-on: ${{ inputs.target == 'windows-x64' && 'windows-2022' || 'ubuntu-24.04' }}
-    timeout-minutes: 60
+    runs-on: ${{ inputs.target == 'macos-arm64' && 'macos-15' || inputs.target == 'windows-x64' && 'windows-2022' || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ inputs.target == 'macos-arm64' && 15 || 60 }}
     env:
       BAMBI_RELEASE_TARGET: ${{ inputs.target }}
       BAMBI_RELEASE_PHASE: ${{ inputs.phase }}
@@ -40,7 +40,8 @@ jobs:
           node --input-type=module -e '
           const e=process.env;
           if(!e.BAMBI_QUOTA_RECORD?.trim() || !/^\d+$/.test(e.BAMBI_REMAINING_ARTIFACT_MIB)) throw Error("Record actual remaining allowance before dispatch.");
-          if(!["linux-x64","windows-x64"].includes(e.BAMBI_RELEASE_TARGET)) throw Error("Target not implemented.");
+          if(!["linux-x64","windows-x64","macos-arm64"].includes(e.BAMBI_RELEASE_TARGET)) throw Error("Target not implemented.");
+          if(e.BAMBI_RELEASE_TARGET === "macos-arm64" && (process.platform !== "darwin" || process.arch !== "arm64")) throw Error("Native Apple Silicon host required.");
           if(e.BAMBI_RELEASE_TARGET === "linux-x64" && e.BAMBI_RELEASE_PHASE === "alpha") throw Error("Linux alpha currently requires its attended native freeze environment; use the local snapshot builder.");'
           if [ '${{ inputs.transfer_packages }}' = 'true' ] && { [ "$BAMBI_RELEASE_TARGET" != 'windows-x64' ] || [ "$BAMBI_RELEASE_PHASE" != 'alpha' ] || [ '${{ inputs.upload_packages }}' != 'true' ]; }; then
             echo 'Bounded transfer requires an explicitly requested Windows alpha upload.' >&2
@@ -61,15 +62,18 @@ jobs:
         run: |
           cd "$BAMBI_SNAPSHOT"
           npx playwright install-deps chromium
-      - name: Build the native package
-        run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" build "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET"
       - name: Locate immutable output
         run: |
           if [ "$BAMBI_RELEASE_TARGET" = "windows-x64" ]; then
             echo "BAMBI_RELEASE_OUTPUT=$BAMBI_SNAPSHOT/dist/desktop-windows/$BAMBI_RELEASE_VERSION" >> "$GITHUB_ENV"
+          elif [ "$BAMBI_RELEASE_TARGET" = "macos-arm64" ]; then
+            echo "BAMBI_RELEASE_OUTPUT=$BAMBI_SNAPSHOT/dist/desktop-macos/$BAMBI_RELEASE_VERSION" >> "$GITHUB_ENV"
           else
             echo "BAMBI_RELEASE_OUTPUT=$BAMBI_SNAPSHOT/dist/desktop/$BAMBI_RELEASE_VERSION" >> "$GITHUB_ENV"
           fi
+      - name: Build the native package
+        id: build
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" build "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET"
       - name: Prepare the Windows read-only process and ACL observer
         if: inputs.target == 'windows-x64'
         shell: pwsh
@@ -86,24 +90,48 @@ jobs:
       - name: Native Linux packaging acceptance
         if: inputs.target == 'linux-x64'
         run: xvfb-run --auto-servernum node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" qualify "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET" "$BAMBI_RELEASE_OUTPUT"
+      - name: Native Apple Silicon received ZIP acceptance
+        if: inputs.target == 'macos-arm64'
+        timeout-minutes: 10
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" qualify "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_TARGET" "$BAMBI_RELEASE_OUTPUT"
+      - name: Save bounded macOS qualification diagnostics
+        if: always() && inputs.target == 'macos-arm64'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-diagnostics-${{ github.run_id }}
+          retention-days: 1
+          if-no-files-found: ignore
+          path: |
+            ${{ env.BAMBI_RELEASE_OUTPUT }}/qualification-macos/*/evidence.json
+            ${{ env.BAMBI_RELEASE_OUTPUT }}/qualification-macos/*/packaged-player.png
+            ${{ env.BAMBI_RELEASE_OUTPUT }}/qualification-macos/*/setup-memory-guard.png
+            ${{ env.BAMBI_RELEASE_OUTPUT }}/qualification-macos/*/User data ä/logs/backend.log
+            ${{ env.BAMBI_RELEASE_OUTPUT }}/RUNTIME-MANIFEST.json
+            ${{ env.BAMBI_RELEASE_OUTPUT }}/DESKTOP-QUALIFICATION.json
+            ${{ env.BAMBI_RELEASE_OUTPUT }}/SOURCE-CHECKS.json
+            ${{ env.BAMBI_SNAPSHOT }}/SOURCE-CHECKS.json
+            ${{ env.BAMBI_RELEASE_OUTPUT }}/MACOS-NATIVE-SPEECH-CHECK.json
       - name: Write the target readiness report
+        if: success() || (always() && inputs.target == 'macos-arm64' && steps.build.outcome == 'success')
         run: node "$BAMBI_SNAPSHOT/scripts/desktop-release.mjs" status "$BAMBI_SNAPSHOT" "$BAMBI_RELEASE_OUTPUT" > "$BAMBI_RELEASE_OUTPUT/RELEASE-STATUS.json"
       - name: Enforce confirmed artifact storage before upload
-        if: inputs.upload_packages && !inputs.transfer_packages
+        id: storage
+        if: inputs.upload_packages && !inputs.transfer_packages && (success() || (always() && inputs.target == 'macos-arm64' && steps.build.outcome == 'success'))
         run: |
           node --input-type=module -e '
           import {readdirSync,statSync} from "node:fs";
           import {join} from "node:path";
           const dir=process.env.BAMBI_RELEASE_OUTPUT;
-          const size=readdirSync(dir).filter(name=>/\.(exe|AppImage|gz|json|md)$/.test(name)||name==="SHA256SUMS").reduce((n,name)=>n+statSync(join(dir,name)).size,0);
+          const size=readdirSync(dir).filter(name=>/\.(exe|AppImage|gz|zip|json|md)$/.test(name)||name==="SHA256SUMS").reduce((n,name)=>n+statSync(join(dir,name)).size,0);
           if(size>Number(process.env.BAMBI_REMAINING_ARTIFACT_MIB)*2**20*.95) throw Error("Upload exceeds confirmed remaining shared storage.");'
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: inputs.upload_packages && !inputs.transfer_packages
+        if: inputs.upload_packages && !inputs.transfer_packages && (success() || (always() && inputs.target == 'macos-arm64' && steps.storage.outcome == 'success'))
         with:
           name: bambi-${{ inputs.target }}-${{ inputs.version }}
           path: |
             ${{ env.BAMBI_RELEASE_OUTPUT }}/*.exe
             ${{ env.BAMBI_RELEASE_OUTPUT }}/*.AppImage
+            ${{ env.BAMBI_RELEASE_OUTPUT }}/*.zip
             ${{ env.BAMBI_RELEASE_OUTPUT }}/*.tar.gz
             ${{ env.BAMBI_RELEASE_OUTPUT }}/*.json
             ${{ env.BAMBI_RELEASE_OUTPUT }}/*.md
@@ -292,3 +320,91 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" wait '${{ steps.part7.outputs.artifact-id }}'
+      - name: Recheck shared storage before temporary part 8
+        id: space8
+        if: always() && steps.transfer.outcome == 'success' && steps.receipt7.outcome == 'success' && fromJSON(steps.transfer.outputs.count) > 8
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" check '${{ steps.transfer.outputs.root }}/8' "$BAMBI_REMAINING_ARTIFACT_MIB"
+      - name: Upload bounded temporary part 8
+        id: part8
+        if: always() && steps.space8.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bambi-windows-transfer-${{ github.run_id }}-8
+          path: ${{ steps.transfer.outputs.root }}/8/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Wait for verified local receipt of part 8
+        id: receipt8
+        if: always() && steps.part8.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" wait '${{ steps.part8.outputs.artifact-id }}'
+      - name: Recheck shared storage before temporary part 9
+        id: space9
+        if: always() && steps.transfer.outcome == 'success' && steps.receipt8.outcome == 'success' && fromJSON(steps.transfer.outputs.count) > 9
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" check '${{ steps.transfer.outputs.root }}/9' "$BAMBI_REMAINING_ARTIFACT_MIB"
+      - name: Upload bounded temporary part 9
+        id: part9
+        if: always() && steps.space9.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bambi-windows-transfer-${{ github.run_id }}-9
+          path: ${{ steps.transfer.outputs.root }}/9/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Wait for verified local receipt of part 9
+        id: receipt9
+        if: always() && steps.part9.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" wait '${{ steps.part9.outputs.artifact-id }}'
+      - name: Recheck shared storage before temporary part 10
+        id: space10
+        if: always() && steps.transfer.outcome == 'success' && steps.receipt9.outcome == 'success' && fromJSON(steps.transfer.outputs.count) > 10
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" check '${{ steps.transfer.outputs.root }}/10' "$BAMBI_REMAINING_ARTIFACT_MIB"
+      - name: Upload bounded temporary part 10
+        id: part10
+        if: always() && steps.space10.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bambi-windows-transfer-${{ github.run_id }}-10
+          path: ${{ steps.transfer.outputs.root }}/10/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Wait for verified local receipt of part 10
+        id: receipt10
+        if: always() && steps.part10.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" wait '${{ steps.part10.outputs.artifact-id }}'
+      - name: Recheck shared storage before temporary part 11
+        id: space11
+        if: always() && steps.transfer.outcome == 'success' && steps.receipt10.outcome == 'success' && fromJSON(steps.transfer.outputs.count) > 11
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" check '${{ steps.transfer.outputs.root }}/11' "$BAMBI_REMAINING_ARTIFACT_MIB"
+      - name: Upload bounded temporary part 11
+        id: part11
+        if: always() && steps.space11.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bambi-windows-transfer-${{ github.run_id }}-11
+          path: ${{ steps.transfer.outputs.root }}/11/*
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+      - name: Wait for verified local receipt of part 11
+        id: receipt11
+        if: always() && steps.part11.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node "$BAMBI_SNAPSHOT/scripts/desktop-windows-transfer.mjs" wait '${{ steps.part11.outputs.artifact-id }}'

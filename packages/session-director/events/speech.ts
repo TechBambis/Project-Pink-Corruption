@@ -9,11 +9,13 @@ import { EventSchema, MotifSchema, type BambiEvent, type PresentationState } fro
 import { compileEvent, speechInstruction } from './runtime';
 import { giggleOffset } from '../../audio/giggle';
 import { pinkWordOffsets } from '../../visuals/spoken-cues';
+import {implicitTriggerNames} from '../../../config/trigger-sequence';
+import {validateSpokenText} from '../../speech/contract';
 
 // Older event clients supplied only persona text; retain that custom-character default.
-export const EventSpeechRequestSchema = ChatRequestSchema.pick({ model: true, voice: true, speed: true, preset: true, sampling: true, context: true, persona: true, username: true, selectedTriggers: true, collar: true, collarName: true, localContext: true }).extend({ promptId: ChatRequestSchema.shape.promptId.default('custom'), narrationStyle: z.string().max(300).optional(), event: EventSchema, payloadId: z.string().min(1).max(160), allowedTriggers: z.array(z.string().max(100)).max(100), motif: MotifSchema.optional(), precedingNarration: z.string().max(1200).optional(), presentationPreferences: z.object({ visualsEnabled: z.boolean(), reducedMotion: z.boolean(), effectsEnabled: z.boolean().optional() }).strict().optional() }).strict();
+export const EventSpeechRequestSchema = ChatRequestSchema.pick({ model: true, voice: true, speed: true, preset: true, sampling: true, context: true, persona: true, username: true, selectedTriggers: true, collar: true, collarName: true, nsfw: true, rawRoleplay: true, localContext: true }).extend({ promptId: ChatRequestSchema.shape.promptId.default('custom'), narrationStyle: z.string().max(300).optional(), event: EventSchema, payloadId: z.string().min(1).max(160), requestId: z.string().min(1).max(160).optional(), experimentProfile: z.literal('next-gen-ab').optional(), allowedTriggers: z.array(z.string().max(100)).max(100), motif: MotifSchema.optional(), precedingNarration: z.string().max(1200).optional(), presentationPreferences: z.object({ visualsEnabled: z.boolean(), reducedMotion: z.boolean(), effectsEnabled: z.boolean().optional() }).strict().optional() }).strict();
 export type EventSpeechRequest = z.infer<typeof EventSpeechRequestSchema>;
-export interface RenderedEventSpeech { payloadId: string; text: string; audio: string; durationMs: number; targetMs: number; textAttempts: number; triggerOffsetMs?: number; cueOffsetMs?: number; giggleOffsetMs?: number; pinkOffsetsMs?: number[]; words?: { word: string; atMs: number }[] }
+export interface RenderedEventSpeech { payloadId: string; requestId?: string; text: string; audio: string; durationMs: number; targetMs: number; textAttempts: number; triggerOffsetMs?: number; cueOffsetMs?: number; giggleOffsetMs?: number; pinkOffsetsMs?: number[]; words?: { word: string; atMs: number; endMs?: number }[] }
 export class SpeechWindowError extends Error {
   readonly wordsPerMs: number;
   constructor(readonly durationMs: number, readonly targetMs: number, words: number) {
@@ -29,7 +31,7 @@ export function eventTextGrammar(words: number, exactPhrase?: string, forbiddenW
     if (!exactPhrase.trim() || /[\r\n\[\]<>]/.test(exactPhrase) || exactPhrase.trim().split(/\s+/).length > words) throw Error('Invalid exact event phrase');
     return `root ::= ${JSON.stringify(exactPhrase)} [.!?]?`;
   }
-  const blocked = [...new Set(forbiddenWords.filter(w=>/^[A-Za-z]+$/.test(w)).map(w=>w.toLowerCase()))];
+  const blocked = [...new Set(implicitTriggerNames(forbiddenWords).filter(w=>/^[A-Za-z]+$/.test(w)).map(w=>w.toLowerCase()))];
   if (!blocked.length) return `root ::= word (" " word){0,${words - 1}}\nword ::= [A-Za-z0-9] [A-Za-z0-9'.,!?;:\\-]*`;
   const rules: string[] = [], alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let serial=0;
@@ -82,6 +84,7 @@ export function wavDurationMs(bytes: Uint8Array) {
 }
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export function validateEventText(text: string, event: BambiEvent, required?: string, forbidden: string[] = []) {
+  validateSpokenText(text,{narration:true,speaker:event.state.foreground==='left_voice'?'bambi':'owner'});
   if (!text.trim() || text.length > 6000 || /[\[\]<>]|```/.test(text)) throw Error('Event narration must contain plain original text only');
   if (required) {
     const matches = text.match(new RegExp(`\\b${escape(required)}\\b`, 'gi')) ?? [];
@@ -90,7 +93,7 @@ export function validateEventText(text: string, event: BambiEvent, required?: st
   // Catalog entries may nest: the planned "Bambi Sleep" also contains "Bambi".
   // Only occurrences contained in the exact scheduled phrase are authorized.
   const planned = required ? [...text.matchAll(new RegExp(`\\b${escape(required)}\\b`, 'gi'))].map(m => ({ start: m.index!, end: m.index! + m[0].length })) : [];
-  for (const phrase of forbidden) {
+  for (const phrase of implicitTriggerNames(forbidden)) {
     if (phrase.toLowerCase() === required?.toLowerCase()) continue;
     const unplanned = [...text.matchAll(new RegExp(`\\b${escape(phrase)}\\b`, 'gi'))].some(m =>
       !planned.some(span => m.index! >= span.start && m.index! + m[0].length <= span.end));
@@ -110,7 +113,7 @@ export function validatePresentationText(text: string, state: PresentationState,
 
 export async function renderEventSpeech(raw: EventSpeechRequest, dependencies: {
   generate: (instruction: string, signal: AbortSignal, words: number, exactPhrase?: string) => Promise<string>;
-  render: (text: string, signal: AbortSignal) => Promise<{ bytes: Uint8Array; words?: { word: string; atMs: number }[] }>;
+  render: (text: string, signal: AbortSignal) => Promise<{ bytes: Uint8Array; words?: { word: string; atMs: number; endMs?: number }[] }>;
   knownTriggers: string[];
 }, signal: AbortSignal): Promise<RenderedEventSpeech> {
   const request = EventSpeechRequestSchema.parse(raw), compiled = compileEvent(request.event), slot = compiled.speech.find(s => s.payloadId === request.payloadId);
@@ -151,11 +154,10 @@ export async function renderEventSpeech(raw: EventSpeechRequest, dependencies: {
     ? scan ? `The ${object} ${movement}. You may describe this present movement.` : `The ${object} stays steady. Do not describe it pulsing, rotating, scanning or moving.`
     : 'Use only the engine-supplied visible scene.';
   const presentationContract = `\nPRESENTATION CONTRACT: ${screenFacts} ${wipeNarrationFacts(request.event, slot.atMs, preferences)} Do not speak the standalone command word Blink outside its dedicated engine-owned cue. Use natural blinking or eye rest for explanation. Describe only current scheduled actions, in present tense; never invent a flash, sound, device action or future visual transition. Blink instructions may explain what a later displayed cue means; do not claim that cue is appearing now. Imagined sensations must be clearly framed as imagination, not as screen/audio events.`;
-  const reserved = [...new Set(dependencies.knownTriggers)].filter(phrase => phrase.toLowerCase() !== slot.speech.requiredTrigger?.toLowerCase());
+  const reserved = implicitTriggerNames([...new Set(dependencies.knownTriggers)]).filter(phrase => phrase.toLowerCase() !== slot.speech.requiredTrigger?.toLowerCase());
   // Put style before the engine contract. A reserved listener name is not narration input.
-  const listenerIsReserved = dependencies.knownTriggers.some(phrase => new RegExp(`\\b${escape(phrase)}\\b`, 'i').test(request.username));
+  const listenerIsReserved = implicitTriggerNames(dependencies.knownTriggers).some(phrase => new RegExp(`\\b${escape(phrase)}\\b`, 'i').test(request.username));
   const instruction = 'Use the selected character supplied in the system instructions.'
-    + (request.narrationStyle ? `\nNarration delivery preference (tone and pacing within the selected character and engine contract): ${JSON.stringify(request.narrationStyle)}.` : '')
     + (listenerIsReserved ? '' : `\nListener label (metadata, not a required salutation): ${JSON.stringify(request.username)}.`)
     + '\n' + speechInstruction({ ...slot, speech: { ...slot.speech, wordTarget: words } }, request.event.softReturn?.final ? undefined : motif, frame ? { state: frame.state, label: frame.label } : undefined)
     + presentationContract

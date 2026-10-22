@@ -1,0 +1,25 @@
+{
+  "id": "hauhau-4b-mtp",
+  "status": "experiment-only",
+  "targetAlias": "bambi-qwen35-4b-hauhau-mtp-experiment:q4_k_m",
+  "context": 24576,
+  "promptCacheMiB": 2048,
+  "target": {
+    "alias": "bambi-qwen35-4b-hauhau-mtp-experiment:q4_k_m",
+    "repo": "AIOpsInSpace/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-MTP",
+    "revision": "3542ee23c6418c38ca9eec77acc69ac047343a27",
+    "file": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-MTP-Q4_K_M.gguf",
+    "bytes": 2788710496,
+    "sha256": "1443de63a550a7bd18905589dcebfa5c307da8b2ef86db858a7691fb9a3c15cc",
+    "license": "apache-2.0",
+    "provenance": "Community tensor grafting; one NextN layer in audited GGUF header. Not quality-qualified."
+  },
+  "draft": {
+    "repo": "EntityDeletr/Qwen3.5-4B-DFlash-GGUF",
+    "revision": "c2e6879b70f5870f389f850934b144fbdb51c8e4",
+    "file": "Qwen3.5-4B-DFlash.gguf",
+    "bytes": 454200928,
+    "sha256": "a46bda8d229760ff330de40a02d948e4d1811c4419a774321588e4355707762b",
+    "license": "apache-2.0"
+  }
+}

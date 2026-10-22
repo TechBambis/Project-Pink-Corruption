@@ -4,8 +4,24 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {InferenceQueue,InferenceResources} from '../packages/ai/inference';
+import {InferenceQueue,InferenceResources,SpeechProgressGuard} from '../packages/ai/inference';
 import {LlamaBackend,OllamaBackend} from '../packages/ai';
+import {VoiceSentenceChunker} from '../packages/speech/dual-voice';
+
+test('unclosed voice tags and marker-only loops release inference without flushing incomplete speech',async()=>{
+ for(const fragment of ['[bambi:Unclosed thought without a closing marker. ', '[bambi]']){
+  const queue=new InferenceQueue(),parser=new VoiceSentenceChunker([],true),guard=new SpeechProgressGuard(),signal=new AbortController().signal;
+  let generated=0,released=false,stopped=false;const heard:string[]=[];
+  const backend={name:'fixture',async *stream(){try{yield {text:'This complete thought can play. Next '};for(let i=0;i<1000;i++){generated++;yield {text:fragment};}}finally{released=true;}}} as unknown as LlamaBackend;
+  for await(const token of queue.stream(backend,[],'fixture',signal,4096,8192)){
+   const phrases=parser.push(token.text);heard.push(...phrases);
+   if(guard.observe(token.text.length,phrases.some(phrase=>/[A-Za-z]/.test(phrase.replace(/\[[^\]]*\]/g,''))),parser.pendingCharacters)){stopped=true;break;}
+  }
+  assert.equal(stopped,true);assert.equal(released,true);assert.ok(generated<1000);
+  assert.ok(!heard.some(phrase=>phrase.includes('Unclosed')));
+  assert.equal(await queue.run(async()=>42,signal),42,'The next input retains access to inference');
+ }
+});
 
 test('slow cloud work cannot block local listening while native and Ollama still share one GPU slot',async()=>{
  const resources=new InferenceResources(),signal=new AbortController().signal,events:string[]=[];
@@ -25,6 +41,18 @@ test('cancellation after acquiring a slot prevents an obsolete operation from st
  const job=queue.run(async()=>{started=true;},controller.signal);controller.abort();
  await assert.rejects(job,{name:'AbortError'});assert.equal(started,false);
  assert.equal(await queue.run(async()=>42,new AbortController().signal),42);
+});
+
+test('generation queue instrumentation runs after acquisition and an instrumentation error still releases the slot',async()=>{
+ const queue=new InferenceQueue(),signal=new AbortController().signal;
+ let release!:()=>void,acquired=0;
+ const blocking=queue.run(()=>new Promise<void>(resolve=>release=resolve),signal);await Promise.resolve();
+ const backend={name:'fixture',async *stream(){yield {text:'Ready.'};}} as unknown as LlamaBackend;
+ const stream=queue.stream(backend,[],'fixture',signal,4096,64,'qwen',undefined,()=>{acquired++;});
+ const next=stream.next();await Promise.resolve();assert.equal(acquired,0);release();await blocking;
+ assert.equal((await next).value?.text,'Ready.');assert.equal(acquired,1);await stream.return(undefined);
+ const broken=queue.stream(backend,[],'fixture',signal,4096,64,'qwen',undefined,()=>{throw Error('Probe failure');});
+ await assert.rejects(broken.next(),/Probe failure/);assert.equal(await queue.run(async()=>42,signal),42);
 });
 
 for(const kind of ['native','ollama'] as const)test(`${kind} yields abort only the current HTTP generation before releasing its inference slot`,async()=>{

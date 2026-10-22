@@ -3,9 +3,11 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import { DatabaseSync } from 'node:sqlite';
-import { mkdirSync } from 'node:fs';
-import {dirname} from 'node:path';
-import {createHash} from 'node:crypto';
+import { mkdirSync,existsSync,chmodSync,renameSync,rmSync,openSync,closeSync,fsyncSync } from 'node:fs';
+import {dirname,join} from 'node:path';
+import {createHash,randomUUID} from 'node:crypto';
+import {BackupSchema,ImportSchema,MAX_BACKUP_BYTES,MAX_PROFILE_BYTES,checkedSize,type ProfileBackup,type ProfileImport} from '../profiles/schema';
+import {exportPreferences,mergePreferences,preferenceGroup} from '../profiles/preferences';
 import {cleanDialogueText,visibleDialogueText} from '../ai/dialogue';
 import {migrateStoredSettings,validateSettings,profileMetadata,type Settings} from '../settings';
 import {SettingsFileSchema,type SettingsFile} from '../settings/transfer';
@@ -22,8 +24,23 @@ export class Store {
  onMemoryChange(listener:(change:'write'|'forget'|'clear')=>void){this.memoryListeners.add(listener);return ()=>this.memoryListeners.delete(listener);}
  private changed(change:'write'|'forget'|'clear'='write'){for(const listener of this.memoryListeners)listener(change);}
  constructor(path='data/bambi.sqlite',readonly profileId='default'){
+  const existing=path!==':memory:'&&existsSync(path);
   if(path!==':memory:')mkdirSync(dirname(path),{recursive:true,mode:0o700});
-  this.db=new DatabaseSync(path);this.db.exec(`PRAGMA journal_mode=WAL;CREATE TABLE IF NOT EXISTS preferences(key TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS turns(id INTEGER PRIMARY KEY,role TEXT,content TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,data TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS metrics(id INTEGER PRIMARY KEY,event TEXT,data TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,data TEXT);`);
+  this.db=new DatabaseSync(path);
+  const revision=Number((this.db.prepare('PRAGMA user_version').get() as {user_version:number}).user_version);
+  if(revision>1){this.db.close();throw Error('This database needs a newer Bambi Local version. It has not been changed.');}
+  // VACUUM INTO includes committed WAL pages. Never copy an open SQLite file.
+  if(existing&&revision<1){
+   const directory=join(dirname(path),'backups');mkdirSync(directory,{recursive:true,mode:0o700});
+   const target=join(directory,'before-storage-v1-'+randomUUID()+'.sqlite'),staged=target+'.partial';
+   try{
+    this.db.prepare('VACUUM INTO ?').run(staged);if(process.platform!=='win32')chmodSync(staged,0o600);
+    const snapshot=openSync(staged,'r+');try{fsyncSync(snapshot);}finally{closeSync(snapshot);}renameSync(staged,target);
+    if(process.platform!=='win32'){const directoryHandle=openSync(directory,'r');try{fsyncSync(directoryHandle);}finally{closeSync(directoryHandle);}}
+   }catch(error){rmSync(staged,{force:true});this.db.close();throw error;}
+  }
+  if(path!==':memory:'&&process.platform!=='win32')chmodSync(path,0o600);
+  this.db.exec(`PRAGMA journal_mode=WAL;CREATE TABLE IF NOT EXISTS preferences(key TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS turns(id INTEGER PRIMARY KEY,role TEXT,content TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,data TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS metrics(id INTEGER PRIMARY KEY,event TEXT,data TEXT,created TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,data TEXT);CREATE TABLE IF NOT EXISTS profile_recovery(id TEXT PRIMARY KEY,profile_id TEXT NOT NULL,created TEXT NOT NULL,label TEXT NOT NULL,data TEXT NOT NULL);`);
   const columns=(this.db.prepare('PRAGMA table_info(turns)').all() as {name:string}[]).map(column=>column.name);
   if(!columns.includes('interruption'))this.db.exec('ALTER TABLE turns ADD COLUMN interruption TEXT');
   if(!columns.includes('profile_id'))this.db.exec("ALTER TABLE turns ADD COLUMN profile_id TEXT NOT NULL DEFAULT 'default'");
@@ -41,6 +58,7 @@ export class Store {
    CREATE TRIGGER IF NOT EXISTS memory_fact_delete AFTER DELETE ON memory_facts BEGIN DELETE FROM memory_vectors WHERE kind='fact' AND target_id=old.id;END;
    CREATE TRIGGER IF NOT EXISTS memory_fact_update AFTER UPDATE OF key,value ON memory_facts BEGIN DELETE FROM memory_vectors WHERE kind='fact' AND target_id=old.id;END;`);
   if(!this.get('memoryIndexVersion',0)){this.db.exec("INSERT INTO turns_fts(turns_fts) VALUES('rebuild')");this.set('memoryIndexVersion',1);}
+  this.db.exec('PRAGMA user_version=1');
  }
  private preferenceKey(key:string){return this.profileId==='default'?key:`${this.profileId}:${key}`;}
  get(key:string,fallback:unknown=null){const r=this.db.prepare('SELECT value FROM preferences WHERE key=?').get(this.preferenceKey(key)) as {value:string}|undefined;return r?JSON.parse(r.value):fallback;}
@@ -129,6 +147,7 @@ export class Store {
    // Forgotten preference revisions must not reappear through their source episodes.
    this.db.prepare('INSERT OR IGNORE INTO forgotten_memory_sources SELECT profile_id,source_turn_id FROM memory_facts WHERE profile_id=? AND key=? AND source_turn_id IS NOT NULL').run(this.profileId,row.key);
    this.db.prepare("DELETE FROM memory_vectors WHERE profile_id=? AND kind='turn' AND target_id IN (SELECT turn_id FROM forgotten_memory_sources WHERE profile_id=?)").run(this.profileId,this.profileId);
+   this.db.prepare('DELETE FROM profile_recovery WHERE profile_id=?').run(this.profileId);
    this.db.prepare('DELETE FROM memory_facts WHERE profile_id=? AND key=?').run(this.profileId,row.key);this.db.exec('COMMIT');
   }catch(error){this.db.exec('ROLLBACK');throw error;}
   this.changed('forget');return true;
@@ -172,8 +191,75 @@ export class Store {
   return rows.map(row=>({...row,content:visibleDialogueText(row.content).slice(0,1200)}));
  }
  exportMemory(){return {version:1,profileId:this.profileId,facts:this.memoryFacts(),turns:this.db.prepare('SELECT id,role,content,created,interruption,conversation_id AS conversationId FROM turns WHERE profile_id=? ORDER BY id').all(this.profileId)};}
+ exportProfileBackup(includeMemory=true,includeLibrary=true):ProfileBackup{
+  const backup:ProfileBackup={format:'bambi-backup',version:1,created:new Date().toISOString(),settings:exportPreferences(this.get('profile',{}) as Record<string,unknown>)};
+  // Reject oversized histories before materializing their contents in JavaScript.
+  let bytes=new TextEncoder().encode(JSON.stringify(backup)).length;
+  const capacity=(row:Record<string,unknown>,countLimit:number)=>{bytes+=Number(row.bytes??0);if(Number(row.count)>countLimit||bytes>MAX_BACKUP_BYTES)throw Error('This profile exceeds the supported size. Export a smaller selection.');};
+  if(includeMemory){
+   capacity(this.db.prepare('SELECT count(*) AS count,coalesce(sum(length(CAST(content AS BLOB))),0) AS bytes FROM turns WHERE profile_id=?').get(this.profileId)!,50000);
+   capacity(this.db.prepare('SELECT count(*) AS count,coalesce(sum(length(CAST(key AS BLOB))+length(CAST(value AS BLOB))),0) AS bytes FROM memory_facts WHERE profile_id=?').get(this.profileId)!,20000);
+   capacity(this.db.prepare('SELECT count(*) AS count FROM forgotten_memory_sources WHERE profile_id=?').get(this.profileId)!,50000);
+  }
+  if(includeLibrary)capacity(this.db.prepare('SELECT count(*) AS count,coalesce(sum(length(CAST(data AS BLOB))),0) AS bytes FROM media').get()!,10000);
+  if(includeMemory)backup.memory={
+   turns:this.db.prepare('SELECT id,role,content,created,interruption,conversation_id AS conversationId FROM turns WHERE profile_id=? ORDER BY id').all(this.profileId) as NonNullable<ProfileBackup['memory']>['turns'],
+   facts:this.db.prepare('SELECT id,key,value,source_turn_id AS sourceTurnId,created,supersedes,current FROM memory_facts WHERE profile_id=? ORDER BY id').all(this.profileId) as NonNullable<ProfileBackup['memory']>['facts'],
+   forgotten:(this.db.prepare('SELECT turn_id AS id FROM forgotten_memory_sources WHERE profile_id=? ORDER BY turn_id').all(this.profileId) as {id:number}[]).map(row=>row.id),
+   conversation:{id:String(this.get('conversationId','legacy')),start:Number(this.get('conversationStart',0)),summary:String(this.get('conversationSummary','')),cursor:Number(this.get('conversationSummaryCursor',0))},
+  };
+  if(includeLibrary)backup.library=this.db.prepare('SELECT data FROM media ORDER BY id').all().map(row=>JSON.parse(String(row.data)));
+  checkedSize(backup,MAX_BACKUP_BYTES);return BackupSchema.parse(backup);
+ }
+ /** Called inside the restore transaction as well as before preference upgrades. */
+ checkpointProfile(label:string,includeMemory=true,includeLibrary=true){
+  const id=randomUUID(),backup=this.exportProfileBackup(includeMemory,includeLibrary);
+  this.db.prepare('INSERT INTO profile_recovery VALUES(?,?,?,?,?)').run(id,this.profileId,backup.created,label,JSON.stringify(backup));
+  this.db.prepare('DELETE FROM profile_recovery WHERE profile_id=? AND id NOT IN (SELECT id FROM profile_recovery WHERE profile_id=? ORDER BY rowid DESC LIMIT 5)').run(this.profileId,this.profileId);
+  return id;
+ }
+ recoveryPoints(){return this.db.prepare('SELECT id,created,label FROM profile_recovery WHERE profile_id=? ORDER BY rowid DESC LIMIT 5').all(this.profileId);}
+ recoveryPoint(id:string):ProfileBackup|null{
+  const row=this.db.prepare('SELECT data FROM profile_recovery WHERE profile_id=? AND id=?').get(this.profileId,id);
+  return row?BackupSchema.parse(JSON.parse(String(row.data))):null;
+ }
+ importProfile(raw:ProfileImport){
+  const request=ImportSchema.parse(raw);checkedSize(request.document,request.document.format==='bambi-backup'?MAX_BACKUP_BYTES:MAX_PROFILE_BYTES);
+  const selected=Object.fromEntries(Object.entries(request.document.settings).filter(([key])=>request.groups.includes(preferenceGroup(key) as ProfileImport['groups'][number])));
+  const memory=request.document.format==='bambi-backup'&&request.memory?request.document.memory:undefined;
+  const library=request.document.format==='bambi-backup'&&request.library?request.document.library:undefined;
+  const previous=this.get('profile',{}) as Record<string,unknown>;
+  const base=request.mode==='replace'?Object.fromEntries(Object.entries(previous).filter(([key])=>!request.groups.includes(preferenceGroup(key) as ProfileImport['groups'][number]))):previous;
+  const settings=mergePreferences(base,selected);
+  // Reconnection and arming always require a fresh user action, including restore.
+  settings['device-auto-connect']=false;
+  this.db.exec('BEGIN IMMEDIATE');let recoveryId:string;
+  try{
+   recoveryId=this.checkpointProfile('Before profile import',!!memory,!!library);this.set('profile',settings);this.set('settings-revision',this.settingsSnapshot().revision+1);this.set('settings-undo',null);
+   if(memory){
+    this.db.prepare('DELETE FROM memory_facts WHERE profile_id=?').run(this.profileId);
+    this.db.prepare('DELETE FROM turns WHERE profile_id=?').run(this.profileId);
+    this.db.prepare('DELETE FROM memory_vectors WHERE profile_id=?').run(this.profileId);
+    this.db.prepare('DELETE FROM forgotten_memory_sources WHERE profile_id=?').run(this.profileId);
+    const turns=new Map<number,number>(),facts=new Map<number,number>();
+    const insertTurn=this.db.prepare('INSERT INTO turns(role,content,created,interruption,profile_id,conversation_id) VALUES(?,?,?,?,?,?)');
+    // IDs belong to this database, never to the source profile. Preserve order.
+    for(const turn of [...memory.turns].sort((a,b)=>a.id-b.id))turns.set(turn.id,Number(insertTurn.run(turn.role,turn.content,turn.created,turn.interruption,this.profileId,turn.conversationId).lastInsertRowid));
+    const insertFact=this.db.prepare('INSERT INTO memory_facts(profile_id,key,value,source_turn_id,created,supersedes,current) VALUES(?,?,?,?,?,?,?)');
+    for(const fact of [...memory.facts].sort((a,b)=>a.id-b.id))facts.set(fact.id,Number(insertFact.run(this.profileId,fact.key,fact.value,fact.sourceTurnId===null?null:turns.get(fact.sourceTurnId)!,fact.created,fact.supersedes===null?null:facts.get(fact.supersedes)!,fact.current).lastInsertRowid));
+    const forget=this.db.prepare('INSERT INTO forgotten_memory_sources VALUES(?,?)');for(const old of memory.forgotten)forget.run(this.profileId,turns.get(old)!);
+    const boundary=(old:number)=>{let result=0;for(const [source,target] of turns)if(source<=old)result=Math.max(result,target);return result;};
+    this.set('conversationId',memory.conversation.id);this.set('conversationStart',boundary(memory.conversation.start));this.set('conversationSummary',memory.conversation.summary);this.set('conversationSummaryCursor',boundary(memory.conversation.cursor));this.set('summary','');this.set('replyIntent','conversation');
+   }
+   if(library){this.db.exec('DELETE FROM media');const insert=this.db.prepare('INSERT INTO media VALUES(?,?)');for(const item of library)insert.run(item.id,JSON.stringify(item));}
+   this.set('profileImportRevision',Number(this.get('profileImportRevision',0))+1);
+   this.db.exec('COMMIT');
+  }catch(error){this.db.exec('ROLLBACK');throw error;}
+  if(memory)this.changed('clear');
+  return {settings,recoveryId};
+ }
  metric(event:string,data:unknown){this.db.prepare('INSERT INTO metrics(event,data) VALUES(?,?)').run(event,JSON.stringify(data));}
  saveSession(id:string,data:unknown){this.db.prepare('INSERT OR REPLACE INTO sessions(id,data) VALUES(?,?)').run(id,JSON.stringify(data));}
  sessions(){return this.db.prepare('SELECT * FROM sessions ORDER BY created DESC LIMIT 40').all();}
- clearMemory(){this.db.exec('BEGIN IMMEDIATE');try{this.db.prepare('DELETE FROM memory_facts WHERE profile_id=?').run(this.profileId);this.db.prepare('DELETE FROM turns WHERE profile_id=?').run(this.profileId);this.db.prepare('DELETE FROM memory_vectors WHERE profile_id=?').run(this.profileId);this.db.prepare('DELETE FROM forgotten_memory_sources WHERE profile_id=?').run(this.profileId);this.set('summary','');this.set('conversationStart',0);this.set('conversationId',crypto.randomUUID());this.set('conversationSummary','');this.set('conversationSummaryCursor',0);this.set('replyIntent','conversation');this.db.exec('COMMIT');}catch(error){this.db.exec('ROLLBACK');throw error;}this.changed('clear');}
+ clearMemory(){this.db.exec('BEGIN IMMEDIATE');try{this.db.prepare('DELETE FROM profile_recovery WHERE profile_id=?').run(this.profileId);this.db.prepare('DELETE FROM memory_facts WHERE profile_id=?').run(this.profileId);this.db.prepare('DELETE FROM turns WHERE profile_id=?').run(this.profileId);this.db.prepare('DELETE FROM memory_vectors WHERE profile_id=?').run(this.profileId);this.db.prepare('DELETE FROM forgotten_memory_sources WHERE profile_id=?').run(this.profileId);this.set('summary','');this.set('conversationStart',0);this.set('conversationId',crypto.randomUUID());this.set('conversationSummary','');this.set('conversationSummaryCursor',0);this.set('replyIntent','conversation');this.db.exec('COMMIT');}catch(error){this.db.exec('ROLLBACK');throw error;}this.changed('clear');}
 }

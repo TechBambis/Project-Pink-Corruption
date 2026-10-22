@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import {z} from 'zod';
+import {spiralStyles} from '../session-director/regie/registry';
 import {sceneNames} from '../safety/actions';
 import {sessionDirections} from '../session-director/direction';
 import {TriggerTimingSchema,defaultTriggerTiming} from '../session-director/trigger-timing';
+import {journeyIds} from '../session-director/journeys';
 import {migrateVisualPreferences} from '../visuals/preferences';
 
 export type SettingValue=string|number|boolean;
@@ -20,6 +22,17 @@ export interface SettingDefinition {schema:z.ZodTypeAny;default:SettingValue;cat
 const field=(schema:z.ZodTypeAny,defaultValue:SettingValue,category:SettingCategory,section:SettingsSection,transfer=true):SettingDefinition=>({schema,default:defaultValue,category,section,transfer});
 /** The authoritative inventory: validation, UI persistence and transfer use these same definitions. */
 export const settingsRegistry:Record<string,SettingDefinition>={
+  "conversation-topic":field(z.enum(["general", "bambi", "style"]),"general","personal","personal"),
+  "dflash-4b":field(z.boolean(),false,"machine-specific","machine"),
+  "direction-ai-regie":field(z.boolean(),false,"portable","session"),
+  "direction-breathing":field(z.boolean(),true,"portable","session"),
+  "direction-inner-response":field(z.boolean(),true,"portable","session"),
+  "direction-intent":field(z.string().max(800),"","personal","personal"),
+  "direction-playful-requests":field(z.boolean(),true,"portable","session"),
+  "direction-withdrawal":field(z.boolean(),true,"portable","session"),
+  "q8-kv-cache":field(z.boolean(),false,"machine-specific","machine"),
+  "session-interaction":field(z.enum(["interactive", "uninterrupted"]),"interactive","portable","session"),
+  "session-journey":field(z.enum(["custom",...journeyIds]),"custom","portable","session"),
   "guided-style":field(z.string().max(300),"Soft, playful, dreamy and affectionate","personal","personal"),
   "conversation-style":field(z.enum(["situational", "reactive"]),"reactive","portable","session"),
   "bambicloud-cues":field(z.boolean(),true,"portable","session"),
@@ -58,7 +71,7 @@ export const settingsRegistry:Record<string,SettingDefinition>={
   "curve":field(z.enum(["slow-build", "wave", "peak-and-cool", "linear"]),"slow-build","portable","session"),
   "ai-mode":field(z.enum(["off", "text", "voice", "ambient", "interactive"]),"voice","portable","session"),
   "model":field(logicalReference,"bambi-qwen35-9b-hauhau:q4_k_m","portable","session"),
-  "voice":field(voiceReference,"af_heart","portable","audio"),
+  "voice":field(voiceReference,"bambi_classic","portable","audio"),
   "voice2":field(voiceReference.or(z.literal('')),"","portable","audio"),
   "voice-mix":field(numericChoice(0,1,0.05),"0.25","portable","audio"),
   "audio-preset":field(z.enum(["bambi_local_clean", "bambi_classic", "bambi_classic_deep", "bambi_voice_test"]),"bambi_local_clean","portable","audio"),
@@ -81,7 +94,7 @@ export const settingsRegistry:Record<string,SettingDefinition>={
   "bus-voice":field(numericChoice(0,1,0.01),"0.85","portable","audio"),
   "bus-ambient":field(numericChoice(0,0.5,0.01),"0","portable","audio"),
   "bus-effects":field(numericChoice(0,1,0.01),"0.2","portable","audio"),
-  "prompt-template":field(z.enum(["bambisleep-classic", "gentle-induction", "custom"]),"bambisleep-classic","portable","session"),
+  "prompt-template":field(z.enum(["bambisleep-classic", "gentle-induction", "english-conversation", "bambi-companion", "custom"]),"bambisleep-classic","portable","session"),
   "bambi-name":field(z.string().max(50),"Bambi","personal","personal"),
   "trigger-selection":field(jsonSetting(z.array(z.string().min(1).max(100)).max(100)),"[]","portable","triggers"),
   "triggers-enabled":field(z.boolean(),true,"portable","triggers"),
@@ -168,6 +181,8 @@ const settingLabels:Record<string,string>={
  'device-auto-connect':'Automatic device reconnect',
 };
 export const settingLabel=(id:string)=>settingLabels[id]??id.split('-').map(word=>word==='mic'?'Microphone':word==='db'?'dB':word.charAt(0).toUpperCase()+word.slice(1)).join(' ');
+for(const key of [...spiralStyles.map(s=>'direction-style-'+s),...sceneNames.map((_,i)=>'direction-scene-'+i)])settingsRegistry[key]=field(z.boolean(),true,'portable','visuals');
+
 export const preferenceIds=Object.keys(settingsRegistry);
 export const booleanPreferenceIds=preferenceIds.filter(id=>typeof settingsRegistry[id].default==='boolean');
 export const SettingsSchema=z.object(Object.fromEntries(preferenceIds.map(id=>[id,settingsRegistry[id].schema.optional()]))).strict();
@@ -186,6 +201,7 @@ export function migrateStoredSettings(value:Record<string,unknown>):Settings {
 }
 export const profileMetadata={'duration-version':1,'dialogue-version':1,'visuals-version':2,'sampling-version':2};
 export const runtimeSettingsInventory={
+ ...Object.fromEntries(['chat-output','profiles-name','profiles-personal-text','profiles-code-output','profiles-password','profiles-password-confirm','profiles-backup-memory','profiles-backup-library','profiles-code-input','profiles-restore-password','profiles-file','profiles-replace','profiles-restore-memory','profiles-restore-library'].map(id=>[id,'Transient profile review or export; never saved'])),
  'device-enabled':'Transient arming; never persisted or transferred',
  'device-test-intensity':'Transient device preview', 'device-test-channel':'Transient device preview',
  'device-manual-channel':'Transient manual actuation', 'device-manual-pattern':'Transient manual actuation',

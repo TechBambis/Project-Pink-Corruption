@@ -66,7 +66,7 @@ test('cloud streams split SSE, uses configured identity, supports JSON planning 
     assert.equal(authentication,'Bearer test-secret');assert.equal(bodies.at(-1)?.model,'served-model');
     assert.equal(gatewayHeaders.length,5);assert.ok(gatewayHeaders.every(value=>value==='gateway-test-secret'));
     assert.equal(bodies.at(-1)?.dry_multiplier,0);
-    await new Promise(resolve=>setTimeout(resolve,20));assert.equal(closed,true);
+    const closeDeadline=performance.now()+1000;while(!closed&&performance.now()<closeDeadline)await new Promise(resolve=>setTimeout(resolve,10));assert.equal(closed,true,'Returning from the stream closes the server request before its five-second completion');
   }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
@@ -128,7 +128,7 @@ test('remote Ollama uses its configured identity and context, disables thinking 
     assert.ok(bodies.every(body=>body.model==='remote-qwen:latest'&&body.think===false&&body.options.num_ctx===8192));
     assert.equal(bodies.at(-1)?.options.num_predict,24);assert.equal(bodies.at(-1)?.options.top_k,20);
     assert.equal(bodies.at(-1)?.options.temperature,1);assert.equal(bodies.at(-1)?.options.dry_multiplier,undefined);
-    await new Promise(resolve=>setTimeout(resolve,20));assert.equal(closed,true);
+    const closeDeadline=performance.now()+1000;while(!closed&&performance.now()<closeDeadline)await new Promise(resolve=>setTimeout(resolve,10));assert.equal(closed,true,'Returning from the stream closes the server request before its five-second completion');
   }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
@@ -144,7 +144,7 @@ test('remote Ollama provider errors do not disclose response bodies or private p
     response='not JSON: private prompt and provider secret';
     await assert.rejects(async()=>{for await(const _chunk of backend.stream([{role:'user',content:'Neutral test'}],CLOUD_MODEL_ALIAS,new AbortController().signal)){}},/^Error: Cloud streaming response is invalid$/);
     response=JSON.stringify({message:{content:'not JSON: private prompt and provider secret'}});
-    await assert.rejects(backend.structured([{role:'user',content:'Neutral test'}],CLOUD_MODEL_ALIAS,new AbortController().signal,8192,{}),/^Error: Cloud structured response is invalid$/);
+    await assert.rejects(backend.structured([{role:'user',content:'Neutral test'}],CLOUD_MODEL_ALIAS,new AbortController().signal,8192,{}),/^StructuredOutputError: The AI returned an invalid JSON response\.$/);
   }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
@@ -166,4 +166,24 @@ test('default remote context fits complete compiled persona prompts and reserves
     assert.equal(plan.messages[0].content,system);assert.equal(plan.maxTokens,2048);
     if(id==='bambisleep-classic')await assert.rejects(fitContext(system,[],'Hello.',count,8192,2048),/exceed the 8,192-token context/);
   }
+});
+
+test('scene JSON budgets reach every remote adapter and truncation remains a bounded retry signal',async()=>{
+ const bodies:any[]=[];let truncated=false;
+ const server=createServer(async(req,res)=>{
+  const parts:Buffer[]=[];for await(const part of req)parts.push(part);const body=JSON.parse(Buffer.concat(parts).toString());bodies.push(body);
+  res.end(JSON.stringify(req.url==='/api/chat'?{message:{content:'{"strategy":"Complete."}'},done_reason:truncated?'length':'stop'}:{choices:[{message:{content:'{"strategy":"Complete."}'},finish_reason:truncated?'length':'stop'}]}));
+ });
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ const url=`http://127.0.0.1:${(server.address() as {port:number}).port}`,signal=new AbortController().signal;
+ try{
+  for(const kind of ['llama.cpp','openai-compatible','ollama'] as const){
+   const backend=new CloudBackend({url,model:'fixture',key:'',context:24576,kind,timeoutMs:5000});
+   await backend.structured([{role:'user',content:'Plan a scene.'}],CLOUD_MODEL_ALIAS,signal,24576,{}, {maxTokens:1536,temperature:.65});
+   const body=bodies.at(-1);assert.equal(kind==='ollama'?body.options.num_predict:body.max_tokens,1536);assert.equal(kind==='ollama'?body.options.temperature:body.temperature,.65);
+   truncated=true;await assert.rejects(backend.structured([{role:'user',content:'Plan a scene.'}],CLOUD_MODEL_ALIAS,signal,24576,{}, {maxTokens:1536}),/^StructuredOutputError: The AI stopped before completing its JSON response\.$/);truncated=false;
+   await backend.structured([{role:'user',content:'Classify.'}],CLOUD_MODEL_ALIAS,signal,24576,{});
+   assert.equal(kind==='ollama'?bodies.at(-1).options.num_predict:bodies.at(-1).max_tokens,64,'Small existing decisions keep their default');
+  }
+ }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });

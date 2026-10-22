@@ -23,3 +23,21 @@ export class TriggerPresentation {
  }
  clear(){this.window=null;this.text.textContent='';this.layer.hidden=true;this.stage.removeAttribute('data-trigger-text');}
 }
+
+/** A complete inner answer, previewed and held on the existing output clock. */
+export class ResponsePresentation {
+ private layer:HTMLDivElement;
+ private text:HTMLSpanElement;
+ private window:{start:number;end:number}|null=null;
+ constructor(stage:HTMLElement){
+  this.layer=document.createElement('div');this.layer.className='response-prompt';this.layer.hidden=true;this.layer.setAttribute('aria-hidden','true');
+  this.text=document.createElement('span');this.layer.append(this.text);stage.append(this.layer);
+ }
+ show(phrase:string,start:number,end:number){
+  const text=phrase.trim().replace(/\s+/g,' ');if(!text||text.length>600||!Number.isFinite(start)||!Number.isFinite(end)||end<=start||end-start>30)return;
+  this.text.textContent=text.toUpperCase();this.text.style.setProperty('--response-size',text.length>60?'6':text.length>30?'9':'12');this.window={start,end};
+ }
+ active(time:number){return !!this.window&&time>=this.window.start&&time<this.window.end;}
+ present(time:number,enabled:boolean){if(this.window&&time>=this.window.end)this.clear();this.layer.hidden=!enabled||!this.active(time);}
+ clear(){this.window=null;this.layer.hidden=true;this.text.textContent='';}
+}

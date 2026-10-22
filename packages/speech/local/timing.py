@@ -13,7 +13,7 @@ class Phrase:
     text: str
     pause_ms: int
 
-def phrases(text, pauses=None, max_chars=180):
+def phrases(text, pauses=None, max_chars=180, split_clauses=True, split_sentences=True):
     """Parse explicit pauses before phrase splitting; never feed markers to TTS."""
     pauses = {**DEFAULT_PAUSES, **(pauses or {})}
     # Strip complete cues before splitting punctuation (including decimal levels).
@@ -35,8 +35,11 @@ def phrases(text, pauses=None, max_chars=180):
             continue
         if '[pause:' in part:
             raise ValueError('Invalid pause marker')
-        # Preserve punctuation; commas and semicolons form short spoken units.
-        for segment in re.findall(r'[^.!?;,\n]+(?:[.!?;,]+|$)', part):
+        # Lab sentence mode keeps commas/semicolons inside the model's context.
+        boundaries = r'[^.!?;,\n]+[.!?;,]*' if split_clauses else r'[^.!?\n]+[.!?]*'
+        if not split_sentences:
+            boundaries = r'[\s\S]+'
+        for segment in re.findall(boundaries, part):
             words = segment.strip().split()
             chunk = ''
             for word in words:

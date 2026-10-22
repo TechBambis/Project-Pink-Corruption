@@ -3,6 +3,14 @@
 // Separate commercial permissions: see LICENSING.md.
 
 export interface PendingInput {id:string;text:string;source:'speech'|'text';action?:'continue'|'adapt';}
+/** The whole utterance belongs to its start window, even if recognition ends later. */
+export class ListenerResponseInput {
+ private reserved=false;
+ get active(){return this.reserved;}
+ begin(reserved:boolean){this.reserved=reserved;return reserved;}
+ end(){const reserved=this.reserved;this.reserved=false;return reserved;}
+ reset(){this.reserved=false;}
+}
 /** Ordered decisions never stop audio; only a playback boundary commits adaptation. */
 export class ConcurrentInput {
  private items:PendingInput[]=[];private epoch=0;private controller:AbortController|null=null;private working=false;

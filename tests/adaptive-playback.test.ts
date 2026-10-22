@@ -17,7 +17,7 @@ function fixture() {
   const notices: string[] = [], voices: { stop(): void }[] = [];
   let clears = 0;
   const audio = { context: { currentTime: 10, decodeAudioData: async () => ({ duration: 1 }) }, outputTime: 10,
-    setEventMode() {}, setEventGains() {}, clearEventGains() {}, stopEventCues() {},
+    setNarrationDelivery() {}, setEventMode() {}, setEventGains() {}, clearEventGains() {}, stopEventCues() {},
     playEventVoice() { const source = { onended: null, stop() {} }; voices.push(source); return source; },
   } as unknown as AudioEngine;
   const hooks: ConstructorParameters<typeof SessionEvents>[2] = { audio: () => audio, visuals: () => null, settings: () => settings,

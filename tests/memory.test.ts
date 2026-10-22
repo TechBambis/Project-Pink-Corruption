@@ -23,15 +23,30 @@ test('native checkpoint boundary preserves every instruction and counts the mess
  assert.deepEqual(plan.messages,lastCounted);
  assert.ok(plan.messages[0].content.startsWith(prefix));
  assert.ok(plan.messages[0].content.includes('Apply its response guidance'));
- assert.equal(plan.messages[1].role,'user');
- assert.ok(plan.messages[1].content.includes(dynamic));
- assert.ok(plan.messages[1].content.includes('Confirmed preference: quiet music.'));
- assert.deepEqual(plan.messages.slice(2,-1),history);
+ assert.equal(plan.messages.at(-2)!.role,'user');
+ assert.ok(plan.messages.at(-2)!.content.includes(dynamic));
+ assert.ok(plan.messages.at(-2)!.content.includes('Confirmed preference: quiet music.'));
+ assert.match(plan.messages[1].content,/REUSABLE CONTEXT BOUNDARY/);
+ assert.deepEqual(plan.messages.slice(2,-2),history);
  assert.deepEqual(plan.messages.at(-1),{role:'user',content:'My current correction.'});
  assert.equal(plan.inputTokens,await count(plan.messages));
  const changed=checkpointContextMessages([{role:'system',content:prefix+'\n\nCurrent session time: 3 minutes.'},{role:'user',content:'A new question.'}],prefix);
  assert.deepEqual(changed[0],plan.messages[0],'Changing session state must retain the checkpoint prefix');
  assert.throws(()=>checkpointContextMessages([{role:'system',content:'Different persona'}],prefix),/does not match/);
+});
+
+test('changing session guidance and retrieved evidence retains the whole heard-history prefix',()=>{
+ const prefix='Complete immutable character.';
+ const history:Message[]=[{role:'user',content:'A correction: prefer quiet.'},{role:'assistant',content:'The room can stay quiet. '.repeat(2000)+'Heard ending.'}];
+ const build=(tail:string,input:string)=>checkpointContextMessages([{role:'system',content:prefix+tail},...history,{role:'user',content:input}],prefix);
+ const before=build('\nTime 2.5. Quoted memory: old preference.','Continue.');
+ const after=build('\nTime 3.0. Quoted memory: corrected preference.','Please explain.');
+ assert.deepEqual(before.slice(0,-2),after.slice(0,-2),'Dynamic guidance must not precede or invalidate any retained heard history');
+ assert.deepEqual(after.slice(2,-2),history);
+ assert.match(after.at(-2)!.content,/corrected preference/);
+ assert.doesNotMatch(after.map(m=>m.content).join('\n'),/old preference/);
+ assert.equal(after.at(-1)!.content,'Please explain.');
+ assert.throws(()=>checkpointContextMessages([{role:'system',content:prefix},{role:'assistant',content:'Unfinished prefill'}],prefix),/final user input/);
 });
 
 test('checkpoint message overhead participates in context admission and ordinary backends keep their layout',async()=>{
@@ -40,8 +55,8 @@ test('checkpoint message overhead participates in context admission and ordinary
  await assert.rejects(fitContext(prefix+' changing state',[],'Question',counter,300,64,0,64,'',{checkpointPrefix:prefix}),/exceed/);
  const plan=await fitContext(prefix+' changing state',[],'Question',counter,400,64,0,64);
  assert.equal(plan.messages.length,2);
- const warm=await fitContext(prefix,[],'Ready.',counter,400,1,0,1,'',{checkpointPrefix:prefix});
- assert.equal(warm.messages.length,3);assert.ok(warm.messages[0].content.startsWith(prefix));
+ const warm=await fitContext(prefix,[],'Ready.',counter,600,1,0,1,'',{checkpointPrefix:prefix});
+ assert.equal(warm.messages.length,4);assert.ok(warm.messages[0].content.startsWith(prefix));
 });
 
 test('existing databases migrate without losing history and rebuild searchable older episodes', () => {

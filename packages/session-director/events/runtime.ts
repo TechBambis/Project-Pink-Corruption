@@ -27,7 +27,7 @@ export function compileEvent(raw: BambiEvent): CompiledEvent {
     speech.push({ id: `${event.id}:speech:${speech.length}`, payloadId: `${event.id}:payload${payloadSuffix}`, eventId: event.id, phase: event.phase, atMs: event.atMs + offset, endMs: event.atMs + offset + duration, speech: structuredClone(spec), iteration });
   };
   if (prepMs > 0) {
-    const prepState = ['peak', 'original_self', 'motif_recall', 'layer_shift', 'soft_return'].includes(event.type) ? event.state : event.baseline;
+    const prepState = event.preparationState??(['peak', 'original_self', 'motif_recall', 'layer_shift', 'soft_return'].includes(event.type) ? event.state : event.baseline);
     frame(0, prepState, 'prepare', event.type === 'mindwipe' ? '[mindwipe:start]' : event.type === 'reset' ? '[reset:begin]' : undefined, event.entry);
   }
   if (event.fractionation) {
@@ -144,6 +144,54 @@ export class EventRuntime {
     for (const id of this.delivered) if (!liveSlots.has(id)) this.delivered.delete(id);
     for (const motif of motifs) if (!this.motifs.has(motif.id)) this.motifs.set(motif.id, { ...motif, lastUsedAtMs: null, useCount: 0 });
     for (const slot of compiled.speech) if (slot.speech.requiredTrigger) this.triggers.plan(slot.speech.requiredTrigger, slot.speech.triggerCooldownMs!, slot.phase);
+  }
+  /** Commit a fully measured composition atomically, including its input windows.
+   * Validation and cue reservation finish before any live program is changed. */
+  appendScene(scene:Pick<BambiProgram,'events'|'motifs'|'responseWindows'|'responsePrompts'>) {
+    if(this.stopped||!scene.events.length||scene.events.length>64)throw Error('Invalid scene append');
+    const previous=this.compiled.at(-1),boundary=Math.max(this.lastMs,previous?previous.event.atMs+eventDurationMs(previous.event):0);
+    if(scene.events.some(e=>e.atMs<boundary))throw Error('Scene overlaps committed playback');
+    const retained=this.compiled.filter(c=>c.event.atMs+eventDurationMs(c.event)>=this.lastMs-60000).slice(-(128-scene.events.length));
+    const motifs=new Map(this.program.motifs.map(m=>[m.id,m]));
+    for(const m of scene.motifs){const old=motifs.get(m.id);if(old&&JSON.stringify(old)!==JSON.stringify(m))throw Error('Cannot redefine an introduced motif');motifs.set(m.id,m);}
+    const responseWindows=[...(this.program.responseWindows??[]).filter(w=>w.toMs>=this.lastMs),...(scene.responseWindows??[])];
+    const responsePrompts=[...(this.program.responsePrompts??[]).filter(w=>w.toMs>=this.lastMs),...(scene.responsePrompts??[])];
+    const checked=ProgramSchema.parse({...this.program,events:[...retained.map(c=>c.event),...scene.events],motifs:[...motifs.values()],responseWindows,responsePrompts});
+    const additions=scene.events.map(compileEvent),reservations=new Map<string,{atMs:number;cooldownMs:number}>();
+    for(const slot of [...this.slots,...additions.flatMap(c=>c.speech)])if(slot.speech.requiredTrigger){
+      const phrase=slot.speech.requiredTrigger,atMs=slot.atMs+slot.speech.triggerAtMs!,prior=reservations.get(phrase);
+      if(prior&&atMs-prior.atMs<prior.cooldownMs)throw Error('Scene trigger violates cooldown');
+      reservations.set(phrase,{atMs,cooldownMs:slot.speech.triggerCooldownMs!});
+    }
+    let prior=previous;
+    for(const c of additions){c.entryState=structuredClone(prior&&prior.event.atMs+eventDurationMs(prior.event)===c.event.atMs?prior.frames.at(-1)?.state??this.program.baseline:this.program.baseline);prior=c;}
+    this.program.events=checked.events;this.program.motifs=checked.motifs;this.program.responseWindows=checked.responseWindows;this.program.responsePrompts=checked.responsePrompts;
+    this.compiled.splice(0,this.compiled.length,...retained,...additions);
+    const live=new Set(this.slots.map(s=>s.id));for(const id of this.delivered)if(!live.has(id))this.delivered.delete(id);
+    for(const m of scene.motifs)if(!this.motifs.has(m.id))this.motifs.set(m.id,{...m,lastUsedAtMs:null,useCount:0});
+    for(const slot of additions.flatMap(c=>c.speech))if(slot.speech.requiredTrigger)this.triggers.plan(slot.speech.requiredTrigger,slot.speech.triggerCooldownMs!,slot.phase);
+  }
+  /** Feedback may discard future sections, preserving any section already begun.
+   * The caller also cancels pending HTTP/audio under its generation epoch. */
+  discardFuture(afterMs:number) {
+    if(this.stopped||!Number.isFinite(afterMs)||afterMs<this.lastMs)throw Error('Cannot discard heard event history');
+    const retained=this.compiled.filter(c=>c.event.atMs<=afterMs);
+    this.program.events=retained.map(c=>c.event);this.compiled.splice(0,this.compiled.length,...retained);
+    this.program.responseWindows=this.program.responseWindows?.filter(w=>w.fromMs<=afterMs);
+    this.program.responsePrompts=this.program.responsePrompts?.filter(w=>w.fromMs<=afterMs);
+    this.program.motifs=this.program.motifs.filter(m=>m.firstIntroducedAtMs<=afterMs);
+    for(const [id,m] of this.motifs)if(m.firstIntroducedAtMs>afterMs)this.motifs.delete(id);
+    this.generation++;
+  }
+  /** A readiness fallback may replace only an episode that has not started. */
+  finishListeningWindow(eventId:string,atMs:number){
+    const index=this.compiled.findIndex(c=>c.event.id===eventId),old=this.compiled[index]?.event;
+    if(this.stopped||!old||old.type!=='silence'||old.speech.mode!=='silent'||old.atMs>atMs||atMs<this.lastMs||atMs>=old.atMs+eventDurationMs(old))return;
+    const end=Math.max(old.atMs+1,atMs),event=EventSchema.parse({...old,timing:{prepMs:0,activeMs:end-old.atMs,returnMs:0}});
+    const prompts=this.program.responsePrompts?.map(p=>p.fromMs===old.atMs?{...p,toMs:Math.min(p.toMs,end)}:p);
+    const checked=ProgramSchema.parse({...this.program,events:this.program.events.map(e=>e.id===eventId?event:e),responsePrompts:prompts});
+    const compiled=compileEvent(event);compiled.entryState=this.compiled[index].entryState;
+    this.program.events=checked.events;this.program.responsePrompts=checked.responsePrompts;this.compiled[index]=compiled;this.generation++;
   }
   /** A readiness fallback may replace only an episode that has not started. */
   replacePending(event: BambiEvent) {

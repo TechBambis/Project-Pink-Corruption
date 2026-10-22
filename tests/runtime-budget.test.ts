@@ -48,7 +48,7 @@ test('every unique authored line and section of every installed template is avai
   for(const line of [prompt.main,prompt.strategy,prompt.collar_addon].flatMap(text=>text.split('\n')).map(line=>line.trim()).filter(Boolean))assert.ok(compiled.includes(line),`${prompt.id}: an authored line was removed in ${phase}`);
  }
  assert.equal(modelContext(communityQwen,'bambisleep-classic'),24576);
- assert.equal(modelContext(communityQwen36,'bambisleep-classic'),16384);
+ assert.equal(modelContext(communityQwen36,'bambisleep-classic'),24576);
  assert.equal(modelContext('ollama-fixture','bambisleep-classic'),24576);
  assert.equal(modelContext('ollama-fixture','custom'),4096);
  assert.equal(modelContext(sthenoV32,'bambisleep-classic'),8192);
@@ -105,8 +105,12 @@ test('batches suspend at complete sentences and never in a split playback marker
  assert.equal(speechBatchBoundary('One sentence. Second sentence.'),false);
  assert.equal(speechBatchBoundary('One sentence. Second sentence. Third sentence. [pause:med'),false);
  assert.equal(speechBatchBoundary('One sentence. Second sentence. Third sentence. [pause:medium]'),true);
- assert.equal(speechBatchBoundary('word '.repeat(48)),true);
+ assert.equal(speechBatchBoundary('word '.repeat(48)),false);
+ assert.equal(speechBatchBoundary('word '.repeat(48)+'ending.'),true);
+ assert.equal(speechBatchBoundary('First. Second. Third. The unfinished ending '),false);
  assert.equal(speechBatchBoundary('One. Two. Three. <action>'),false);
+ assert.equal(speechBatchBoundary('*One sentence. Second sentence. Third sentence.*'),true);
+ assert.equal(speechBatchBoundary('One sentence. Second sentence. Third sentence. [bambi:Warm. [pause:short]'),false);
  const baseline=llamaSampling('qwen');assert.equal(baseline.dry_multiplier,0);assert.equal(baseline.xtc_probability,0);
  assert.equal(llamaSampling('creative').xtc_probability,.4);
 });

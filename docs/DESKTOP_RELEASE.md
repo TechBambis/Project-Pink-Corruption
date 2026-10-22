@@ -1,6 +1,6 @@
 # Desktop builds
 
-Linux and Windows x64 share `scripts/desktop-release.mjs`, the source allowlist and `config/desktop-release.json`. **Smoke** packages test the shell/player; **alpha** packages add local AI and speech. macOS/ARM packaging is not implemented.
+Linux/Windows x64 and Apple Silicon share `scripts/desktop-release.mjs`, the source allowlist and `config/desktop-release.json`. **Smoke** packages test the shell/player; **alpha** packages add local AI and speech. Apple Silicon Smoke passed received-ZIP CI checks; its Alpha build remains unqualified until the required native and recipient gates pass.
 
 ## Frozen source
 
@@ -45,11 +45,24 @@ Alpha freezes the locked native speech environment and bundles the pinned llama 
 
 For actual model tests, run `desktop-windows-ai-check.mjs EXE MODEL_DATA` using the bundled/build Node, then repeat with `--cpu`. Preserve full prompts and 24,576-token reference context. Check actual offloaded layers, not just detected GPU names. Physical audio and Windows 11 recipient behavior require observations.
 
+## macOS Apple Silicon
+
+On Apple Silicon, use a fresh snapshot (macOS 13+ for Smoke, 14+ for Alpha):
+
+```sh
+node scripts/desktop-release.mjs build . macos-arm64
+node scripts/desktop-release.mjs qualify . macos-arm64 dist/desktop-macos/0.1.0-smoke.N
+```
+
+Output: ZIP containing the app, matching source, notices, manifest and checksums. Extract the ZIP and copy the app to Applications. The tester has an ad-hoc signature and is not notarized. CI tests the extracted/copied final app, player PCM, Studio, settings and process cleanup. Alpha freezes hash-locked native speech and bundles arm64 llama.cpp; models are installed only through explicit setup. Its received-runtime checks cover synthesis and streaming recognition. Full-context Metal/CPU conversation, model setup/offline restart, downloaded Gatekeeper behavior, physical audio/microphone consent and sleep/wake remain required qualification gates.
+
+After Alpha packaging checks, run `desktop-macos-ai-check.mjs "/Applications/Bambi Local.app/Contents/MacOS/Bambi Local" MODEL_DATA`, then repeat with `--cpu`. The check preserves the full reference model and 24,576-token context; auto requires actual Metal offload. `--download-check` explicitly enables pinned download cancellation/retry checks. Restart results distinguish rejected renderer requests from a physically disconnected network; complete the latter on the Mac before claiming offline qualification.
+
 ## CI and evidence
 
-**Manual desktop release** runs the Windows native workflow; Linux alpha currently uses an attended local build. Before private CI, verify account **337824705**, actual free allowance, storage and zero-spend controls. Use `upload_packages` within the recorded allowance; `transfer_packages` is the optional sequential-part receiver route.
+**Manual desktop release** selects Windows, Linux Smoke or Apple Silicon; Linux alpha currently uses an attended local build. Before private CI, verify account **337824705**, actual free allowance, storage and zero-spend controls. Use `upload_packages` within the recorded allowance; `transfer_packages` is the optional sequential-part receiver route.
 
-Compare both targets with `node scripts/desktop-release.mjs status SOURCE TARGET_OUTPUT...`. Keep runtime/source manifests, qualification records and their unchanged payloads. Source checks are bound to source/version/host. A build with missing required gates stays `built-unqualified`; test results from older packages are not reused.
+Compare built targets with `node scripts/desktop-release.mjs status SOURCE TARGET_OUTPUT...`. Keep runtime/source manifests, qualification records and their unchanged payloads. Source checks are bound to source/version/host. A build with missing required gates stays `built-unqualified`; test results from older packages are not reused.
 
 The controller rejects changed snapshots, mismatched package hashes and concurrent release work. Remove a stale lock only after its recorded process has stopped. Runtime ownership cleans only the app's processes; occupied ports and unrelated profiles are retained.
 
@@ -65,3 +78,5 @@ npm run desktop:update -- sign /absolute/private/packages /absolute/private/keys
 ```
 
 Keep keys outside Git. Clients need reviewed trusted keys; a key supplied by an untrusted update is insufficient.
+
+Windows AI alphas also include a ZIP of the same application. Its backend and executable bytes are checked against staging and the qualified installed application; extracting the full ZIP needs no installer. This does not remove Windows publisher-signature or reputation checks. The current alpha is unsigned. A trusted Authenticode certificate or signing service is required for a publisher signature; private update signatures and ZIP packaging are not substitutes. [Microsoft signing guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).

@@ -2,7 +2,7 @@
   "id": "bambi_local_clean",
   "label": "Local Clean",
   "description": "Clear local narration, short phrases, minimal processing.",
-  "voice": "af_heart",
+  "voice": "bambi_classic",
   "speed": 0.78,
   "pitchSemitones": 0,
   "sampleRate": 24000,

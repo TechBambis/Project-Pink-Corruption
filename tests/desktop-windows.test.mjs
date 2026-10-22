@@ -10,8 +10,19 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer} from 'node:http';
 import {createRequire} from 'node:module';
-import {buildOptions,downloadPinned,digest,llamaEntries,assertWindowsX64,sourcePathAllowed,inventory,peImports,windowsDependencyReport} from '../scripts/desktop-windows-support.mjs';
+import {buildOptions,downloadPinned,digest,llamaEntries,assertWindowsX64,sourcePathAllowed,inventory,peImports,windowsDependencyReport,copyCompactLicenses} from '../scripts/desktop-windows-support.mjs';
+import {splitBundle} from '../scripts/desktop-windows-transfer.mjs';
 const {runtimeEnvironment}=createRequire(import.meta.url)('../apps/desktop/runtime-environment.cjs');
+
+test('Windows license packaging retains deep paths and duplicate basenames as short indexed byte-identical files',async t=>{
+ const root=mkdtempSync(join(tmpdir(),'Bambi license paths ü '));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const origin=join(root,'source'),destination=join(root,'notices/source-licenses');
+ const paths=['macos-python-3.12.13/install/lib/python3.12/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/cachecontrol/LICENSE.txt','macos-python-3.12.13/install/lib/python3.12/site-packages/pip-26.1.2.dist-info/licenses/src/pip/_vendor/distlib/LICENSE.txt'];
+ for(const [index,path] of paths.entries()){mkdirSync(join(origin,path,'..'),{recursive:true});writeFileSync(join(origin,path),'Original copyright and license '+index+'\n');}
+ const entries=await copyCompactLicenses(origin,destination);assert.equal(entries.length,paths.length);assert.equal(new Set(entries.map(e=>e.file)).size,paths.length);
+ for(const entry of entries){assert(entry.file.length<=57&&!entry.file.includes('/'));const original=readFileSync(join(origin,entry.originalPath));assert.deepEqual(readFileSync(join(destination,entry.file)),original);assert.equal(entry.sha256,digest(original));assert.equal(entry.bytes,original.length);}
+ const index=JSON.parse(readFileSync(join(destination,'INDEX.json'),'utf8'));assert.deepEqual(index.files,entries);assert.equal(index.sourceRoot,'docs/licenses');
+});
 
 test('bounded frozen-release transport retains matching evidence and rejects another source or failed gates',t=>{
  const root=mkdtempSync(join(tmpdir(),'Bambi release transfer ü '));t.after(()=>rmSync(root,{recursive:true,force:true}));
@@ -58,13 +69,16 @@ test('desktop loader is an encoded file URL and launches through paths containin
  const result=spawnSync(process.execPath,[local[0],local[1],'--input-type=module','-e','if(!globalThis.__fixtureImported)process.exit(1)'],{encoding:'utf8',timeout:10000});
  assert.equal(result.status,0,result.stderr);
 });
-test('Windows llama selection rejects CUDA, daemon and traversal while retaining CPU variants, Vulkan and notices',()=>{
+test('Windows llama selection includes complete CUDA 12/13 while excluding drivers, daemon and traversal',()=>{
  const required=['llama-server.exe','ggml.dll','ggml-base.dll','ggml-cpu-x64.dll','libllama.dll','libllama-server-impl.dll'];
- const listing=[...required,'ggml-cpu-zen4.dll','libc++.dll','DLFCN_WIN32_COPYING','LLAMA_CPP_LICENSE','vulkan/ggml-vulkan.dll','vulkan/msvcp140.dll','cuda_v12/ggml-cuda.dll','cuda_v13/cublas64_13.dll','libllama-quantize-impl.dll','llama-quantize.exe','../evil.dll'].map(path=>'lib/ollama/'+path);
+ const cuda=[...[12,13].flatMap(version=>['ggml-cuda.dll',`cublas64_${version}.dll`,`cublasLt64_${version}.dll`,'msvcp140.dll','vcruntime140_1.dll'].map(name=>`cuda_v${version}/${name}`)),'cuda_v12/cudart64_12.dll'];
+ const listing=[...required,...cuda,'ggml-cpu-zen4.dll','libc++.dll','DLFCN_WIN32_COPYING','LLAMA_CPP_LICENSE','vulkan/ggml-vulkan.dll','vulkan/msvcp140.dll','cuda_v13/nvcuda.dll','cuda_v13/cublas64_12.dll','cuda_v12/../evil.dll','cuda_v13/extra.dll','libllama-quantize-impl.dll','llama-quantize.exe','../evil.dll'].map(path=>'lib/ollama/'+path);
  listing.push('ollama.exe');const result=llamaEntries(listing);
  assert(result.includes('lib/ollama/ggml-cpu-zen4.dll'));assert(result.includes('lib/ollama/vulkan/msvcp140.dll'));assert(result.includes('lib/ollama/DLFCN_WIN32_COPYING'));
- assert(!result.some(path=>/cuda|quantize|\.\.|^ollama/.test(path)));
+ for(const path of cuda)assert(result.includes('lib/ollama/'+path));
+ assert(!result.some(path=>/nvcuda|extra|quantize|\.\.|^ollama/.test(path)));assert(!result.includes('lib/ollama/cuda_v13/cublas64_12.dll'));
  assert.throws(()=>llamaEntries(listing.filter(path=>!path.endsWith('llama-server.exe'))),/missing/);
+ for(const path of cuda.filter(path=>!/msvcp|vcruntime/.test(path)))assert.throws(()=>llamaEntries(listing.filter(entry=>entry!=='lib/ollama/'+path)),/missing/);
 });
 test('source allowlist handles Windows separators and excludes local reports, weights and generated assets',()=>{
  for(const path of ['tests\\reports\\result.json','apps\\web\\public\\vad\\model.json','packages\\speech\\models\\private.json','.runtime\\data.json','docs/internal/record.md'])assert(!sourcePathAllowed(path),path);
@@ -100,4 +114,22 @@ test('PE dependency inspection catches omitted DLLs and does not accept a build-
  const path=join(folder,'server.exe');writeFileSync(path,pe('VCRUNTIME140.dll'));assert.deepEqual(peImports(path),['vcruntime140.dll']);
  assert.deepEqual(windowsDependencyReport(folder).unresolved,[{path:'server.exe',dll:'vcruntime140.dll'}]);
  writeFileSync(join(folder,'vcruntime140.dll'),pe('KERNEL32.dll'));assert.equal(windowsDependencyReport(folder).unresolved.length,0);
+ for(const backend of ['cuda_v12','cuda_v13','vulkan'])mkdirSync(join(folder,backend));
+ writeFileSync(join(folder,'cuda_v12/ggml-cuda.dll'),pe('NVCUDA.dll'));
+ writeFileSync(join(folder,'cuda_v13/ggml-cuda.dll'),pe('MSVCP140.dll'));
+ writeFileSync(join(folder,'vulkan/ggml-vulkan.dll'),pe('VULKAN-1.dll'));
+ writeFileSync(join(folder,'vulkan/msvcp140.dll'),pe('KERNEL32.dll'));
+ const isolated=windowsDependencyReport(folder);
+ assert.deepEqual(isolated.unresolved,[{path:'cuda_v13/ggml-cuda.dll',dll:'msvcp140.dll'}]);
+ assert.deepEqual(isolated.optionalDriver,[{path:'cuda_v12/ggml-cuda.dll',dll:'nvcuda.dll'},{path:'vulkan/ggml-vulkan.dll',dll:'vulkan-1.dll'}]);
+ writeFileSync(join(folder,'cuda_v13/msvcp140.dll'),pe('KERNEL32.dll'));assert.equal(windowsDependencyReport(folder).unresolved.length,0);
+});
+
+test('large installer and portable ZIP transport preserves bytes across twelve ordered bounded parts',t=>{
+ const root=mkdtempSync(join(tmpdir(),'Bambi large transfer ü '));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const bundle=join(root,'handoff.tar'),body=Buffer.alloc(11*1024**2+31);for(let i=0;i<body.length;i++)body[i]=i%251;
+ writeFileSync(bundle,body);const parts=splitBundle(bundle,join(root,'parts'),1024**2);
+ assert.equal(parts.length,12);assert(parts.every((part,index)=>part.index===index&&part.bytes<=1024**2));
+ assert.deepEqual(Buffer.concat(parts.map(part=>readFileSync(part.path))),body);
+ writeFileSync(bundle,Buffer.alloc(12*1024**2+1));assert.throws(()=>splitBundle(bundle,join(root,'overflow'),1024**2),/twelve bounded parts/);assert(!existsSync(join(root,'overflow')));
 });

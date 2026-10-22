@@ -28,7 +28,14 @@ const record=(name,detail={})=>{evidence.checks.push({name,...detail});console.l
 function nsis(path,args){
  // NSIS requires /D= and _?= last and unquoted, including paths with spaces.
  // Quote only argv[0]; pass the remaining command line verbatim without a shell.
- execFileSync(path,args,{argv0:'"'+path+'"',windowsVerbatimArguments:true,windowsHide:true,timeout:120000,stdio:'inherit'});
+ // AI packages contain several GiB of native CPU/GPU libraries. Keep a bounded
+ // deadline while allowing their extraction under ordinary antivirus scanning.
+ const timeout=runtime.phase==='alpha'?10*60*1000:120000;
+ const operation=path===installer?'install':'uninstall',started=performance.now();
+ console.log(`NSIS ${operation} started; deadline ${timeout/1000} seconds.`);
+ let passed=false;
+ try{execFileSync(path,args,{argv0:'"'+path+'"',windowsVerbatimArguments:true,windowsHide:true,timeout,stdio:'inherit'});passed=true;}
+ finally{(evidence.nsisOperations??=[]).push({operation,timeoutMs:timeout,durationMs:performance.now()-started,passed});}
 }
 let fixture,fixtureHash;
 try{

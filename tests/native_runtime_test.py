@@ -6,6 +6,7 @@
 import importlib.util
 import io
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -25,6 +26,18 @@ from accelerator_bridge import runtime_policy
 
 
 class NativeRuntimeTests(unittest.TestCase):
+    def test_9b_mtp_profiles_are_explicit_and_keep_baseline_decoding_separate(self):
+        root = Path(__file__).resolve().parents[1]
+        pins = json.loads((root / 'docs/comparison-models.json').read_text())
+        for alias in ['bambi-qwen35-9b-dark-roast-mtp-on:iq4_xs', 'bambi-qwen35-9b-defiant-fable-mtp-on:iq3_m']:
+            pin = next(pin for pin in pins if pin['alias'] == alias)
+            self.assertEqual(ownership.speculative_options(pin), ['--spec-type', 'draft-mtp', '--spec-draft-n-max', '3'])
+            self.assertEqual(ownership.model_contexts(pin), [16384, 24576])
+            baseline = {**pin, 'runtime': {'cache_type': 'f16'}}
+            self.assertEqual(ownership.speculative_options(baseline), [])
+            with self.assertRaisesRegex(RuntimeError, 'Unsupported pinned speculative'):
+                ownership.speculative_options({**pin, 'alias': 'unreviewed-model'})
+
     def test_anubis_context_cache_policy_and_registry(self):
         root = Path(__file__).resolve().parents[1]
         pin = json.loads((root / 'docs/anubis-model.json').read_text())
@@ -68,18 +81,30 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
             child.wait(timeout=5)
         self.directory.cleanup()
 
-    def launch(self, foreign=False, cwd=None, weight=None, ignore_term=False, cache_mib=None, mode='auto'):
+    def launch(self, foreign=False, cwd=None, weight=None, ignore_term=False, cache_mib=None, mode='auto', cache_type='f16', dflash=False, mtp=False, batch_size=None, micro_batch_size=None, declared_port=8080):
         with socket.socket() as reservation:
             reservation.bind(('127.0.0.1', 0))
             port = reservation.getsockname()[1]
         arguments = [str(self.binary if not foreign else Path('/proc/self/exe').resolve()), str(self.server),
                      '-m', str(weight or self.root / 'models/community/fixture.gguf'), '--alias', self.alias,
-                     '--host', '127.0.0.1', '--port', '8080', '--ctx-size', '8192', '--parallel', '1',
+                     '--host', '127.0.0.1', '--port', str(declared_port), '--ctx-size', '8192', '--parallel', '1',
                      '--ctx-checkpoints', '16', '--checkpoint-min-step', '512', '--cache-ram', str(ownership.prompt_cache_mib(self.alias) if cache_mib is None else cache_mib),
                      '--reasoning', 'off', '--device', 'none' if mode == 'cpu' else 'Vulkan0', '--gpu-layers', '0' if mode == 'cpu' else 'auto', '--fit', 'off' if mode == 'cpu' else 'on', '--fit-ctx', '8192', '--fit-target', '1024', '--flash-attn', 'on', '--jinja', '--no-webui',
-                     '--cache-type-k', 'f16', '--cache-type-v', 'f16', '--test-port', str(port)]
+                     '--cache-type-k', cache_type, '--cache-type-v', cache_type, '--test-port', str(port)]
         if ignore_term:
             arguments.append('--test-ignore-term')
+        if self.alias.startswith('bambi-qwen35-4b-hauhau'):
+            arguments += ['--verbosity', '4']
+        if 'ubatch_size' in self.pins[0].get('runtime', {}):
+            arguments += ['--ubatch-size', str(micro_batch_size or self.pins[0]['runtime']['ubatch_size'])]
+        elif micro_batch_size is not None:
+            arguments += ['--ubatch-size', str(micro_batch_size)]
+        if batch_size is not None:
+            arguments += ['--batch-size', str(batch_size)]
+        if mtp:
+            arguments += ownership.speculative_options(self.pins[0])
+        if dflash:
+            arguments += ['--spec-type', 'draft-dflash', '--spec-draft-model', str(self.root / 'models/speculative/draft.gguf'), '--spec-draft-n-max', '3']
         child = subprocess.Popen(arguments, cwd=cwd or self.root, stdin=subprocess.DEVNULL,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         self.children.append(child)
@@ -104,6 +129,190 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
             return module
         finally:
             os.chdir(previous)
+
+    def setup_mtp(self, enabled=True, bad_hash=False):
+        self.alias = 'bambi-qwen35-4b-hauhau-mtp-' + ('experiment' if enabled else 'baseline') + ':q4_k_m'
+        self.pins[0].update(alias=self.alias, sha256='0' * 64 if bad_hash else hashlib.sha256(b'fixture').hexdigest(), runtime={'cache_type': 'f16', 'ubatch_size': 128})
+        if enabled:
+            self.pins[0]['runtime']['speculative'] = {'type': 'draft-mtp', 'draft_tokens': 3}
+        (self.root / 'docs/community-models.json').write_text(json.dumps(self.pins))
+
+    def test_registry_enables_calibration_for_supported_catalog_models_only(self):
+        root = Path(__file__).resolve().parents[1]
+        catalog = json.loads((root / 'config/local-model-catalog.json').read_text())
+        expected = {pin['alias'] for pin in catalog if pin.get('desktopSupported') and pin.get('license') in ['apache-2.0', 'lfm1.0']}
+        actual = {pin['alias'] for pin in ownership.registry(root) if pin.get('calibration_supported')}
+        self.assertEqual(len(expected), 9)
+        self.assertEqual(actual, expected)
+
+    def test_alternate_port_requires_explicit_matching_expectation_and_exact_owner(self):
+        child, _ = self.launch(declared_port=18180)
+        self.assertIsNone(ownership.inspect_llama(self.root, child.pid, self.pins, self.profile))
+        entry = ownership.inspect_llama(self.root, child.pid, self.pins, self.profile, port=18180)
+        self.assertEqual(entry['port'], 18180)
+        self.assertEqual(entry['runtimeProfile'], self.profile)
+        with self.assertRaisesRegex(RuntimeError, 'ownership changed'):
+            ownership.stop_llama(self.root, entry, self.pins, self.profile)
+        self.assertIsNone(child.poll())
+        foreign, _ = self.launch(foreign=True, declared_port=18180)
+        self.assertIsNone(ownership.inspect_llama(self.root, foreign.pid, self.pins, self.profile, port=18180))
+        with patch.object(ownership, 'listening_pids', return_value=[child.pid]) as listeners:
+            self.assertEqual(ownership.recover_llama(self.root, self.pins, self.profile, port=18180)['pid'], child.pid)
+            listeners.assert_called_once_with(18180)
+        ownership.stop_llama(self.root, entry, self.pins, self.profile, seconds=.1, port=18180)
+        child.wait(timeout=5)
+        self.assertIsNone(foreign.poll())
+
+    def test_alternate_port_rejects_invalid_expectations_before_process_access(self):
+        for port in (True, 0, 80, 65536, '18180', 18180.0):
+            with self.subTest(port=port), self.assertRaises(ValueError):
+                ownership.inspect_llama(self.root, os.getpid(), self.pins, self.profile, port=port)
+
+    def test_calibrated_large_batches_keep_ownership_and_recovery_for_supported_profiles(self):
+        self.pins[0].update(calibration_supported=True, runtime={'ubatch_size': 128})
+        child, _ = self.launch(batch_size=1024, micro_batch_size=256)
+        entry = ownership.inspect_llama(self.root, child.pid, self.pins, self.profile)
+        self.assertEqual(entry['runtimeProfile'], self.profile)
+        self.assertEqual(entry['context'], 8192)  # Fixture context, never the real model endpoint.
+        self.pins[0]['calibration_supported'] = False
+        incompatible = ownership.inspect_llama(self.root, child.pid, self.pins, self.profile)
+        self.assertEqual(incompatible['runtimeProfile'], 'recovered-incompatible')
+        self.assertIsNone(child.poll())
+
+    def test_research_admission_never_reuses_or_stops_existing_native_owner(self):
+        child, _ = self.launch()
+        module = self.runner()
+        with patch.object(ownership, 'listening_pids', return_value=[child.pid]), \
+             patch.object(module, 'stop_llama') as stop, \
+             patch.object(module, 'request') as network, \
+             patch.object(sys, 'argv', ['runner', 'start', '--model', self.alias, '--context', '8192', '--require-empty-slot']):
+            with self.assertRaisesRegex(RuntimeError, 'empty inference slot'):
+                module.main()
+            stop.assert_not_called()
+            network.assert_not_called()
+        self.assertIsNone(child.poll())
+
+    def test_research_admission_never_unloads_an_ollama_model(self):
+        module = self.runner()
+        with patch.object(module, 'recover_llama', return_value=None), \
+             patch.object(module, 'request', return_value={'models': [{'name': 'public fixture'}]}) as network, \
+             patch.object(module.socket, 'socket') as socket_factory, \
+             patch.object(sys, 'argv', ['runner', 'start', '--model', self.alias, '--context', '8192', '--require-empty-slot']):
+            socket_factory.return_value.__enter__.return_value.connect_ex.return_value = 1
+            with self.assertRaisesRegex(RuntimeError, 'No Ollama model was unloaded'):
+                module.main()
+            network.assert_called_once_with('http://127.0.0.1:11434/api/ps')
+
+    def test_mtp_ownership_requires_its_pinned_speculation_and_matching_runner_is_reused(self):
+        self.setup_mtp()
+        child, port = self.launch(mtp=True)
+        entry = ownership.inspect_llama(self.root, child.pid, self.pins, self.profile)
+        self.assertTrue(entry['mtp'])
+        self.assertEqual(entry['dflash'], 'off')
+        self.assertEqual(entry['runtimeProfile'], self.profile)
+        self.assertNotIn('--spec-draft-model', entry['command'])
+        self.assertEqual(ownership.prompt_cache_mib(self.alias), 2048)
+        module = self.runner()
+        native_request = module.request
+        with patch.object(ownership, 'listening_pids', return_value=[child.pid]), \
+             patch.object(module, 'request', side_effect=lambda url, data=None: native_request(url.replace(':8080', ':' + str(port)), data)), \
+             patch.object(module, 'stop_llama') as stop, \
+             patch.object(sys, 'argv', ['runner', 'start', '--model', self.alias, '--context', '8192']), redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit) as done:
+                module.main()
+            self.assertEqual(done.exception.code, 0)
+            stop.assert_not_called()
+
+    def test_mtp_off_uses_the_same_asset_without_a_speculative_context(self):
+        self.setup_mtp(enabled=False)
+        child, _ = self.launch()
+        entry = ownership.inspect_llama(self.root, child.pid, self.pins, self.profile)
+        self.assertFalse(entry['mtp'])
+        self.assertEqual(entry['runtimeProfile'], self.profile)
+        self.assertEqual(ownership.speculative_options(self.pins[0]), [])
+
+    def test_bad_mtp_hash_and_missing_speculative_flags_cannot_reuse_or_stop_existing_ai(self):
+        self.setup_mtp(bad_hash=True)
+        child, _ = self.launch()
+        entry = ownership.inspect_llama(self.root, child.pid, self.pins, self.profile)
+        self.assertEqual(entry['runtimeProfile'], 'recovered-incompatible')
+        module = self.runner()
+        with patch.object(ownership, 'listening_pids', return_value=[child.pid]), \
+             patch.object(module, 'stop_llama') as stop, \
+             patch.object(sys, 'argv', ['runner', 'start', '--model', self.alias, '--context', '8192']):
+            with self.assertRaisesRegex(RuntimeError, 'checksum mismatch'):
+                module.main()
+            stop.assert_not_called()
+        self.assertIsNone(child.poll())
+
+    def setup_4b_draft(self, bad_hash=False):
+        self.alias = 'bambi-qwen35-4b-hauhau:q4_k_m'
+        self.pins[0]['alias'] = self.alias
+        (self.root / 'docs/community-models.json').write_text(json.dumps(self.pins))
+        (self.root / 'config').mkdir(exist_ok=True)
+        (self.root / 'models/speculative').mkdir(exist_ok=True)
+        payload = b'public draft fixture'
+        (self.root / 'models/speculative/draft.gguf').write_bytes(payload)
+        manifest = {'status': 'experiment-only', 'draft': {'file': 'draft.gguf', 'bytes': len(payload), 'sha256': '0' * 64 if bad_hash else hashlib.sha256(payload).hexdigest()}}
+        (self.root / 'config/speculative-4b-experiment.json').write_text(json.dumps(manifest))
+
+    def test_4b_dflash_process_is_owned_and_matching_profile_reuses_it(self):
+        self.setup_4b_draft()
+        child, port = self.launch(dflash=True)
+        entry = ownership.inspect_llama(self.root, child.pid, self.pins, self.profile)
+        self.assertEqual(entry['dflash'], 'on')
+        self.assertEqual(entry['runtimeProfile'], self.profile)
+        self.assertEqual(ownership.prompt_cache_mib(self.alias), 2048)
+        module = self.runner()
+        native_request = module.request
+        with patch.object(ownership, 'listening_pids', return_value=[child.pid]), \
+             patch.object(module, 'request', side_effect=lambda url, data=None: native_request(url.replace(':8080', ':' + str(port)), data)), \
+             patch.object(module, 'stop_llama') as stop, \
+             patch.object(sys, 'argv', ['runner', 'start', '--model', self.alias, '--context', '8192', '--dflash', 'on']), redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit) as done:
+                module.main()
+            self.assertEqual(done.exception.code, 0)
+            stop.assert_not_called()
+        self.assertIsNone(child.poll())
+
+    def test_missing_or_tampered_small_model_license_does_not_stop_existing_ai(self):
+        child, _ = self.launch()
+        target = 'bambi-lfm25-1.2b:Q4_K_M'
+        notice = b'public pinned license fixture'
+        pin = {'alias': target, 'file': 'fixture.gguf', 'bytes': 7,
+               'sha256': hashlib.sha256(b'fixture').hexdigest(),
+               'resource_plan': {'estimatedWorkingBytes': 1024**3, 'reserveBytes': 1024**3},
+               'licenseNotice': {'path': 'community/LICENSE.txt', 'bytes': len(notice), 'sha256': hashlib.sha256(notice).hexdigest()}}
+        self.pins.append(pin)
+        (self.root / 'docs/community-models.json').write_text(json.dumps(self.pins))
+        module = self.runner()
+        for payload in [None, b'x' * len(notice)]:
+            if payload is not None:
+                (self.root / 'models/community/LICENSE.txt').write_bytes(payload)
+            with patch.object(ownership, 'listening_pids', return_value=[child.pid]), patch.object(module, 'stop_llama') as stop, patch.object(sys, 'argv', ['runner', 'start', '--model', target, '--context', '8192']):
+                with self.assertRaisesRegex(RuntimeError, 'license notice'):
+                    module.main()
+                stop.assert_not_called()
+            self.assertIsNone(child.poll())
+
+    def test_bad_draft_hash_is_rejected_before_stopping_existing_ai(self):
+        self.setup_4b_draft(bad_hash=True)
+        child, _ = self.launch()
+        module = self.runner()
+        with patch.object(module, 'stop_llama') as stop, patch.object(sys, 'argv', ['runner', 'start', '--model', self.alias, '--context', '8192', '--dflash', 'on']):
+            with self.assertRaisesRegex(RuntimeError, 'checksum mismatch'):
+                module.main()
+            stop.assert_not_called()
+        self.assertIsNone(child.poll())
+
+    def test_dflash_for_other_model_is_rejected_before_stopping_existing_ai(self):
+        child, _ = self.launch()
+        module = self.runner()
+        with patch.object(module, 'stop_llama') as stop, patch.object(sys, 'argv', ['runner', 'start', '--model', self.alias, '--context', '8192', '--dflash', 'on']):
+            with self.assertRaisesRegex(RuntimeError, 'available for Hauhau 4B'):
+                module.main()
+            stop.assert_not_called()
+        self.assertIsNone(child.poll())
 
     def test_matching_project_process_is_verified_and_socket_owner_is_found(self):
         child, port = self.launch()
@@ -174,6 +383,35 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
         self.assertEqual(state['llama']['pid'], child.pid)
         self.assertTrue(state['llama']['recovered'])
         self.assertEqual(state['server'], {'pid': 42, 'root': 'preserved'})
+        self.assertIsNone(child.poll())
+
+    def test_explicit_hauhau_q8_is_owned_and_reused_but_default_still_means_f16(self):
+        self.alias = 'bambi-qwen35-9b-hauhau:q4_k_m'
+        self.pins[0]['alias'] = self.alias
+        (self.root / 'docs/community-models.json').write_text(json.dumps(self.pins))
+        child, port = self.launch(cache_type='q8_0')
+        entry = ownership.inspect_llama(self.root, child.pid, self.pins, self.profile)
+        self.assertEqual(entry['cacheType'], 'q8_0')
+        self.assertEqual(entry['runtimeProfile'], self.profile)
+        self.assertEqual(ownership.context_cache_type(self.pins[0], 8192), 'f16')
+        module = self.runner()
+        native_request = module.request
+        with patch.object(ownership, 'listening_pids', return_value=[child.pid]), \
+             patch.object(module, 'request', side_effect=lambda url, data=None: native_request(url.replace(':8080', ':' + str(port)), data)), \
+             patch.object(module, 'stop_llama') as stop, \
+             patch.object(sys, 'argv', ['runner', 'start', '--model', self.alias, '--context', '8192', '--kv-cache', 'q8_0']), redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit) as done:
+                module.main()
+            self.assertEqual(done.exception.code, 0)
+            stop.assert_not_called()
+        self.assertIsNone(child.poll())
+
+    def test_q8_for_other_model_is_rejected_before_stopping_its_runner(self):
+        child, _ = self.launch()
+        module = self.runner()
+        with patch.object(sys, 'argv', ['runner', 'start', '--model', self.alias, '--context', '8192', '--kv-cache', 'q8_0']):
+            with self.assertRaisesRegex(RuntimeError, 'available for Hauhau'):
+                module.main()
         self.assertIsNone(child.poll())
 
     def test_missing_requested_weights_do_not_stop_the_working_model(self):
@@ -357,7 +595,9 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
         root = Path(__file__).resolve().parents[1]
         probe = self.root / 'hung_probe.py'
         record = self.root / 'probe_pid'
-        probe.write_text("import os,signal,time\nfrom pathlib import Path\nPath(os.environ['FIXTURE_PID']).write_text(str(os.getpid()))\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\ntime.sleep(60)\n")
+        # Publish readiness atomically after the intended signal behavior is
+        # installed. Merely creating the file can expose an empty PID to readers.
+        probe.write_text("import os,signal,time\nfrom pathlib import Path\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\nrecord=Path(os.environ['FIXTURE_PID'])\nstaged=record.with_suffix('.tmp')\nstaged.write_text(str(os.getpid()))\nos.replace(staged,record)\ntime.sleep(60)\n")
         source = """import signal,sys
 from pathlib import Path
 from accelerator_bridge import runtime_policy

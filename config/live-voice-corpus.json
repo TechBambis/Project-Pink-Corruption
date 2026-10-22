@@ -1,0 +1,390 @@
+{
+  "version": 1,
+  "license": "AGPL-3.0-only",
+  "copyright": "2026 BambiOS",
+  "purpose": "Original public English screening/listening fixtures; no private conversations or voice preference claims.",
+  "nativeVocalEvents": {
+    "status": "not-applicable",
+    "reason": "No native event support claimed for these candidates. Do not read event tags literally."
+  },
+  "cases": [
+    {
+      "id": "unit-01",
+      "family": "unit",
+      "text": "Take your time.",
+      "words": 3,
+      "targetWords": 3
+    },
+    {
+      "id": "unit-02",
+      "family": "unit",
+      "text": "I understand what you need.",
+      "words": 5,
+      "targetWords": 5
+    },
+    {
+      "id": "unit-03",
+      "family": "unit",
+      "text": "We can decide what to do next together.",
+      "words": 8,
+      "targetWords": 8
+    },
+    {
+      "id": "unit-04",
+      "family": "unit",
+      "text": "Tell me what feels comfortable, and we will take the next step.",
+      "words": 12,
+      "targetWords": 12
+    },
+    {
+      "id": "unit-05",
+      "family": "unit",
+      "text": "There is no hurry to decide, so take a moment to think and tell me which option feels more comfortable.",
+      "words": 20,
+      "targetWords": 20
+    },
+    {
+      "id": "unit-06",
+      "family": "unit",
+      "text": "There is no hurry to decide, so take a moment to think and tell me which option feels more comfortable. We can work through each part together, keeping the explanation clear and leaving enough room for your questions and ideas.",
+      "words": 40,
+      "targetWords": 40
+    },
+    {
+      "id": "warm-01",
+      "family": "warm",
+      "text": "You have time to think, and I am listening.",
+      "words": 9
+    },
+    {
+      "id": "warm-02",
+      "family": "warm",
+      "text": "Let your shoulders settle while we find the words together.",
+      "words": 10
+    },
+    {
+      "id": "warm-03",
+      "family": "warm",
+      "text": "It is all right to ask me to slow down.",
+      "words": 10
+    },
+    {
+      "id": "warm-04",
+      "family": "warm",
+      "text": "I can explain that gently, one small step at a time.",
+      "words": 11
+    },
+    {
+      "id": "warm-05",
+      "family": "warm",
+      "text": "You can change your mind. Tell me what would feel better.",
+      "words": 11
+    },
+    {
+      "id": "warm-06",
+      "family": "warm",
+      "text": "We can leave a little room between these thoughts.",
+      "words": 9
+    },
+    {
+      "id": "warm-07",
+      "family": "warm",
+      "text": "That sounds difficult. I would like to understand what happened.",
+      "words": 10
+    },
+    {
+      "id": "warm-08",
+      "family": "warm",
+      "text": "You do not have to rush your answer. Take a comfortable moment.",
+      "words": 12
+    },
+    {
+      "id": "questions-01",
+      "family": "questions",
+      "text": "Would you like a shorter explanation?",
+      "words": 6
+    },
+    {
+      "id": "questions-02",
+      "family": "questions",
+      "text": "Which option feels more comfortable to you?",
+      "words": 7
+    },
+    {
+      "id": "questions-03",
+      "family": "questions",
+      "text": "How much time would you like to spend on this?",
+      "words": 10
+    },
+    {
+      "id": "questions-04",
+      "family": "questions",
+      "text": "Do you want me to explain the first part again?",
+      "words": 10
+    },
+    {
+      "id": "questions-05",
+      "family": "questions",
+      "text": "What would make the next step easier?",
+      "words": 7
+    },
+    {
+      "id": "questions-06",
+      "family": "questions",
+      "text": "Should we pause here, or keep talking?",
+      "words": 7
+    },
+    {
+      "id": "questions-07",
+      "family": "questions",
+      "text": "Are you asking about the sound, the timing, or both?",
+      "words": 10
+    },
+    {
+      "id": "questions-08",
+      "family": "questions",
+      "text": "What did you notice when the second sentence began?",
+      "words": 9
+    },
+    {
+      "id": "punctuation-01",
+      "family": "punctuation",
+      "text": "Wait, then listen; the next thought is a little different.",
+      "words": 10
+    },
+    {
+      "id": "punctuation-02",
+      "family": "punctuation",
+      "text": "One choice is simple: take a short break.",
+      "words": 8
+    },
+    {
+      "id": "punctuation-03",
+      "family": "punctuation",
+      "text": "I understand. We can change direction now.",
+      "words": 7
+    },
+    {
+      "id": "punctuation-04",
+      "family": "punctuation",
+      "text": "Well... let me think about that for a moment.",
+      "words": 9
+    },
+    {
+      "id": "punctuation-05",
+      "family": "punctuation",
+      "text": "You might prefer this... or perhaps the other option.",
+      "words": 9
+    },
+    {
+      "id": "punctuation-06",
+      "family": "punctuation",
+      "text": "The garden changes slowly: leaves appear, flowers open, and seeds fall.",
+      "words": 11
+    },
+    {
+      "id": "punctuation-07",
+      "family": "punctuation",
+      "text": "Yes! That gives us a useful place to begin.",
+      "words": 9
+    },
+    {
+      "id": "punctuation-08",
+      "family": "punctuation",
+      "text": "Keep the silver key nearby (the small one beside the glass).",
+      "words": 11
+    },
+    {
+      "id": "numbers-01",
+      "family": "numbers",
+      "text": "The appointment is at 10:30 tomorrow morning.",
+      "words": 7
+    },
+    {
+      "id": "numbers-02",
+      "family": "numbers",
+      "text": "The box costs $12.50, including the small label.",
+      "words": 8
+    },
+    {
+      "id": "numbers-03",
+      "family": "numbers",
+      "text": "Please count from 1 to 5, with a short pause.",
+      "words": 10
+    },
+    {
+      "id": "numbers-04",
+      "family": "numbers",
+      "text": "The walk is 2.5 miles and takes about 40 minutes.",
+      "words": 10
+    },
+    {
+      "id": "numbers-05",
+      "family": "numbers",
+      "text": "On October 9, 2026, we wrote down three choices.",
+      "words": 9
+    },
+    {
+      "id": "numbers-06",
+      "family": "numbers",
+      "text": "The temperature changed from 18 to 22 degrees.",
+      "words": 8
+    },
+    {
+      "id": "numbers-07",
+      "family": "numbers",
+      "text": "You can choose 3, 5, or 8 words for the first phrase.",
+      "words": 12
+    },
+    {
+      "id": "numbers-08",
+      "family": "numbers",
+      "text": "There are 120 pages, and we have read 35 so far.",
+      "words": 11
+    },
+    {
+      "id": "abbreviations-01",
+      "family": "abbreviations",
+      "text": "Dr. Green will arrive after lunch.",
+      "words": 6
+    },
+    {
+      "id": "abbreviations-02",
+      "family": "abbreviations",
+      "text": "Ms. Taylor left a note beside the door.",
+      "words": 8
+    },
+    {
+      "id": "abbreviations-03",
+      "family": "abbreviations",
+      "text": "The CPU is busy, but the audio should keep playing.",
+      "words": 10
+    },
+    {
+      "id": "abbreviations-04",
+      "family": "abbreviations",
+      "text": "The U.S. office opens at nine in the morning.",
+      "words": 9
+    },
+    {
+      "id": "abbreviations-05",
+      "family": "abbreviations",
+      "text": "Bring a pen, a notebook, etc., if they would help.",
+      "words": 10
+    },
+    {
+      "id": "abbreviations-06",
+      "family": "abbreviations",
+      "text": "We compared the two options, e.g., by listening to the same sentence.",
+      "words": 12
+    },
+    {
+      "id": "abbreviations-07",
+      "family": "abbreviations",
+      "text": "The meeting with Prof. Lane is on Friday.",
+      "words": 8
+    },
+    {
+      "id": "abbreviations-08",
+      "family": "abbreviations",
+      "text": "Please check the URL before opening the page.",
+      "words": 8
+    },
+    {
+      "id": "quotes-markdown-01",
+      "family": "quotes-markdown",
+      "text": "She said, \"Take your time,\" and waited for an answer.",
+      "words": 10
+    },
+    {
+      "id": "quotes-markdown-02",
+      "family": "quotes-markdown",
+      "text": "The word \"comfortable\" means different things to different people.",
+      "words": 9
+    },
+    {
+      "id": "quotes-markdown-03",
+      "family": "quotes-markdown",
+      "text": "**Listen carefully** to the beginning and the end of this sentence.",
+      "words": 11
+    },
+    {
+      "id": "quotes-markdown-04",
+      "family": "quotes-markdown",
+      "text": "The note reads: \"Keep the blue glass on the shelf.\"",
+      "words": 10
+    },
+    {
+      "id": "quotes-markdown-05",
+      "family": "quotes-markdown",
+      "text": "We can discuss `sampleRate` after the example finishes.",
+      "words": 8
+    },
+    {
+      "id": "quotes-markdown-06",
+      "family": "quotes-markdown",
+      "text": "First, listen to the raw sample. Second, compare the longer passage.",
+      "words": 11
+    },
+    {
+      "id": "quotes-markdown-07",
+      "family": "quotes-markdown",
+      "text": "He asked, \"Would you like to continue?\" She nodded.",
+      "words": 9
+    },
+    {
+      "id": "quotes-markdown-08",
+      "family": "quotes-markdown",
+      "text": "## A quiet moment\nWe can begin with one clear thought.",
+      "words": 11
+    },
+    {
+      "id": "continuity-01",
+      "family": "continuity",
+      "text": "I have heard the first part. Now tell me what happened next.",
+      "words": 12
+    },
+    {
+      "id": "continuity-02",
+      "family": "continuity",
+      "text": "We can start with a simple example. After that, the longer explanation will make more sense.",
+      "words": 16
+    },
+    {
+      "id": "continuity-03",
+      "family": "continuity",
+      "text": "The path bends beside the garden. Beyond the gate, a small wooden bench catches the afternoon light.",
+      "words": 17
+    },
+    {
+      "id": "continuity-04",
+      "family": "continuity",
+      "text": "It is fine to pause. I will leave room for you to answer, and then we can continue.",
+      "words": 18
+    },
+    {
+      "id": "continuity-05",
+      "family": "continuity",
+      "text": "That changes the plan. I will keep the part you liked and explain a gentler next step.",
+      "words": 17
+    },
+    {
+      "id": "continuity-06",
+      "family": "continuity",
+      "text": "The first option takes less time. The second gives you more room to experiment.",
+      "words": 14
+    },
+    {
+      "id": "continuity-07",
+      "family": "continuity",
+      "text": "Let me finish this thought, then we can return to your question. There is no need to decide immediately.",
+      "words": 19
+    },
+    {
+      "id": "continuity-08",
+      "family": "continuity",
+      "text": "We have several choices to explore. I will describe them clearly, and you can tell me which one interests you.",
+      "words": 20
+    }
+  ]
+}

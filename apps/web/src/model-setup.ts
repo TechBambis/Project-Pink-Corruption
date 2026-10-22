@@ -4,6 +4,7 @@ import type {ModelRecommendation} from '../../../packages/ai/recommendation';
 import {modelProgress,setupBusy,size,type SetupState} from './model-progress';
 import './model-setup.css';
 import {accessAllowed,requireAccess} from './privacy-state';
+import type {calibrationPerformance} from '../../../packages/runtime/model-calibration';
 
 type Catalog=ModelRecommendation&{desktop:boolean;downloadsAvailable:boolean;buildMode?:string;selectedModel?:string;setup:SetupState|null;speechBytes:number};
 type Source={id:string;label:string;path:string;kind:'file'|'folder';models:string[];limited:boolean;error?:string};
@@ -17,20 +18,24 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
  root.innerHTML=`<p class="model-loading" role="status">Reading your computer and model information…</p><p class="model-unavailable" role="note" hidden>This is the playback smoke build. It cannot download or run local AI. No model download has started. Use an AI-enabled alpha build for model setup; the player and Studio are available here.</p>
  <nav class="model-steps" aria-label="Local AI setup"><button type="button" data-step="0">1. Your computer</button><button type="button" data-step="1">2. Choose a model</button><button type="button" data-step="2">3. Install and start</button></nav>
  <p class="model-running" hidden></p>
- <section data-pane="0"><h2>What fits your computer?</h2><p class="model-intro">Check your hardware, choose a local model, then download only what you need. Your conversations stay on this computer.</p><dl class="model-hardware"></dl><p class="model-estimate"></p><button type="button" data-recheck>Check hardware again</button></section>
+ <section data-pane="0"><h2>What fits your computer?</h2><p class="model-intro">Check your hardware, choose a local model, then download only what you need. Your conversations stay on this computer. No model website or developer tools are needed: this app downloads the AI, Bambi Mix voice and English microphone files together.</p><button type="button" data-quick-setup>Get AI &amp; voice models</button><dl class="model-hardware"></dl><p class="model-estimate"></p><button type="button" data-recheck>Check hardware again</button></section>
  <section data-pane="1" hidden><h2>Choose your local AI</h2><p class="model-summary"></p><div class="model-list" role="radiogroup" aria-label="Local AI models"></div><p class="model-note">Memory estimates include context and leave room for voice and the app. They do not predict response speed. Models requiring another setup remain listed for comparison.</p></section>
  <section data-pane="2" hidden><h2>Install and start</h2><p class="model-download-note"></p><label class="model-experimental" hidden><input type="checkbox"> I want to try this experimental model. It has not passed the reference model’s app tests.</label>
+ <label class="model-risk" hidden><input type="checkbox"> Try anyway if memory is tight. I accept that this model may be slow, fail, or make my PC unresponsive.</label>
  <div class="model-status"><strong class="model-progress" role="status" aria-live="polite"></strong><progress max="1" value="0" aria-label="Model setup progress"></progress><p class="model-progress-detail"></p></div>
  <p class="model-connection" role="status" hidden></p><button type="button" data-status-retry hidden>Check status now</button>
  <div class="model-actions"><button type="button" data-download>Download and verify</button><button type="button" data-prepare hidden>Start local AI</button><button type="button" data-cancel disabled>Cancel setup</button><button type="button" data-use hidden>Use installed model</button><button type="button" data-access>Privacy &amp; access</button></div>
+ <section class="model-calibration" hidden><h3>Find the best settings for this PC</h3><p>Compare CPU and available GPU acceleration with your selected companion instructions, from compact models to the supported 35B model. The first response can take several minutes. Results stay on this computer.</p><label><input type="checkbox" data-calibration-speech checked> Also test local voice generation</label><div class="model-actions"><button type="button" data-calibrate>Test performance</button><button type="button" data-calibration-cancel disabled>Cancel performance test</button></div><p data-calibration-status role="status" aria-live="polite"></p><fieldset class="model-comparison"><legend>Compare models on this PC</legend><p>Choose existing catalog files. Experimental entries require your consent; selecting one confirms its trial. Files are verified before testing. No downloads start, and your original model selection is restored.</p><div data-comparison-models></div><button type="button" data-compare>Compare chosen models</button><div data-comparison-results aria-live="polite"></div></fieldset><p class="model-note">The test uses synthetic conversations and does not save chat history or play audio. Voice results measure audio generation; microphone, audible playback and model quality still need a conversation test.</p></section>
  <section class="model-local" hidden><h3>Already have a model?</h3><p class="model-note">Choose a GGUF file or add a model folder, including one from another repository. Matching catalog files are copied into the app and checked before use. Your originals stay untouched. Saved folders can be checked again later.</p><div class="model-actions"><button type="button" data-file>Choose a model file</button><button type="button" data-folder>Add a model folder</button><button type="button" data-copy>Import complete model and voice folder</button></div><div class="model-sources"></div><p class="model-source-error" role="status" hidden></p></section>
  <p class="model-note">Downloads start only when you choose them. Verified files are kept for retry. You can leave setup and keep using the player; an active download continues.</p></section>
- <p class="model-error" role="alert" hidden></p><div class="model-wizard-actions"><button type="button" data-back disabled>Back</button><button type="button" data-next>Choose a model</button><button type="button" data-finish>Set up later</button></div>`;
+ <p class="model-blocked" role="status" hidden></p><p class="model-error" role="alert" hidden></p><div class="model-wizard-actions"><button type="button" data-back disabled>Back</button><button type="button" data-next>Choose a model</button><button type="button" data-finish>Set up later</button></div>`;
  for(const button of root.querySelectorAll<HTMLButtonElement>('button'))button.disabled=true;
  const el=<T extends HTMLElement=HTMLElement>(selector:string)=>root.querySelector<T>(selector)!;
  for(const [selector,id] of [['[data-download]','setup-install'],['[data-copy]','setup-copy'],['[data-prepare]','setup-prepare'],['[data-cancel]','setup-cancel'],['progress','setup-bar'],['.model-progress','setup-progress']])el(selector).id=id;
  let data!:Catalog,selected='',step=0,state:SetupState|null=null,requesting=false,initializing=true,requestLabel='',stopped=false,polling=false,statusLost=false;
  let sources:Source[]=[],speed=0,lastSample:{bytes:number;at:number;model:string;operation?:string;asset?:string;stage?:string}|undefined;
+ let measured:ReturnType<typeof calibrationPerformance>=null,measurementState='',comparisonRenderKey='';
+ const comparisonChoices=new Map<string,{selected:boolean;risk:boolean}>();let savedComparisons:NonNullable<SetupState['calibration']>['comparisons']=[];let savedProfiles:NonNullable<SetupState['calibration']>['profiles']=[];
  const bridge=(window as any).bambiDesktop;
  function error(value:unknown){el('.model-error').textContent=String(value);el('.model-error').hidden=false;}
  function pane(index:number){
@@ -43,14 +48,18 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
   if(!data||stopped)return;
   el('.model-loading').hidden=!initializing;
   for(const button of root.querySelectorAll<HTMLButtonElement>('[data-step],[data-next],[data-access]'))button.disabled=false;el<HTMLButtonElement>('[data-back]').disabled=step===0;
-  const model=chosen(),busy=initializing||requesting||setupBusy(state),experimental=model?.qualification==='experimental',confirmed=!experimental||el<HTMLInputElement>('.model-experimental input').checked;
-  const possible=!!model?.canDownload&&model.promptCompatible!==false&&model.memoryFit==='fits'&&model.runtime!=='platform-pending'&&data.downloadsAvailable;
+  const testing=state?.calibration?.phase==='running',model=chosen(),busy=initializing||requesting||setupBusy(state)||testing,experimental=model?.qualification==='experimental',confirmed=!experimental||el<HTMLInputElement>('.model-experimental input').checked;
+  const trialEligible=data.desktop&&data.downloadsAvailable&&!!model?.canDownload&&model.promptCompatible!==false&&model.estimatedWorkingBytes!==null&&model.runtime!=='platform-pending';
+  const memoryAllowed=model?.memoryFit==='fits'||(trialEligible&&el<HTMLInputElement>('.model-risk input').checked);
+  const possible=!!model?.canDownload&&model.promptCompatible!==false&&memoryAllowed&&model.runtime!=='platform-pending'&&data.downloadsAvailable;
   const current=state?.model===selected?state:null;
-  const installedPossible=!!model?.installed&&model.promptCompatible!==false&&model.memoryFit==='fits'&&model.runtime!=='platform-pending';
-  el('.model-unavailable').hidden=data.buildMode!=='smoke';el('.model-experimental').hidden=!experimental;
+  const blocked=initializing?'Reading setup information…':requesting?'Waiting for the current request…':setupBusy(state)?'Setup is already working. Wait or cancel it before starting another operation.':statusLost?'Waiting for live setup status. Choose Check status now to retry.':!data.downloadsAvailable?'Local AI setup is unavailable in this build.':!model?'Choose a model first.':!model.canDownload?'This model needs another setup and cannot be installed in this desktop build.':model.promptCompatible===false?'This model cannot hold the full companion instructions. Choose a supported model.':!memoryAllowed?'The selected model exceeds this computer’s memory budget. Choose a smaller model, or tick Try anyway in Install and start to attempt it at your own risk.':model.runtime==='platform-pending'?'Local AI is unavailable on this platform in this build.':!confirmed?'Tick the experimental model confirmation to continue.':!accessAllowed('modelDownloads')&&!current?.verified?'Downloads are off. Open Privacy & access to enable Model downloads, or import existing files.':'';
+  el('.model-blocked').hidden=!blocked;el('.model-blocked').textContent=blocked;
+  const installedPossible=!!model?.installed&&model.promptCompatible!==false&&memoryAllowed&&model.runtime!=='platform-pending';
+  el('.model-unavailable').hidden=data.buildMode!=='smoke';el('.model-experimental').hidden=!experimental;el('.model-risk').hidden=!trialEligible;
   const total=(model?.downloadBytes??model?.weightsBytes??0)+(data.speechBytes??0);
   el('.model-download-note').textContent=model?`${model.label}. Model ${size(model.weightsBytes??0)}${data.speechBytes?` + voice and English recognition ${size(data.speechBytes)}`:''}. Total ${size(total)}. ${model.memoryFit==='fits'?'Setup checks available disk space.':'This model does not fit the conservative memory estimate.'} ${!model.canDownload?'This model requires another setup.':''} ${model.promptCompatible===false?'Its context cannot hold the full companion prompt.':''}`:'No model selected. Choose a model or continue with the player.';
-  const download=el<HTMLButtonElement>('[data-download]');download.disabled=busy||statusLost||!possible||!confirmed||!accessAllowed('modelDownloads')||!!current?.verified;
+  const download=el<HTMLButtonElement>('[data-download]');download.disabled=busy||statusLost||!possible||!confirmed||!!current?.verified;
   download.textContent=current?.phase==='partial'?`Download remaining ${size(current.remainingBytes??0)}`:current&&['failed','cancelled'].includes(current.phase)?'Retry download':'Download and verify';
   const prepare=el<HTMLButtonElement>('[data-prepare]');prepare.hidden=!data.desktop||!data.downloadsAvailable;prepare.disabled=busy||statusLost||!current?.verified||!confirmed||!possible||current.phase==='ready';
   const use=el<HTMLButtonElement>('[data-use]');use.hidden=data.desktop||!model?.installed;use.disabled=busy||!installedPossible||!confirmed;
@@ -72,8 +81,53 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
   el('.model-status').dataset.phase=current?.phase??'not-installed';
   el('.model-connection').hidden=!statusLost;el('.model-connection').textContent='Live status is temporarily unavailable. The last confirmed progress is shown; a download may still be running. Reconnecting automatically…';el('[data-status-retry]').hidden=!statusLost;
   el('.model-running').hidden=!setupBusy(state)||step===2;el('.model-running').textContent=progress.title+'. Open Install and start to see progress.';
+  el<HTMLButtonElement>('[data-quick-setup]').disabled=busy||statusLost||!data.downloadsAvailable||!model;
   for(const input of root.querySelectorAll<HTMLInputElement>('.model-list input'))input.disabled=busy;
-  el('.model-experimental input').toggleAttribute('disabled',busy);
+  el('.model-experimental input').toggleAttribute('disabled',busy);el('.model-risk input').toggleAttribute('disabled',busy);
+  const testable=!!model?.canDownload&&model.promptCompatible!==false&&model.runtime!=='platform-pending'&&data.buildMode!=='smoke';
+  el('.model-calibration').hidden=!testable;el<HTMLButtonElement>('[data-calibrate]').disabled=busy||statusLost||!(current?.verified||model?.installed)||!confirmed||!memoryAllowed;
+  renderComparison(busy,!!current?.verified||!!model?.installed,confirmed&&memoryAllowed);
+  el<HTMLButtonElement>('[data-calibration-cancel]').disabled=!testing;el<HTMLInputElement>('[data-calibration-speech]').disabled=busy;
+  const calibration=state?.calibration,details=el('[data-calibration-status]');
+  if(testing)details.textContent=`${calibration!.modelCount&&calibration!.modelCount>1?`Model ${calibration!.modelIndex} of ${calibration!.modelCount} · ${data.alternatives.find(item=>item.id===calibration!.model)?.label??calibration!.model} · `:''}${calibration!.configuration?`Testing configuration ${calibration!.configuration} of ${calibration!.configurations} · `:''}${calibration!.turn?`response ${calibration!.turn} of 4 · `:''}${calibration!.stage.replaceAll('-',' ')}. You can cancel at any time.`;
+  else if(calibration&&(calibration.model===selected||(calibration.modelCount??0)>1)&&['failed','cancelled'].includes(calibration.phase))details.textContent=calibration.error??'Performance test stopped. Verified model files are kept.';
+  else if(measured&&state?.model===selected)details.textContent=`Measured on this PC: ${measured.verdict} · ${measured.backend}${measured.device?' · '+measured.device:''}. Typical follow-up first text ${(measured.firstTextMs/1000).toFixed(1)} s${measured.firstAudioMs===null?'':` · first generated audio ${(measured.firstAudioMs/1000).toFixed(1)} s`}${measured.tokensPerSecond===null?'':` · ${measured.tokensPerSecond.toFixed(1)} tokens/s`}${measured.coldFirstTextMs==null?'':`. First response after loading ${(measured.coldFirstTextMs/1000).toFixed(1)} s`}. Measured settings are saved for this model and companion prompt. This does not assess response quality.`;
+  else details.textContent='Install and select this model, then run the test. Your current companion settings are used.';
+ }
+ function renderComparison(busy:boolean,currentAvailable:boolean,currentAllowed:boolean){
+  const renderKey=JSON.stringify([selected,busy,statusLost,currentAvailable,currentAllowed,el<HTMLInputElement>('.model-risk input').checked,[...comparisonChoices],data.alternatives.map(item=>[item.id,item.label,item.canDownload,item.promptCompatible,item.runtime,item.memoryFit,item.installed,item.availableForComparison]),savedComparisons,state?.calibration?.comparisons,(state?.calibration?.profiles??savedProfiles)?.map(item=>[item.model,item.createdAt,item.winner])]);if(renderKey===comparisonRenderKey)return;comparisonRenderKey=renderKey;
+  const host=el('[data-comparison-models]');host.replaceChildren();
+  for(const model of data.alternatives.filter(item=>item.canDownload&&item.promptCompatible!==false&&item.runtime!=='platform-pending')){
+   const available=!!model.availableForComparison||!!model.installed||model.id===selected&&currentAvailable;
+   const choice=comparisonChoices.get(model.id)??{selected:model.id===selected&&available,risk:false};comparisonChoices.set(model.id,choice);
+   const row=document.createElement('div');row.className='model-comparison-choice';
+   const label=document.createElement('label'),checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.dataset.compareModel=model.id;checkbox.checked=choice.selected;checkbox.disabled=busy||!available;
+   label.append(checkbox,document.createTextNode(' '+model.label+(model.qualification==='experimental'?' · experimental trial':' · reference-tested')+(available?'':' · install files first')));
+   checkbox.onchange=()=>{choice.selected=checkbox.checked;showState();};row.append(label);
+   if(available&&model.memoryFit!=='fits'){
+    const riskLabel=document.createElement('label'),risk=document.createElement('input');risk.type='checkbox';risk.dataset.compareRisk=model.id;risk.checked=choice.risk;risk.disabled=busy;
+    riskLabel.append(risk,document.createTextNode(' Try this model despite tight memory. It may fail or make this PC unresponsive.'));risk.onchange=()=>{choice.risk=risk.checked;showState();};row.append(riskLabel);
+   }
+   if(available&&!model.installed&&model.id!==selected){const note=document.createElement('small');note.textContent='Files found; verification required.';row.append(note);}
+   host.append(row);
+  }
+  const checked=data.alternatives.filter(item=>comparisonChoices.get(item.id)?.selected&&(item.availableForComparison||item.installed||item.id===selected&&currentAvailable));
+  el<HTMLButtonElement>('[data-compare]').disabled=busy||statusLost||!currentAllowed||!checked.length||checked.some(item=>item.memoryFit!=='fits'&&!comparisonChoices.get(item.id)?.risk&&!(item.id===selected&&el<HTMLInputElement>('.model-risk input').checked));
+  const results=el('[data-comparison-results]');results.replaceChildren();
+  const comparisons=new Map((savedComparisons??[]).map(result=>[result.model,result]));for(const result of state?.calibration?.comparisons??[])comparisons.set(result.model,result);
+  for(const result of comparisons.values()){
+   const row=document.createElement('p'),title=document.createElement('strong');title.textContent=(data.alternatives.find(item=>item.id===result.model)?.label??result.model)+': ';row.append(title);
+   const performance=result.performance;row.append(document.createTextNode(performance?`${performance.verdict} · ${performance.backend==='cuda'?'CUDA'+(performance.cudaVersion?' '+performance.cudaVersion:''):performance.backend}${performance.device?' · '+performance.device:''} · follow-up first text ${(performance.firstTextMs/1000).toFixed(1)} s${performance.tokensPerSecond===null?'':` · ${performance.tokensPerSecond.toFixed(1)} tokens/s`}${performance.firstAudioMs===null?'':` · first generated audio ${(performance.firstAudioMs/1000).toFixed(1)} s`}. Quality requires your own conversation test.`:result.error??'No configuration passed.'));results.append(row);
+   const profile=state?.calibration?.profiles?.find(item=>item.model===result.model)??savedProfiles?.find(item=>item.model===result.model);
+   if(profile){const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='CPU and GPU configurations';details.append(summary);
+    const median=(values:number[])=>{const sorted=[...values].sort((a,b)=>a-b),middle=Math.floor(sorted.length/2);return sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;};
+    for(const [index,configuration] of profile.results.entries()){
+     const line=document.createElement('p'),warm=configuration.samples.filter(sample=>!sample.cold),rates=warm.flatMap(sample=>sample.tokensPerSecond===null?[]:[sample.tokensPerSecond]);
+     line.textContent=`${index+1}. ${configuration.backend==='cuda'?'CUDA'+(configuration.cudaVersion?' '+configuration.cudaVersion:''):configuration.backend}${configuration.device?' · '+configuration.device:''} · ${configuration.offloadedLayers?`${configuration.offloadedLayers} layers on GPU · `:''}${configuration.tuning.threads} threads · batch ${configuration.tuning.batchSize}/${configuration.tuning.microBatchSize}${profile.winner===index?' · repeat passed, saved':''}: ${configuration.error??(warm.length===3?`first text ${(median(warm.map(sample=>sample.firstTextMs))/1000).toFixed(1)} s${rates.length===3?` · ${median(rates).toFixed(1)} tokens/s`:''}`:'Incomplete measurement')}`;
+     details.append(line);
+    }results.append(details);
+   }
+  }
  }
  function renderSources(){
   const host=el('.model-sources');host.replaceChildren();
@@ -82,7 +136,7 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
    description.textContent=source.error??(source.models.length?'Matching catalog files found. Files are verified when imported.':'No supported catalog file found. Select the exact file or a more specific folder. Other models and quantizations need their own runtime profile.');if(source.limited)description.textContent+=' Search is limited to three nested levels and 5,000 entries.';
    info.append(title,path,description);const actions=document.createElement('div');actions.className='model-source-actions';
    for(const id of source.models){const candidate=data.alternatives.find(model=>model.id===id);if(!candidate)continue;const button=document.createElement('button');button.type='button';button.textContent='Import '+candidate.label;button.dataset.sourceModel=id;
-    button.onclick=()=>{const confirmed=selected===id&&el<HTMLInputElement>('.model-experimental input').checked;if(selected!==id){selected=id;el<HTMLInputElement>('.model-experimental input').checked=false;render();}pane(2);
+    button.onclick=()=>{const confirmed=selected===id&&el<HTMLInputElement>('.model-experimental input').checked;if(selected!==id){selected=id;el<HTMLInputElement>('.model-experimental input').checked=false;el<HTMLInputElement>('.model-risk input').checked=state?.model===id&&state.tryAnyway===true;render();}pane(2);
      if(candidate.qualification==='experimental'&&!confirmed){error('Confirm this experimental model, then choose Import again.');return;}
      void importSource(source.id,id);
     };actions.append(button);
@@ -99,14 +153,18 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
  }
  function render(){
   const hardware=data.hardware,description=el('.model-hardware');description.replaceChildren();
-  for(const [label,value] of [['System',`${hardware.platform} ${hardware.architecture}`],['Processor',`${hardware.cpu} (${hardware.cpuThreads} threads)`],['Memory',`${gib(hardware.ramTotal)} total · ${gib(hardware.ramAvailable)} available`],['Graphics',hardware.gpus.map(gpu=>`${gpu.name}${gpu.memoryTotal?' ('+gib(gpu.memoryTotal)+')':' (memory unknown)'}`).join(', ')||'Graphics information unavailable; this does not mean you have no GPU'],['Reserved for other work',gib(data.reserveBytes)]]){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;description.append(dt,dd);}
+  for(const [label,value] of [['System',`${hardware.platform} ${hardware.architecture}`],['Processor',`${hardware.cpu} (${hardware.cpuThreads} threads)`],['Memory',`${gib(hardware.ramTotal)} total · ${gib(hardware.ramAvailable)} available`],['Graphics',hardware.gpus.map(gpu=>`${gpu.name} (${gpu.memoryTotal!==null?gib(gpu.memoryTotal)+' dedicated':'dedicated memory unknown'}${gpu.sharedMemoryTotal?'; '+gib(gpu.sharedMemoryTotal)+' shared RAM limit':''})`).join(', ')||'Graphics information unavailable; this does not mean you have no GPU'],['Reserved for other work',gib(data.reserveBytes)]]){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value;description.append(dt,dd);}
+  const runtime=state?.runtime;
+  const processing=document.createElement('dt'),status=document.createElement('dd');processing.textContent='AI processing';
+  status.textContent=!runtime?.ready?'Not verified yet':runtime.backend==='cpu'?'CPU':runtime.backend==='unverified'?'Ready · GPU use has not been verified':runtime.backend?`${runtime.deviceName??runtime.backend}${runtime.offloadedLayers!==undefined&&runtime.totalLayers?` · ${runtime.offloadedLayers}/${runtime.totalLayers} model layers on GPU`:''}`:'Not verified yet';
+  description.append(processing,status);
   el('.model-estimate').textContent=data.warnings.join(' ');
   el('.model-summary').textContent=data.recommended?`Recommended for this computer: ${data.recommended.label}.`:'No supported model fits the conservative estimate. You can continue with the player and Studio.';
   const list=el('.model-list');list.replaceChildren();
   const rows=[...data.alternatives].sort((a,b)=>Number(b.id===data.recommended?.id)-Number(a.id===data.recommended?.id)||b.priority-a.priority);
   for(const model of rows){
    const label=document.createElement('label');label.className='model-choice';label.dataset.recommended=String(model.id===data.recommended?.id);
-   const radio=document.createElement('input');radio.type='radio';radio.name='model-choice';radio.value=model.id;radio.checked=model.id===selected;radio.onchange=()=>{selected=model.id;speed=0;lastSample=undefined;el<HTMLInputElement>('.model-experimental input').checked=false;el('.model-error').hidden=true;renderSources();};
+   const radio=document.createElement('input');radio.type='radio';radio.name='model-choice';radio.value=model.id;radio.checked=model.id===selected;radio.onchange=()=>{selected=model.id;el<HTMLInputElement>('.model-risk input').checked=state?.model===model.id&&state.tryAnyway===true;speed=0;lastSample=undefined;el<HTMLInputElement>('.model-experimental input').checked=false;el('.model-error').hidden=true;renderSources();};
    const body=document.createElement('span'),title=document.createElement('strong'),status=document.createElement('span'),details=document.createElement('span'),note=document.createElement('span');title.textContent=model.label;
    status.className='model-badge';status.textContent=[model.id===data.recommended?.id?'Recommended':'',model.installed?'Installed':'',model.qualification==='experimental'?'Experimental':model.qualification==='development-only'?'Other setup required':model.qualification==='reference-tested'?'Reference-tested model':'Local backend model'].filter(Boolean).join(' · ');
    details.textContent=`Download ${model.weightsBytes===null?'unknown':size(model.weightsBytes)} · estimated working memory ${gib(model.estimatedWorkingBytes)} · ${model.memoryFit==='fits'?'Fits estimate':model.memoryFit==='too-large'?'Too large':model.memoryFit==='tight'?'Memory is tight':'Size unknown'}${model.execution==='unified-memory'?' · shared Apple memory':model.execution==='gpu'?' · possible GPU fit':' · CPU or partial GPU'}`;
@@ -114,14 +172,16 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
   }
   renderSources();showState();
  }
- async function reload(refresh=false){const result:Catalog=await json('/api/models/catalog'+(refresh?'?refresh=1':''),undefined,20000);if(stopped)return;data=result;state=data.setup;selected=selected||((data.desktop||setupBusy(state)||state?.verified)?state?.model:undefined)||data.recommended?.id||data.selectedModel||state?.model||'';render();}
+ async function reload(refresh=false){measurementState='';const result:Catalog=await json('/api/models/catalog'+(refresh?'?refresh=1':''),undefined,20000);if(stopped)return;const first=!selected;data=result;state=data.setup;selected=selected||((setupBusy(state)||state?.verified||state?.phase==='partial'||state?.tryAnyway)?state?.model:undefined)||data.recommended?.id||data.selectedModel||state?.model||'';if(first)el<HTMLInputElement>('.model-risk input').checked=state?.model===selected&&state.tryAnyway===true;render();}
  async function action(label:string,callback:()=>Promise<void>){if(requesting)return;requesting=true;requestLabel=label;el('.model-error').hidden=true;showState();try{await callback();}catch(failure){error(failure);}finally{requesting=false;showState();}}
- async function select(){await json('/api/models/select',{model:selected,experimental:el<HTMLInputElement>('.model-experimental input').checked},180000);options.selected?.(selected);}
+ async function select(){await json('/api/models/select',{model:selected,experimental:el<HTMLInputElement>('.model-experimental input').checked,tryAnyway:data.desktop&&el<HTMLInputElement>('.model-risk input').checked},180000);options.selected?.(selected);}
  async function readState(){
   const next:SetupState|null=await json('/api/models/setup');if(stopped)return;
   const now=Date.now();if(next?.phase==='downloading'&&next.stage==='transferring'&&lastSample?.model===next.model&&lastSample.operation===next.operation&&lastSample.asset===next.asset&&lastSample.stage==='transferring'&&(next.assetCompleted??next.completed)>=lastSample.bytes){const measured=((next.assetCompleted??next.completed)-lastSample.bytes)/Math.max(.001,(now-lastSample.at)/1000);speed=speed?speed*.7+measured*.3:measured;}else speed=0;
   lastSample=next?{bytes:next.assetCompleted??next.completed,at:now,model:next.model,operation:next.operation,asset:next.asset,stage:next.stage}:undefined;
   const previous=state?.phase;state=next;statusLost=false;
+  const measurementKey=JSON.stringify([selected,next?.calibration?.phase,next?.calibration?.profile?.createdAt]);
+  if((next?.calibration?.phase==='complete'||next?.calibration?.phase==='idle')&&measurementKey!==measurementState)try{const result=await json('/api/models/calibration');measured=result.measured;savedComparisons=result.savedComparisons??savedComparisons;savedProfiles=result.savedProfiles??savedProfiles;measurementState=measurementKey;}catch{}
   showState();if(next&&next.phase!==previous&&['installed','partial','ready'].includes(next.phase))await reload();
  }
  el('[data-access]').onclick=()=>window.dispatchEvent(new Event('bambi-open-privacy'));
@@ -129,17 +189,25 @@ export async function initModelSetup(root:HTMLElement,options:{finish?:()=>void;
  el('[data-use]').onclick=()=>void action('Selecting your installed model',async()=>{await select();await reload();});
  el('[data-copy]').onclick=()=>void action('Checking your model folder',async()=>{await select();const result=await bridge.copyModelData();if(result.error)throw Error(result.error);await readState();});
  for(const [button,kind] of [['[data-file]','file'],['[data-folder]','folder']])el(button).onclick=()=>void action('Choose an existing model location',async()=>{const result=await bridge.chooseModelSource(kind);if(result.cancelled)return;if(result.error)throw Error(result.error);sources=result.sources;renderSources();});
- el('[data-prepare]').onclick=()=>void action('Starting local AI',async()=>{await json('/api/desktop/setup/prepare',{},180000);await json('/api/models/onboarding',{});await reload();options.prepared?.();});
+ el('[data-prepare]').onclick=()=>void action('Starting local AI',async()=>{await select();await json('/api/desktop/setup/prepare',{},180000);await json('/api/models/onboarding',{});await reload();options.prepared?.();});
  el('[data-cancel]').onclick=()=>{el<HTMLButtonElement>('[data-cancel]').disabled=true;void json('/api/models/setup/cancel',{}).then(readState).catch(error);};
+ el('[data-calibrate]').onclick=()=>void action('Starting the performance test',async()=>{await select();await json('/api/models/calibration',{model:selected,speech:el<HTMLInputElement>('[data-calibration-speech]').checked},180000);measured=null;await readState();});
+ el('[data-compare]').onclick=()=>void action('Starting the model comparison',async()=>{
+  const checked=data.alternatives.filter(item=>comparisonChoices.get(item.id)?.selected&&(item.availableForComparison||item.installed||item.id===selected&&(state?.model===selected&&state.verified))).map(item=>item.id);
+  const experimental=checked.filter(id=>data.alternatives.find(item=>item.id===id)?.qualification==='experimental');
+  const tryAnyway=checked.filter(id=>comparisonChoices.get(id)?.risk||id===selected&&el<HTMLInputElement>('.model-risk input').checked);
+  await select();await json('/api/models/calibration',{model:selected,models:checked,experimental,tryAnyway,speech:el<HTMLInputElement>('[data-calibration-speech]').checked},180000);measured=null;await readState();
+ });
+ el('[data-calibration-cancel]').onclick=()=>void json('/api/models/calibration/cancel',{}).then(readState).catch(error);
  el('[data-status-retry]').onclick=()=>void readState().catch(()=>{statusLost=true;showState();});
- el('.model-experimental input').addEventListener('change',showState);
+ el('.model-experimental input').addEventListener('change',showState);el('.model-risk input').addEventListener('change',showState);
  const accessChanged=()=>showState();window.addEventListener('bambi-access-changed',accessChanged);
  el('[data-recheck]').onclick=()=>void action('Checking your computer',async()=>{await reload(true);await loadSources();});
+ el('[data-quick-setup]').onclick=()=>pane(2);
  el('[data-back]').onclick=()=>pane(Math.max(0,step-1));el('[data-next]').onclick=()=>pane(Math.min(2,step+1));
  for(const button of root.querySelectorAll<HTMLElement>('[data-step]'))button.onclick=()=>pane(Number(button.dataset.step));
  el('[data-finish]').onclick=()=>void action('Saving your setup choice',async()=>{await json('/api/models/onboarding',{});options.finish?.();});
- try{await reload();await loadSources();}catch(failure){stopped=true;window.removeEventListener('bambi-access-changed',accessChanged);throw failure;}
- initializing=false;const initial=data.setup;pane(setupBusy(initial)||initial?.verified||initial?.phase==='partial'?2:0);
+ await reload();await loadSources();initializing=false;const initial=data.setup;pane(setupBusy(initial)||initial?.verified||initial?.phase==='partial'?2:0);
  const poll=async()=>{if(stopped||polling)return;polling=true;try{await readState();}catch{if(!stopped){statusLost=true;speed=0;showState();}}finally{polling=false;}};
  const timer=setInterval(poll,1000),visible=()=>{if(!document.hidden)void poll();};document.addEventListener('visibilitychange',visible);
  return ()=>{stopped=true;clearInterval(timer);window.removeEventListener('bambi-access-changed',accessChanged);document.removeEventListener('visibilitychange',visible);};
@@ -151,8 +219,7 @@ export async function initModelOnboarding(options:{selected:(id:string)=>void;pr
  const host=document.createElement('div');dialog.append(heading,host);document.body.append(dialog);
  let cleanup:(()=>void)|undefined,opening=false;
  const dismiss=async()=>{try{await json('/api/models/onboarding',{});dialog.close();cleanup?.();cleanup=undefined;}catch(error){const message=document.createElement('p');message.textContent=String(error);host.append(message);}};
- const load=async()=>{if(opening)return;opening=true;cleanup?.();cleanup=undefined;host.textContent='Checking your computer…';try{cleanup=await initModelSetup(host,{...options,finish:()=>void dismiss()});}catch(error){host.replaceChildren();const message=document.createElement('p');message.setAttribute('role','alert');message.textContent='Model setup could not load. '+String(error);const retry=document.createElement('button');retry.textContent='Try setup again';retry.onclick=()=>void load();const close=document.createElement('button');close.dataset.finish='';close.textContent='Set up later';close.onclick=()=>void dismiss();host.append(message,retry,close);}finally{opening=false;}};
- const open=async()=>{if(dialog.open||opening)return;dialog.showModal();await load();};
+ const open=async()=>{if(dialog.open||opening)return;opening=true;dialog.showModal();host.textContent='Checking your computer…';try{cleanup=await initModelSetup(host,{...options,finish:()=>void dismiss()});}catch(error){host.textContent=String(error);const close=document.createElement('button');close.textContent='Set up later';close.onclick=()=>void dismiss();host.append(close);}finally{opening=false;}};
  dialog.addEventListener('cancel',event=>{event.preventDefault();if(!opening)void dismiss();});
  document.getElementById('local-models-open')?.addEventListener('click',()=>void open());
  const state=await json('/api/models/onboarding');

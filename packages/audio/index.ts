@@ -38,9 +38,15 @@ function firstAudibleOffset(buffer:AudioBuffer,seconds:number){
  return 0;
 }
 export class AudioEngine {
+ private nativeVoiceStream?:{id:string;end:number};
+ private nativePacketWindows:{id:string;index:number;epoch:number;start:number;duration:number;gapSeconds:number}[]=[];
+ /** Scheduling evidence only; speaker/physical output requires a separate capture. */
+ nativeSpeechOutput(){return this.nativePacketWindows.map(window=>({...window}));}
  private deliveryMix:DeliveryMix;
  setNarrationDelivery(mode?:DeliveryMode,at=this.context.currentTime){this.deliveryMix.set(mode,at);}
- private dualGapStart:number|undefined;
+ private dualOwnerStart:number|undefined;
+ private dualOwnerEnd:number|undefined;
+ private dualInnerEnd=0;
  private dualVoiceCleanup=new Map<AudioBufferSourceNode,()=>void>();
  private eventMode=false;
  private eventGates:Partial<Record<Bus,GainNode>>={};
@@ -80,20 +86,22 @@ export class AudioEngine {
  }
  /** Same selected sounds/faders as ordinary triggers, bounded by the engine episode. */
  playEventTrigger(trigger:string,time:number,deadline:number,spokenEnd=time){
-  if(this.context.state!=='running'||this.muted||time<this.context.currentTime-.15||deadline<=time||this.eventGates.EFFECTS?.gain.value===0)return;
+  if(this.context.state!=='running'||this.muted||time<this.context.currentTime-.15||deadline<=time||this.eventGates.EFFECTS?.gain.value===0)return false;
   const plan=this.triggerPlan(trigger),remaining=deadline-time;
   if(plan.moan)this.cue('moan',trigger,'before',time,Math.min(plan.moan,remaining),plan.settings.moanGain,undefined,plan.moanSound,true);
-  if(plan.snap)this.cue('snap',trigger,'after',time,remaining,1,undefined,this.sound('snap'),true);
+  const snap=plan.snap?this.cue('snap',trigger,'after',time,remaining,1,undefined,this.sound('snap'),true)>0:false;
   for(const cue of plan.cues){const cueTime=cue.kind==='tick'?Math.max(time,spokenEnd):time+cue.offset;if(cueTime<deadline)this.cue(cue.kind,trigger,'after',cueTime,Math.min(cue.duration,deadline-cueTime),cue.gain,undefined,this.sound(cue.kind),true);}
+  return snap;
  }
  /** Cached event payload: no text parser, echo, trigger synthesis, or effect scheduling. */
- playEventVoice(buffer:AudioBuffer,start:number,deadline:number,bus:'main_voice'|'left_voice'|'right_voice'|'echo_voice'='main_voice'){
+ playEventVoice(buffer:AudioBuffer,start:number,deadline:number,bus:'main_voice'|'left_voice'|'right_voice'|'echo_voice'='main_voice',track?:VoiceTrack){
   if(!Number.isFinite(start)||!Number.isFinite(deadline)||start<this.context.currentTime-.15||start+buffer.duration>deadline+.001)throw Error('Event voice does not fit scheduled window');
   const source=this.context.createBufferSource();source.buffer=buffer;
   const pan=bus==='left_voice'||bus==='right_voice'?this.context.createStereoPanner():null;
-  if(pan){pan.pan.value=bus==='left_voice'?-.7:.7;source.connect(pan);pan.connect(this.nodes[bus]);}else source.connect(this.nodes[bus]);
+  const trackCleanup=track?connectVoiceTrack(this.context,source,this.nodes[bus],track):undefined;
+  if(!track){if(pan){pan.pan.value=bus==='left_voice'?-.7:.7;source.connect(pan);pan.connect(this.nodes[bus]);}else source.connect(this.nodes[bus]);}
   this.voiceSources.add(source);this.foreground.set(source,{start,end:start+buffer.duration,bus:'AI_VOICE'});
-  const cleanup=()=>{this.foreground.delete(source);this.voiceSources.delete(source);this.eventVoiceCleanup.delete(source);source.disconnect();pan?.disconnect();};
+  const cleanup=()=>{this.foreground.delete(source);this.voiceSources.delete(source);this.eventVoiceCleanup.delete(source);trackCleanup?.();source.disconnect();pan?.disconnect();};
   this.eventVoiceCleanup.set(source,cleanup);source.onended=cleanup;
   source.start(Math.max(start,this.context.currentTime));source.stop(deadline);return source;
  }
@@ -105,6 +113,13 @@ export class AudioEngine {
  get breathSoundEnabled(){return this.breathSound;}
  set breathSoundEnabled(enabled:boolean){this.breathSound=enabled;if(!enabled)this.breathAudio?.stop();}
  get scheduledBreaths(){return this.breathAudio.events;}
+ playEventBreath(cue:BreathCue,time:number,deadline:number,buffer:AudioBuffer){
+  if(this.context.state!=='running'||this.muted||time<this.context.currentTime-.15||time+cue.durationMs/1000>deadline+.001)return false;
+  const pcm=buffer.getChannelData(0);let sum=0,count=0;for(let i=0;i<pcm.length;i+=16){sum+=pcm[i]*pcm[i];count++;}
+  const event=this.breathAudio.schedule(cue,Math.max(time,this.context.currentTime),Math.sqrt(sum/Math.max(1,count)),this.breathSoundEnabled);
+  if(event)this.onBreath?.(event);return !!event;
+ }
+ stopEventBreaths(){this.breathAudio.stop();}
  onDesignSound:((event:SoundDesignEvent)=>void)|undefined;
  get ducked(){return this.speechDucker.active;}
  get duckingGains(){return {bed:this.bedDuck.gain.value,session:this.sessionDuck.gain.value};}
@@ -128,6 +143,14 @@ export class AudioEngine {
  get outputTime(){
   const timestamp=this.context.getOutputTimestamp?.();
   return timestamp?.contextTime&&timestamp.performanceTime?Math.min(this.context.currentTime,timestamp.contextTime+(this.context.state==='running'?Math.max(0,performance.now()-timestamp.performanceTime)/1000:0)):Math.max(0,this.context.currentTime-(this.context.outputLatency||this.context.baseLatency||0));
+ }
+ /** Remaining scheduled voice horizon on the output clock, including authored tails. */
+ voiceBuffer(){
+  const now=this.outputTime,queuedSeconds=Math.max(0,this.voicesEnd-now);
+  const windows=[...this.foreground.values()].filter(w=>w.bus==='AI_VOICE'&&w.end>now).sort((a,b)=>a.start-b.start);
+  let end=now,speechSeconds=0;
+  for(const w of windows){const start=Math.max(now,end,w.start);speechSeconds+=Math.max(0,w.end-start);end=Math.max(end,w.end);}
+  return {queuedSeconds,speechSeconds:Math.min(queuedSeconds,speechSeconds),running:this.context.state==='running'};
  }
  /** Planned audio time mapped to when samples reach the output device. */
  outputDelayMs(time:number){return Math.max(0,(time-this.outputTime)*1000);}
@@ -172,6 +195,18 @@ export class AudioEngine {
  private preset:AudioPreset|undefined;
  private scriptSoundsEnabled=true;
  get wiperEnabled(){return this.scriptSoundsEnabled&&this.sequenceSettings.effects&&!this.muted&&this.levels.MASTER>0&&this.levels.EFFECTS>0;}
+ get sceneSoundAvailability(){return {wiper:this.localSounds.has(this.variants.wiper),snap:this.localSounds.has('snap'),rhythm:this.localSounds.has('tick_sub')};}
+ /** A regie-selected recording never falls back to a synthesized effect. */
+ playSelectedEventTick(time:number,deadline:number){
+  const sound=this.localSounds.get('tick_sub');
+  if(!sound||this.context.state!=='running'||this.muted||!this.scriptSoundsEnabled||time<this.context.currentTime-.15||deadline<=time||this.eventGates.EFFECTS?.gain.value===0)return false;
+  this.cue('tick','engine_rhythm','after',time,deadline-time,1,undefined,{...sound,id:'tick_sub',source:'local' as const},true);return true;
+ }
+ playSelectedEventSnap(time:number,deadline:number,trigger='Blink'){
+  const sound=this.localSounds.get('snap');
+  if(!sound||this.context.state!=='running'||this.muted||!this.scriptSoundsEnabled||!this.sequenceSettings.snap||time<this.context.currentTime-.15||deadline<=time||this.eventGates.EFFECTS?.gain.value===0)return false;
+  this.cue('snap',trigger,'after',time,deadline-time,1,undefined,{...sound,id:'snap',source:'local' as const},true);return true;
+ }
  setScriptSoundsEnabled(enabled:boolean){this.scriptSoundsEnabled=enabled;}
  private controlSources=new Set<AudioBufferSourceNode>();
  private effectPlayback=new Map<AudioBufferSourceNode,{start:number;duration:number;offset:number;gain:GainNode;output:AudioNode;eventCue?:boolean;eventTrigger?:boolean;profile?:WiperProfile;wiperText?:string}>();
@@ -292,29 +327,48 @@ export class AudioEngine {
    this.onDeviceCue?.(synchronized,time);
   }
  }
- async playScriptCues(cues:readonly PlaybackCue[],onEnd:()=>void,ticks:readonly TickCue[]=[]){
-  this.dualGapStart=undefined;
+ async playScriptCues(cues:readonly PlaybackCue[],onEnd:()=>void,ticks:readonly TickCue[]=[],onStart?:(start:number,duration:number)=>void){
+  this.dualOwnerStart=undefined;
   const start=Math.max(this.context.currentTime+.035,this.voicesEnd),duration=Math.max(.002,this.scheduleScriptCues(cues,start));
   this.applyTicks(ticks,start);
   const source=this.context.createBufferSource();source.buffer=this.context.createBuffer(1,Math.ceil(duration*this.context.sampleRate),this.context.sampleRate);source.connect(this.nodes.main_voice);this.voiceSources.add(source);this.voicesEnd=start+duration;
-  source.onended=()=>{this.voiceSources.delete(source);source.disconnect();if(!this.voiceSources.size)this.voicesEnd=this.context.currentTime;onEnd();};source.start(start);
+  if(this.dualOwnerEnd!==undefined)this.dualOwnerEnd=this.voicesEnd;
+  source.onended=()=>{this.voiceSources.delete(source);source.disconnect();if(!this.voiceSources.size)this.voicesEnd=this.context.currentTime;onEnd();};onStart?.(start,duration);source.start(start);
  }
- async playVoice(bytes:ArrayBuffer,onStart:(start:number,duration:number,wordTime:number)=>void,onEnd:()=>void,trigger?:TriggerSequenceOptions,script?:{voiceTrack?:VoiceTrack;before?:PlaybackCue[];after?:PlaybackCue[];spokenSeconds?:number;sounds?:SoundCue[];ticks?:TickCue[];devicesAtWord?:DeviceCommand[];text?:string;phase?:SessionPhase;wordStart?:number;conversation?:boolean;breath?:BreathCue;words?:{word:string;atMs:number}[]}){
+ async playVoice(bytes:ArrayBuffer,onStart:(start:number,duration:number,wordTime:number)=>void,onEnd:()=>void,trigger?:TriggerSequenceOptions,script?:{stream?:import('../speech/capabilities').SpeechStreamPacket;voiceTrack?:VoiceTrack;before?:PlaybackCue[];after?:PlaybackCue[];spokenSeconds?:number;sounds?:SoundCue[];ticks?:TickCue[];devicesAtWord?:DeviceCommand[];text?:string;phase?:SessionPhase;wordStart?:number;conversation?:boolean;breath?:BreathCue;words?:{word:string;atMs:number}[]}){
   const epoch=this.voiceEpoch;const decoded=await this.context.decodeAudioData(bytes);if(epoch!==this.voiceEpoch){onEnd();return;}
+  if(script?.stream){
+   if(Math.abs(decoded.duration-script.stream.samples/script.stream.sampleRate)>2/this.context.sampleRate)throw Error('Native speech WAV duration differs from its sample count');
+   // PCM packets belong to one utterance. Reserve a short initial buffer, then
+   // join unchanged packets at the previous sample boundary on this same bus.
+   const continuation=this.nativeVoiceStream?.id===script.stream.id;
+   let start=continuation?Math.max(this.context.currentTime+.005,this.nativeVoiceStream!.end):Math.max(this.context.currentTime+.12,this.voicesEnd);
+   const gapSeconds=continuation?Math.max(0,start-this.nativeVoiceStream!.end):0;
+   if(!continuation)start+=this.scheduleScriptCues(script.before??[],start);
+   const wordTime=start+firstAudibleOffset(decoded,decoded.duration),end=start+decoded.duration;
+   if(!continuation&&!script.conversation){this.applyTicks(script.ticks??[],wordTime);if(script.devicesAtWord?.length)this.scheduleDeviceCommands(script.devicesAtWord,wordTime);}
+   const tail=script.stream.final?this.scheduleScriptCues(script.after??[],end):0;
+   const node=this.context.createBufferSource();node.buffer=decoded;node.connect(this.nodes.main_voice);
+   this.voiceSources.add(node);this.voicesEnd=end+tail;this.nativeVoiceStream=script.stream.final?undefined:{id:script.stream.id,end};
+   this.nativePacketWindows.push({id:script.stream.id,index:script.stream.index,epoch,start,duration:decoded.duration,gapSeconds});
+   if(this.nativePacketWindows.length>512)this.nativePacketWindows.shift();
+   this.foreground.set(node,{start,end,bus:'AI_VOICE'});this.speechDucker.schedule(node,start,end,false);
+   onStart(start,decoded.duration+tail,wordTime);
+   node.onended=()=>{this.foreground.delete(node);this.voiceSources.delete(node);this.speechDucker.forget(node);node.disconnect();if(!this.voiceSources.size&&!this.nativeVoiceStream)this.voicesEnd=Math.max(this.context.currentTime,this.voicesEnd);onEnd();};node.start(start);return;
+  }
   if(script?.voiceTrack?.speaker==='bambi'){
    const spoken=Math.min(decoded.duration,Math.max(0,script.spokenSeconds??decoded.duration));
-   const window=backgroundVoiceWindow(this.context.currentTime,this.voicesEnd,this.dualGapStart,spoken,decoded.duration,script.voiceTrack.reverbMs/1000);
-   this.dualGapStart=undefined;
+   const window=backgroundVoiceWindow(this.context.currentTime,this.dualInnerEnd??0,this.dualOwnerStart,spoken,decoded.duration,script.voiceTrack.reverbMs/1000);
    const mono=this.context.createBuffer(1,Math.ceil(window.duration*decoded.sampleRate),decoded.sampleRate),samples=mono.getChannelData(0);
    for(let ch=0;ch<decoded.numberOfChannels;ch++){const input=decoded.getChannelData(ch);for(let i=0;i<Math.min(input.length,Math.ceil(spoken*decoded.sampleRate));i++)samples[i]+=input[i]/decoded.numberOfChannels;}
    const node=this.context.createBufferSource();node.buffer=mono;
    const cleanup=connectVoiceTrack(this.context,node,this.nodes.main_voice,script.voiceTrack);this.dualVoiceCleanup.set(node,cleanup);
-   this.voiceSources.add(node);this.voicesEnd=window.end;this.foreground.set(node,{start:window.start,end:window.start+spoken,bus:'AI_VOICE'});
+   this.voiceSources.add(node);this.dualInnerEnd=window.end;this.voicesEnd=Math.max(this.voicesEnd,window.end);this.foreground.set(node,{start:window.start,end:window.start+spoken,bus:'AI_VOICE'});
    this.speechDucker.schedule(node,window.start,window.start+spoken,false);
    onStart(window.start,window.duration,window.start+(script.wordStart??0));
    node.onended=()=>{this.foreground.delete(node);this.voiceSources.delete(node);this.speechDucker.forget(node);cleanup();this.dualVoiceCleanup.delete(node);if(!this.voiceSources.size)this.voicesEnd=this.context.currentTime;onEnd();};node.start(window.start);return;
   }
-  this.dualGapStart=undefined;
+  if(!script?.voiceTrack){this.dualOwnerStart=undefined;this.dualOwnerEnd=undefined;this.dualInnerEnd=0;}
   const triggerEnabled=!!trigger&&trigger.sequenceEnabled!==false;
   const design=!script?.breath&&!(trigger&&isSpokenOneShot(trigger.trigger))&&(!script?.conversation||triggerEnabled)&&this.designSettings.enabled&&!!script?.text?.trim();
   const requested=(Array.isArray(script?.sounds)?script.sounds:[]).filter(validSoundCue).slice(0,8);
@@ -324,7 +378,8 @@ export class AudioEngine {
   const wordOffset=Number.isFinite(script?.wordStart)&&script!.wordStart!>=0&&script!.wordStart!<originalSpoken?script!.wordStart!:firstAudibleOffset(decoded,originalSpoken);
   const pauseSeconds=(ms:number|undefined)=>Number.isFinite(ms)?Math.min(10000,Math.max(0,ms!))/1000:0;
   // Consecutive breath instructions reserve word-to-word time, including TTS leading silence.
-  const next=script?.breath&&this.breathNextWord?Math.max(this.voicesEnd-wordOffset,this.breathNextWord-wordOffset):this.voicesEnd;
+  const ownerEnd=script?.voiceTrack?.speaker==='owner'?(this.dualOwnerEnd??this.context.currentTime):this.voicesEnd;
+  const next=script?.breath&&this.breathNextWord?Math.max(ownerEnd-wordOffset,this.breathNextWord-wordOffset):ownerEnd;
   let start=Math.max(this.context.currentTime+.035,next);start+=this.scheduleScriptCues(script?.before??[],start);
   const pre=trigger?pauseSeconds(trigger.prePauseMs):0,post=trigger?pauseSeconds(trigger.postPauseMs):0;
   const spokenStart=start+pre,wordTime=spokenStart+wordOffset,spokenEnd=spokenStart+originalSpoken;
@@ -385,16 +440,16 @@ export class AudioEngine {
   const node=this.context.createBufferSource();node.buffer=audio;
   const cleanup=script?.voiceTrack?connectVoiceTrack(this.context,node,this.nodes.main_voice,script.voiceTrack):()=>node.disconnect();
   if(script?.voiceTrack)this.dualVoiceCleanup.set(node,cleanup);else node.connect(this.nodes.main_voice);
-  this.voicesEnd=start+audio.duration;
-  // Effects and trigger tails finish before the background speaks. Short pauses
-  // remain silent; missing eligible gaps become a new gap after the Owner.
-  if(script?.voiceTrack&&pause>=.9)this.dualGapStart=afterStart+afterDuration;this.voiceSources.add(node);
+  this.voicesEnd=Math.max(this.voicesEnd,start+audio.duration);
+  // Owner retains authored pauses/effects, independently of the inner track.
+  if(script?.voiceTrack?.speaker==='owner'){this.dualOwnerStart=spokenStart;this.dualOwnerEnd=start+audio.duration;}
+  this.voiceSources.add(node);
   this.speechDucker.schedule(node,wordTime,Math.max(spokenEnd,echoEnd),!!trigger);
   this.foreground.set(node,{start:spokenStart,end:spokenEnd,bus:'AI_VOICE'});
   onStart(spokenStart,audio.duration-(spokenStart-start),wordTime);node.onended=()=>{this.foreground.delete(node);this.voiceSources.delete(node);this.speechDucker.forget(node);cleanup();this.dualVoiceCleanup.delete(node);if(!this.voiceSources.size)this.voicesEnd=this.context.currentTime;onEnd();};node.start(start);
  }
 
- stopVoice(fade=true,preserveSession=false){this.setNarrationDelivery();this.dualGapStart=undefined;this.voiceEchoes.stop();this.breathNextWord=0;this.breathAudio.stop();if(preserveSession)this.clearDesignSilence();else this.stopEffects();if(!preserveSession){this.tickEngine.stop();this.tickDefaultBpm=-1;this.pulseCommand=undefined;}for(const source of this.controlSources){source.onended=null;try{source.stop();}catch{}source.disconnect();}this.controlSources.clear();this.voiceEpoch++;const p=this.nodes.AI_VOICE.gain;p.cancelScheduledValues(this.context.currentTime);p.setTargetAtTime(0,this.context.currentTime,.008);for(const node of this.voiceSources){this.foreground.delete(node);node.onended=null;try{node.stop(this.context.currentTime+(fade?.035:0));}catch{}}this.voiceSources.clear();for(const cleanup of this.dualVoiceCleanup.values())cleanup();this.dualVoiceCleanup.clear();for(const cleanup of this.eventVoiceCleanup.values())cleanup();this.eventVoiceCleanup.clear();this.voicesEnd=this.context.currentTime;this.speechDucker.clear();p.setValueAtTime(this.levels.AI_VOICE,this.context.currentTime+.04);}
+ stopVoice(fade=true,preserveSession=false){this.nativeVoiceStream=undefined;this.setNarrationDelivery();this.dualOwnerStart=undefined;this.dualOwnerEnd=undefined;this.dualInnerEnd=0;this.voiceEchoes.stop();this.breathNextWord=0;this.breathAudio.stop();if(preserveSession)this.clearDesignSilence();else this.stopEffects();if(!preserveSession){this.tickEngine.stop();this.tickDefaultBpm=-1;this.pulseCommand=undefined;}for(const source of this.controlSources){source.onended=null;try{source.stop();}catch{}source.disconnect();}this.controlSources.clear();this.voiceEpoch++;const p=this.nodes.AI_VOICE.gain;p.cancelScheduledValues(this.context.currentTime);p.setTargetAtTime(0,this.context.currentTime,.008);for(const node of this.voiceSources){this.foreground.delete(node);node.onended=null;try{node.stop(this.context.currentTime+(fade?.035:0));}catch{}}this.voiceSources.clear();for(const cleanup of this.dualVoiceCleanup.values())cleanup();this.dualVoiceCleanup.clear();for(const cleanup of this.eventVoiceCleanup.values())cleanup();this.eventVoiceCleanup.clear();this.voicesEnd=this.context.currentTime;this.speechDucker.clear();p.setValueAtTime(this.levels.AI_VOICE,this.context.currentTime+.04);}
  ambience(on:boolean){if(on&&this.ambient)return;if(this.ambient){try{this.ambient.stop();}catch{}this.ambient=null;}if(!on)return;const buffer=this.context.createBuffer(2,this.context.sampleRate*4,this.context.sampleRate);for(let ch=0;ch<2;ch++){const data=buffer.getChannelData(ch);let smooth=0;for(let i=0;i<data.length;i++){smooth=(smooth+(Math.random()*2-1)*.02)/1.02;data[i]=smooth*.35;}}const node=this.context.createBufferSource();node.buffer=buffer;node.loop=true;const low=this.context.createBiquadFilter();low.type='lowpass';low.frequency.value=650;node.connect(low);low.connect(this.nodes.AMBIENCE);node.start();this.ambient=node;}
  private voiceAnalyser!:AnalyserNode;
  private voiceMeter=new Float32Array(512);

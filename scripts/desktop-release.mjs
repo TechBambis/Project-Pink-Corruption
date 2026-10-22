@@ -15,7 +15,7 @@ const [command,...args]=process.argv.slice(2);
 const usage='prepare smoke|alpha VERSION OUTSIDE_DIRECTORY | check SNAPSHOT_SOURCE | build SNAPSHOT_SOURCE TARGET | qualify SNAPSHOT_SOURCE TARGET OUTPUT_DIRECTORY | status SNAPSHOT_SOURCE [OUTPUT_DIRECTORY ...]';
 if(!command||command==='--help'){console.log('node scripts/desktop-release.mjs '+usage);process.exit(command?0:1);}
 const json=path=>JSON.parse(readFileSync(path,'utf8'));
-const run=(root,script,arguments_,env={})=>execFileSync(process.execPath,[join(root,script),...arguments_],{cwd:root,env:{...process.env,...env},stdio:'inherit',windowsHide:true});
+const run=(root,script,arguments_,env={},options={})=>execFileSync(process.execPath,[join(root,script),...arguments_],{cwd:root,env:{...process.env,...env},stdio:'inherit',windowsHide:true,...options});
 async function checkSource(root,spec){
  const record={schema:1,version:spec.version,applicationDigest:spec.applicationDigest,sourceDigest:spec.sourceDigest,
   platform:process.platform,architecture:process.arch,testedAt:new Date().toISOString(),result:'failed'};
@@ -61,7 +61,8 @@ if(command==='prepare'){
    if(command==='build'){
     if(!existsSync(join(root,'node_modules/typescript')))throw Error('Install the frozen source dependencies with npm ci --ignore-scripts first.');
     if(!sourceChecksMatch(sourceChecks(root),spec))await checkSource(root,spec);
-    if(target==='windows-x64')run(root,'scripts/desktop-windows-build.mjs',[spec.phase,spec.version]);
+    if(target==='macos-arm64')run(root,'scripts/desktop-macos-build.mjs',[spec.phase,spec.version]);
+    else if(target==='windows-x64')run(root,'scripts/desktop-windows-build.mjs',[spec.phase,spec.version]);
     else run(root,'scripts/desktop-build.mjs',[],{[spec.phase==='alpha'?'BAMBI_ALPHA_VERSION':'BAMBI_SMOKE_VERSION']:spec.version});
     await verifySnapshot(root);console.log('Built from the frozen source; native qualification remains pending.');
    }else{
@@ -71,11 +72,37 @@ if(command==='prepare'){
     const checks=sourceChecks(root);
     if(checks)writeFileSync(join(directory,'SOURCE-CHECKS.json'),JSON.stringify(checks,null,2)+'\n');
     const gates={sourceChecks:sourceChecksMatch(checks,spec)?'passed':checks?.result==='failed'?'failed':'pending'};const payload=[];
-    for(const filename of readdirSync(directory).filter(name=>/\.(?:exe|AppImage|tar\.gz)$/.test(name)||['RUNTIME-MANIFEST.json','SOURCE-CHECKS.json'].includes(name)))payload.push({filename,sha256:await hashFile(join(directory,filename))});
-    if(!payload.some(p=>/\.(exe|AppImage)$/.test(p.filename)))throw Error('No distribution executable found.');
+    for(const filename of readdirSync(directory).filter(name=>/\.(?:exe|AppImage|tar\.gz|zip)$/.test(name)||['RUNTIME-MANIFEST.json','SOURCE-CHECKS.json'].includes(name)))payload.push({filename,sha256:await hashFile(join(directory,filename))});
+    if(!payload.some(p=>target==='macos-arm64'?p.filename.endsWith('-macos-arm64.zip'):/\.(exe|AppImage)$/.test(p.filename)))throw Error('No distribution executable found.');
     const qualification={schema:1,version:spec.version,target,applicationDigest:spec.applicationDigest,sourceDigest:runtime.sourceDigest,payload,gates,testedAt:new Date().toISOString()};
     try{
-     if(target==='windows-x64'){
+     if(target==='macos-arm64'){
+      const product=spec.phase==='alpha'?'Bambi Local':'Bambi Local Smoke';
+      const received=mkdtempSync(join(tmpdir(),'Bambi Mac received ü '));
+      try{
+       const archives=readdirSync(directory).filter(name=>name.endsWith('-macos-arm64.zip'));
+       if(archives.length!==1)throw Error('Expected exactly one finished Apple Silicon ZIP.');
+       const archive=join(directory,archives[0]);
+       console.log('Checking received macOS ZIP paths:', archives[0]);
+       const {default:AdmZip}=await import('adm-zip');
+       for(const entry of new AdmZip(archive).getEntries()){
+        if(!entry.entryName.startsWith(product+'.app/')||entry.entryName.split('/').includes('..')||entry.entryName.includes('\\'))throw Error('Invalid app archive path.');
+       }
+       console.log('Extracting received macOS ZIP');
+       execFileSync('/usr/bin/ditto',['-x','-k',archive,received],{stdio:'inherit',timeout:120000,killSignal:'SIGKILL'});
+       const installed=join(received,'Applications');mkdirSync(installed);
+       console.log('Copying received app into disposable Applications directory');
+       execFileSync('/usr/bin/ditto',[join(received,product+'.app'),join(installed,product+'.app')],{stdio:'inherit',timeout:120000,killSignal:'SIGKILL'});
+       qualification.macOS={filename:archives[0],sha256:await hashFile(archive),method:'Final ZIP extraction, copied .app installation and launch in a disposable Applications directory; downloaded quarantine and physical Mac remain recipient checks.'};
+       console.log('Starting bounded received-app macOS acceptance');
+       run(root,'scripts/desktop-macos-check.mjs',[join(installed,product+'.app/Contents/MacOS',product)],{BAMBI_SMOKE_OUTPUT:join(directory,'qualification-macos')},{timeout:7*60*1000,killSignal:'SIGKILL'});
+       gates.packaging='passed';gates.installer='passed';
+       if(spec.phase==='alpha'){
+        run(root,'scripts/desktop-macos-runtime-check.mjs',[join(installed,product+'.app/Contents/Resources/backend')],{BAMBI_MACOS_RUNTIME_OUTPUT:directory},{timeout:8*60*1000,killSignal:'SIGKILL'});
+        const speech=json(join(directory,'MACOS-NATIVE-SPEECH-CHECK.json'));if(speech.result!=='passed')throw Error('Received Mac native speech acceptance failed.');gates.speech='passed';
+       }
+      }finally{rmSync(received,{recursive:true,force:true});}
+     }else if(target==='windows-x64'){
       const testOutput=mkdtempSync(join(directory,'qualification-'));
       try{run(root,'scripts/desktop-windows-install-check.mjs',[directory],{BAMBI_WINDOWS_TEST_OUTPUT:testOutput});}
       finally{

@@ -61,10 +61,10 @@ export function deliveryWordBudget(mode: DeliveryMode, remainingSeconds = Infini
   return Math.max(1, Math.min(deliveryProfiles[mode].passageWords, Math.floor(Math.max(0, remainingSeconds - 8) * 1.1)));
 }
 
-export function deliveryDirection(mode: DeliveryMode, visuals = false, words = deliveryProfiles[mode].passageWords) {
+export function deliveryDirection(mode: DeliveryMode, visuals = false, words = deliveryProfiles[mode].passageWords, includeBudget = true) {
   const profile = deliveryProfiles[mode];
   const appearance = profile.visualStyle === 'orb' ? 'a softly glowing pink orb with slow gentle breathing movement' : profile.visualStyle === 'vortex' ? 'a pink rotating spiral with denser inward movement' : 'a pink repeating spiral with gentle movement';
-  return `ENGINE DELIVERY CONTRACT: ${mode}. Supply one original connected passage of about ${Math.max(1, words - 15)}–${words} spoken words TOTAL. This engine budget overrides full-passage word targets. ${profile.syntax} The engine renders the selected speech speed, phrase gaps and passage pause. Do not output pause markers, effect commands, timings or new named triggers. ${visuals ? `The engine presents ${appearance} when this passage becomes audible. You may describe this current image.` : 'Do not describe visible movement, a changing light or a screen transition; visuals may be manual, reduced or disabled.'} Frame other imagery as imagination. Do not promise future audiovisual changes. Finish the current thought within this budget.`;
+  return `ENGINE DELIVERY CONTRACT: ${mode}. ${includeBudget?`Supply one original connected passage of about ${Math.max(1, words - 15)}–${words} spoken words TOTAL. This engine budget overrides full-passage word targets. `:''}${profile.syntax} The engine renders the selected speech speed, phrase gaps and passage pause. Do not output pause or breath markers, effect/device commands, timings or new named triggers. ${visuals ? `The engine presents ${appearance} when this passage becomes audible. You may describe this current image.` : 'Do not describe visible movement, a changing light or a screen transition; visuals may be manual, reduced or disabled.'} Frame other imagery as imagination. Do not promise future audiovisual changes. Finish the current thought within this budget.`;
 }
 
 /** Explicit timing tags cannot override this engine-owned delivery window. */

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
-const {app,BrowserWindow,dialog,Menu,session,ipcMain,shell}=require('electron');
+const {app,BrowserWindow,dialog,Menu,session,ipcMain,shell,systemPreferences}=require('electron');
 const {spawn,spawnSync}=require('node:child_process');
 const {mkdirSync,openSync,closeSync,lstatSync,readFileSync}=require('node:fs');
 const {resolve,join,dirname}=require('node:path');
@@ -82,7 +82,12 @@ else {
   }
   if(quitting)return;
   if(!ready)throw Error(`The owned backend could not start on port ${port}. Another application may already use it. No unrelated process was stopped. See logs/backend.log; retry with --bambi-port=6970.`);
-  const permissions=permissionHandlers({alpha,origin,ownedContents:()=>window?.webContents,readAccess:async()=>{
+  const permissions=permissionHandlers({alpha,origin,ownedContents:()=>window?.webContents,
+   ...(process.platform==='darwin'?{askSystemAccess:async()=>{
+    const status=systemPreferences.getMediaAccessStatus('microphone');
+    if(status==='granted')return true;
+    return status==='not-determined'?systemPreferences.askForMediaAccess('microphone'):false;
+   }}:{}),readAccess:async()=>{
    const response=await fetch(origin+'/api/access',{signal:AbortSignal.timeout(1500)});if(!response.ok)throw Error('Access choices unavailable.');return response.json();
   }});
   session.defaultSession.setPermissionRequestHandler(permissions.request);
@@ -112,10 +117,10 @@ else {
    await shell.openExternal('https://www.geojs.io/privacy/');return {ok:true};
   });
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
-  window.webContents.on('before-input-event',(event,input)=>{if(input.type==='keyDown'&&input.control&&!input.alt&&input.key.toLowerCase()==='q'){event.preventDefault();app.quit();}});
+  window.webContents.on('before-input-event',(event,input)=>{if(input.type==='keyDown'&&(process.platform==='darwin'?input.meta:input.control)&&!input.alt&&input.key.toLowerCase()==='q'){event.preventDefault();app.quit();}});
   window.webContents.on('will-navigate',(event,url)=>{if(!url.startsWith(origin+'/'))event.preventDefault();});
   window.webContents.on('render-process-gone',()=>app.quit());
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'Bambi Local',submenu:[{label:'Quit',accelerator:'Control+Q',click:()=>app.quit()}]},{label:'Edit',submenu:[{role:'undo'},{role:'redo'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]},{label:'View',submenu:[{role:'reload'},{role:'togglefullscreen'}]}]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{label:'Bambi Local',submenu:[{label:'Quit',accelerator:'CommandOrControl+Q',click:()=>app.quit()}]},{label:'Edit',submenu:[{role:'undo'},{role:'redo'},{role:'cut'},{role:'copy'},{role:'paste'},{role:'selectAll'}]},{label:'View',submenu:[{role:'reload'},{role:'togglefullscreen'}]}]));
   await window.loadURL(origin);
  }).catch(error=>{dialog.showErrorBox('Bambi Local startup',error.message);if(owner?.exitCode!==null)stopped=true;app.quit();});
 }

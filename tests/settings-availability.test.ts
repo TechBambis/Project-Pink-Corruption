@@ -67,11 +67,18 @@ test('Unassigned rotation and UDP bridge leave limits editable while disabling i
   for(const id of ['device-rot-channel','device-rot-max','device-vib-max','device-enabled']) assert.equal(reasons[id],undefined,id);
 });
 
-test('Chat custom text and Guided style have independent applicability', () => {
+test('custom persona is selection-specific while the speaking style applies to chat, Guided and text', () => {
   const chat=settingsAvailability(context({},['reduced'],{'prompt-template':'custom'}));
-  assert.equal(chat.persona,undefined);assert.ok(chat['guided-style']);
+  assert.equal(chat.persona,undefined);assert.equal(chat['guided-style'],undefined);
   const guided=settingsAvailability(context({events:true},['reduced'],{'prompt-template':'gentle-induction'}));
   assert.ok(guided.persona);assert.equal(guided['guided-style'],undefined);
   const silent=settingsAvailability(context({events:true},['reduced'],{'ai-mode':'text'}));
-  assert.match(silent['guided-style'],/Read replies aloud/);
+  assert.equal(silent['guided-style'],undefined);
+});
+
+test('reference voice limitations use availability ownership and release for blend-capable voices', () => {
+  const reference=settingsAvailability(context({},['reduced'],{voice:'moss_doll_q8'}));
+  for(const id of ['voice2','voice-mix','speed']) assert.match(reference[id],/natural pace/);
+  const blended=settingsAvailability(context({},['reduced'],{voice:'af_heart'}));
+  for(const id of ['voice2','voice-mix','speed']) assert.equal(blended[id],undefined);
 });

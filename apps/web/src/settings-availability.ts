@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
+import {isMossVoice} from '../../../packages/speech/capabilities';
+
 export interface SettingsContext {
   file: boolean;
   events: boolean;
@@ -62,12 +64,9 @@ export function settingsAvailability(s: SettingsContext): Record<string, string>
     'This renderer uses Spiral speed and Complexity instead of Motion and Particles.');
   if ((!s.on('visual-voice-sync') && !s.on('visual-tick-sync')) || s.events) block(['visual-reactivity'],
     'Reaction strength applies to the manual voice and tick reactions.');
+  if (isMossVoice(s.value('voice'))) block(['voice2', 'voice-mix', 'speed'], 'This reference voice uses its natural pace without voice blending.');
   if (!s.value('voice2')) block(['voice-mix'], 'Choose a second voice to adjust its blend.');
-  if (s.value('prompt-template') !== 'custom') block(['persona'], 'Choose Custom under Chat personality to use this text. Guided has its own Narration style.');
-  if (!s.events) block(['guided-style'], 'Narration style applies to Guided engine events. Select Guided to use it.');
-  else if (!s.on('narration-enabled') || ['off', 'text'].includes(s.value('ai-mode'))) {
-    block(['guided-style'], 'Enable Guided narration and Read replies aloud to use a spoken narration style.');
-  }
+  if (s.value('prompt-template') !== 'custom') block(['persona'], 'Choose Custom under Chat personality to use this text. Speaking style is shared by chat and Guided.');
   if (!s.cloudCuesAvailable) block(['bambicloud-cues'], 'Choose a cloud recording with timed cue data to use this option.');
   if (!s.on('collar-enabled')) block(['collar-name'], 'Enable the collar to use a name.');
   if (!s.on('trigger-timing-enabled')) block(['trigger-stage-groups', 'trigger-reinforcement-start'],

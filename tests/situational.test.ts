@@ -11,7 +11,7 @@ import {buildRuntimePrompt} from '../packages/content';
 import {ChatRequestSchema} from '../packages/ai/request';
 import {ScriptDisplayStream} from '../packages/speech/script';
 import {NarrationFlow,narrationDirective} from '../packages/session-director/narration';
-import {snapshotSession} from '../packages/ai/session-state';
+import {snapshotSession,type SessionState} from '../packages/ai/session-state';
 import {defaultTriggerTiming} from '../packages/session-director/trigger-timing';
 import {preflightReplyContext} from '../packages/ai/preflight';
 
@@ -120,22 +120,24 @@ test('mode has a separate, preflight-compatible prompt; old API requests retain 
  assert.ok(budget);
 });
 
-test('compact turn guidance preserves task, phase, actual session facts and only active trigger timing',()=>{
+test('the prompt owner supplies one state, budget and active cue timing around turn choice',()=>{
  const session={...snapshotSession({elapsedSeconds:120,totalSeconds:300,scene:'Soft Pink',intensityPercent:60,activeTriggers:['GOOD GIRL'],lastTrigger:'GOOD GIRL'}),phase:'deepening' as const};
- const conversation=situationalReplyDirection('Which scene is selected?',false,session);
- assert.match(conversation,/REAL LISTENER INPUT/);assert.match(conversation,/answer factual questions directly/);
- assert.match(conversation,/"scene":"Soft Pink"/);assert.match(conversation,/"intensity":3/);
- assert.doesNotMatch(conversation,/ENGINE CONTINUATION|gradual countdown|CURRENT TRIGGER TIMING|remainingSeconds/);
- const narration=situationalReplyDirection('Continue.',true,session);
- assert.match(narration,/ENGINE CONTINUATION, not a listener statement/);assert.match(narration,/gentle countdown/);
- assert.match(narration,/"remainingSeconds":180/);assert.match(narration,/"allowedCues":\["GOOD GIRL"\]/);
- assert.doesNotMatch(narration,/CURRENT TRIGGER TIMING/);assert.ok(narration.length<1400);
- const timing=defaultTriggerTiming(),timed=situationalReplyDirection('Continue.',true,{...session,triggerTiming:timing});
- assert.match(timed,/CURRENT TRIGGER TIMING: deepening/);assert.match(timed,/GOOD GIRL/);assert.match(timed,/SAFE AND SECURE/);
- assert.match(timed,/Intensity unlocks no other categories/);assert.doesNotMatch(timed,/"allowedCues"/);assert.ok(timed.length<1900);
- assert.doesNotMatch(situationalReplyDirection('Continue.',true,{...session,triggerTiming:{...timing,enabled:false}}),/CURRENT TRIGGER TIMING/);
- assert.match(situationalReplyDirection('Use exactly 12 words.',true,session),/12-12 words total/);
- assert.match(situationalReplyDirection('In one sentence.',false,session),/exact brevity request/);
- assert.match(situationalReplyDirection('Continue.',true,{...session,phase:'awakening',continuous:true}),/continuous.*true/);
- assert.doesNotMatch(situationalReplyDirection('Continue.',true,{...session,phase:'awakening',continuous:true}),/Choose \[turn:close\]|remainingSeconds/);
+ const render=(request:string,narration:boolean,state:SessionState=session)=>buildReplyPrompt('=== BAMBI COMPANION ===\nFixture character.',request,false,'',state,'',!narration,narration,'situational');
+ const conversation=render('Which scene is selected?',false);
+ assert.match(conversation,/REAL LISTENER INPUT/);assert.match(conversation,/Questions need a useful direct answer/);
+ assert.match(conversation,/Scene: "Soft Pink"/);assert.match(conversation,/Intensity: 3/);
+ assert.doesNotMatch(conversation,/ENGINE CONTINUATION|gradual countdown|CURRENT TRIGGER TIMING/);
+ const narration=render('Continue.',true);
+ assert.match(narration,/ENGINE CONTINUATION, not a listener statement/);assert.match(narration,/gradual countdown/);
+ assert.equal(narration.split('SESSION STATE (').length-1,1);
+ assert.equal(narration.split('Current response length:').length-1,1);
+ assert.match(narration,/60-100 spoken words TOTAL/);assert.doesNotMatch(narration,/80–160|phase word target|CURRENT SESSION \(read-only/);
+ const timing=defaultTriggerTiming(),timed=render('Continue.',true,{...session,triggerTiming:timing});
+ assert.match(timed,/CURRENT TRIGGER TIMING: deepening/);assert.match(timed,/SAFE AND SECURE/);
+ assert.match(timed,/Intensity unlocks no other categories/);
+ assert.doesNotMatch(render('Continue.',true,{...session,triggerTiming:{...timing,enabled:false}}),/CURRENT TRIGGER TIMING/);
+ assert.match(render('Use exactly 12 words.',true),/12-12 spoken words TOTAL/);
+ assert.match(render('In one sentence.',false),/Honor the requested number of sentences/);
+ const unlimited=render('Continue.',true,{...session,phase:'awakening',continuous:true});
+ assert.match(unlimited,/unlimited session continues/);assert.doesNotMatch(unlimited,/Choose \[turn:close\]/);
 });

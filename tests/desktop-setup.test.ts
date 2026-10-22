@@ -7,8 +7,34 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {DesktopSetup,type Asset} from '../packages/runtime/desktop-setup';
+import {desktopServices} from '../packages/runtime/desktop-services';
 
 const asset=(path:string,bytes:Buffer):Asset=>({path,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),url:'https://example.invalid/model',license:'test'});
+test('memory trial consent persists for the selected model, resets on switching and still requires verified files',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'bambi-model-trial-'));
+ try{
+  const setup=new DesktopSetup(root,undefined,false),first=setup.model;
+  assert.equal(setup.tryAnyway,false);await setup.select(first,true);
+  const restored=new DesktopSetup(root,undefined,false);assert.equal(restored.snapshot.tryAnyway,true);assert.equal(restored.model,first);
+  await assert.rejects(restored.prepare(),/verified setup/);
+  await restored.select('bambi-qwen35-4b-hauhau:q4_k_m');assert.equal(restored.tryAnyway,false);
+  await restored.select(restored.model,true);await restored.select(restored.model,false);
+  assert.equal(new DesktopSetup(root,undefined,false).tryAnyway,false);
+  await assert.rejects(restored.select('unsupported-model',true));assert.equal(restored.tryAnyway,false);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+test('verified setup passes saved trial consent to later preparation without losing imported assets',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'bambi-trial-prepare-')),data=join(root,'data'),source=join(root,'source');await mkdir(source);
+ const bytes=Buffer.from('verified trial fixture');await writeFile(join(source,'model'),bytes);
+ const setup=new DesktopSetup(data,[asset('model',bytes)]),calls:unknown[][]=[];
+ t.mock.method(desktopServices,'prepare',async(...args:unknown[])=>{calls.push(args);});
+ try{
+  await setup.install(source);assert.equal(setup.verified,true);
+  await setup.select(setup.model,true);assert.equal(setup.verified,true);await setup.prepare();assert.equal(calls[0][4],true);
+  await setup.select(setup.model,false);assert.equal(setup.verified,true);await setup.prepare();assert.equal(calls[1][4],false);
+  assert.equal(calls[0][0],setup.model);assert.equal(calls[0][1],setup.context);assert.deepEqual(await readFile(join(data,'model')),bytes);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 test('verified copy activates only correct bytes; damaged input preserves installed assets and retry recovers',async()=>{
  const root=await mkdtemp(join(tmpdir(),'bambi-setup-'));const data=join(root,'data'),source=join(root,'source');await mkdir(source);const first=Buffer.from('public first'),second=Buffer.from('public second');const assets=[asset('a',first),asset('b',second)],setup=new DesktopSetup(data,assets);
  try{

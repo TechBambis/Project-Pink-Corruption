@@ -68,7 +68,7 @@ export async function initContent() {
   }
   document.getElementById('show-prompt')!.onclick = async () => {
     const id = input('prompt-template').value;
-    const body = show(id === 'custom' ? 'Your own persona' : 'Source prompt · STABLE-2.0');
+    const body = show(id === 'custom' ? 'Your own persona' : id === 'english-conversation' ? 'English Conversation · Bambi Local' : 'Source prompt · STABLE-2.0');
     const pre = document.createElement('pre'); body.append(pre);
     pre.textContent = id === 'custom' ? input('persona').value : JSON.stringify(await (await fetch('/api/content/prompts/' + id)).json(), null, 2);
   };

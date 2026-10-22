@@ -4,10 +4,33 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeScript,scriptUnits,ScriptDisplayStream} from '../packages/speech/script';
+import {normalizeScript,scriptUnits,boundedSpeechUnits,ScriptDisplayStream} from '../packages/speech/script';
 import {Kokoro} from '../packages/speech/tts';
 import {TriggerSentenceChunker} from '../packages/speech/trigger-units';
 import {appendScriptDirection} from '../packages/content/script-direction';
+
+test('malformed repeated pause tags remain bounded and never acquire a following sound',()=>{
+ const text='[sound:wiper] '+('[pause:\\\\]\t'.repeat(4000))+'[pause:unfinished';
+ const started=performance.now();
+ assert.doesNotThrow(()=>scriptUnits(text));
+ assert(performance.now()-started<1500,'Malformed markers must not cause exponential backtracking');
+});
+
+test('renderer bounds keep every word, pause and cue exactly once across long speech',()=>{
+ const text=('This fucking sentence keeps every word and its ending. [pause:0] ').repeat(70).trim();
+ const unit={text,cuesBefore:['TICK' as const],cuesAfter:['BELL' as const],sounds:[{type:'sound' as const,name:'wiper' as const}],prePause:true,postPause:true};
+ const parts=boundedSpeechUnits([unit],400,40);
+ assert.ok(parts.length>1);
+ assert.equal(parts.map(part=>part.text).join(' '),text);
+ assert.ok(parts.every(part=>part.text.length<=400&&part.text.split(/\s+/).length<=40));
+ assert.deepEqual(parts.flatMap(part=>part.cuesBefore??[]),['TICK']);
+ assert.deepEqual(parts.flatMap(part=>part.cuesAfter??[]),['BELL']);
+ assert.equal(parts.filter(part=>part.sounds).length,1);
+ assert.equal(parts.filter(part=>part.prePause).length,1);assert.equal(parts.filter(part=>part.postPause).length,1);
+ const named={text:'BAMBI SLEEP',trigger:'BAMBI SLEEP'};
+ assert.deepEqual(boundedSpeechUnits([named],400,40),[named]);
+ assert.throws(()=>boundedSpeechUnits([{text:'x'.repeat(3001)}],3000),/single speech word/);
+});
 
 test('script normalization preserves words and converts actual pauses without speaking metadata',()=>{
  assert.equal(normalizeScript('Wait… **I-Q LOCK** …… [PAUSE] --- END ---'),'Wait [pause:2500]  IQ LOCK  [pause:5000]  [SFX:PAUSE_10] ');
@@ -21,6 +44,18 @@ test('speech strips emphasis and code delimiters while retaining words, identifi
  assert.equal(normalizeScript('*one* **two** ***three*** _four_ __five__ `six` af_heart'), 'one two three four five six af_heart');
  assert.deepEqual(scriptUnits('*hums softly* *Ready.* [breath:in] __In.__').map(u=>({text:u.text,breath:u.breath})),[{text:'Ready.',breath:undefined},{text:'In.',breath:{direction:'in',durationMs:4000}}]);
  assert.deepEqual(scriptUnits('*** ` __'),[]);
+});
+test('quotation wrappers and quote-only streaming tails never become speech requests',async()=>{
+ const original=globalThis.fetch,calls:string[]=[];
+ try{
+  globalThis.fetch=async(_url,options)=>{const {input}=JSON.parse(String(options?.body));calls.push(input);return new Response(JSON.stringify({text:input,audio:'AAAA',audio_format:'wav',timestamps:[],spoken_seconds:.5})+'\n');};
+  for(const text of ['"Listen, Bambi."','“Don’t rush, doll.”','"','”']){
+   for await(const _ of new Kokoro().speak(text,'af_heart',1,new AbortController().signal)){}
+  }
+  assert.deepEqual(calls,['Listen, Bambi.','Don’t rush, doll.']);
+  assert.deepEqual(scriptUnits('" “ ”'),[]);
+  assert.deepEqual(scriptUnits('Say "hello". Don\'t whisper.').map(unit=>unit.text),["Say hello. Don't whisper."]);
+ }finally{globalThis.fetch=original;}
 });
 
 test('automatic trigger groups deduplicate explicit prefix and effects while retaining the trailing pause',()=>{

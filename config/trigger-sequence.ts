@@ -12,6 +12,10 @@ export const triggerEffectMap = {
 export const pauseOnlyTriggers = ['BAMBI SLEEP','BAMBI FREEZE','BAMBI LIMB','BAMBI LIMP','BAMBI WAKE AND OBEY','BAMBI CUM AND COLLAPSE','BAMBI DOES AS SHE IS TOLD','GOOD GIRL','BIMBO DOLL','DROP FOR COCK','COCK ZOMBIE NOW','ZAP COCK DRAIN OBEY','GIGGLE TIME','SAFE AND SECURE','PRIMPED','PAMPERED','POSTURE LOCK','UNIFORM LOCK','TITS LOCK','WAIST LOCK','BUTT LOCK','LIPS LOCK','THROAT LOCK','HIPS LOCK','CUNT LOCK','BAMBI YES TIME','BAMBI YOU ARE NOTHING'];
 // A spoken "Snap" is a one-shot cue. Longer names still win during matching.
 export const triggerAliases = [...Object.keys(triggerEffectMap),...pauseOnlyTriggers,'BODY LOCK','ATTITUDE LOCK','SNAP'];
+/** Bambi is also the listener's ordinary name. Text alone cannot distinguish
+ * that address from the catalog's standalone cue. Only a dedicated engine
+ * action schedules that cue; longer phrases retain ordinary trigger matching. */
+export function implicitTriggerNames(names:readonly string[]){return [...new Set(names)].filter(name=>name.trim().toLowerCase()!=='bambi');}
 export function isSpokenSnap(name:string){return name.trim().toUpperCase()==='SNAP';}
 export function isSpokenOneShot(name:string){return isSpokenSnap(name)||name.trim().toUpperCase()==='BUBBLE';}
 export function effectForTrigger(name:string):'wiper'|'pop'|'bell'|undefined {

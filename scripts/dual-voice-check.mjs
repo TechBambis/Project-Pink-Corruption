@@ -13,7 +13,9 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
 
-const root=fileURLToPath(new URL('../',import.meta.url)),requests=[];
+const root=fileURLToPath(new URL('../',import.meta.url)),requests=[],inferenceRequests=[];
+const passage='[turn:guide] [owner] Rest here. [pause:long] [bambi:…so warm…] [owner] Stay here. [pause:long] [bambi] I feel soft. [owner] Rest.';
+const initialProfile={'dialogue-version':1,'conversation-style':'situational','narration-enabled':true,'session-events':false,'mode':'conversation','ai-mode':'text','voice':'bambi_classic','audio-preset':'bambi_classic','model':'cloud:cydonia-24b-v4.3','master':0,'voice-echoes':true,'narration-pause-induction':30};
 function wav(spoken,pause){
  const rate=24000,frames=Math.ceil((spoken+pause)*rate),bytes=Buffer.alloc(44+frames*2);
  bytes.write('RIFF');bytes.writeUInt32LE(bytes.length-8,4);bytes.write('WAVEfmt ',8);bytes.writeUInt32LE(16,16);bytes.writeUInt16LE(1,20);bytes.writeUInt16LE(1,22);bytes.writeUInt32LE(rate,24);bytes.writeUInt32LE(rate*2,28);bytes.writeUInt16LE(2,32);bytes.writeUInt16LE(16,34);bytes.write('data',36);bytes.writeUInt32LE(frames*2,40);
@@ -31,7 +33,12 @@ const stub=createServer(async(req,res)=>{
  if(req.url==='/apply-template'){res.end(JSON.stringify({prompt:JSON.stringify(body.messages)}));return;}
  if(req.url==='/tokenize'){res.end(JSON.stringify({tokens:Array(Math.ceil(body.content.length/4)).fill(1)}));return;}
  res.setHeader('Content-Type','text/event-stream');
- const content='[turn:guide] [owner] Rest here. [pause:long] [bambi:…so warm…] [owner] Stay here. [pause:long] [bambi] I feel soft. [owner] Rest.';
+ // The production bounded sentence queue resumes the same assistant response.
+ // A fixture must continue its exact prefix rather than repeat the opening.
+ const last=body.messages?.at(-1),prefix=last?.role==='assistant'?last.content:'';
+ assert.ok(typeof prefix==='string'&&passage.startsWith(prefix),'Continuation must match the authored fixture');
+ inferenceRequests.push({prefixCharacters:prefix.length});
+ const content=passage.slice(prefix.length);
  for(const text of content){res.write('data: '+JSON.stringify({choices:[{delta:{content:text}}]})+'\n\n');}
  res.end('data: [DONE]\n\n');
 });
@@ -49,42 +56,70 @@ const inherited=Object.fromEntries(Object.entries(process.env).filter(([key])=>!
 const app=spawn(process.execPath,['--import','tsx','bootstrap.mjs'],{cwd:fixture,env:{...inherited,BAMBI_PORT:String(port),BAMBI_DATABASE:':memory:',BAMBI_TTS_URL:`http://127.0.0.1:${stubPort}`,BAMBI_CLOUD_URL:`http://127.0.0.1:${stubPort}`,BAMBI_CLOUD_MODEL:'fixture',BAMBI_CLOUD_CONTEXT:'32768',BAMBI_CLOUD_KIND:'llama.cpp',BAMBI_CLOUD_DEFAULT:'true',BAMBI_CLOUD_API_KEY:'fixture-key'},stdio:['ignore','pipe','pipe']});
 let logs='',browser;app.stdout.on('data',data=>logs+=data);app.stderr.on('data',data=>logs+=data);
 const base=`http://127.0.0.1:${port}`,errors=[],events=[];
+async function completeReply(after){
+ const deadline=Date.now()+15000;
+ while(Date.now()<deadline){const done=events.slice(after).find(e=>e.type==='done');if(done){assert.equal(done.audioComplete,true,'Server completed the actual acknowledged voice queue');return done;}const error=events.slice(after).find(e=>e.type==='error');if(error)throw Error(error.text);await new Promise(resolve=>setTimeout(resolve,50));}
+ throw Error('Reply did not complete: '+JSON.stringify(events.slice(after).map(e=>({type:e.type,text:e.text}))));
+}
 try{
  let ready=false;for(let attempt=0;attempt<100;attempt++){if(app.exitCode!==null)throw Error(logs);try{if((await fetch(base+'/api/health')).ok){ready=true;break;}}catch{}await new Promise(resolve=>setTimeout(resolve,100));}assert.ok(ready,'Fixture server started');
+ // Admission applies only to this loopback stub and isolated in-memory store.
+ assert.equal((await fetch(base+'/api/access',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({microphone:false,devices:false,modelDownloads:false,onlineMedia:false,cloudAI:true,localClock:false,approximateLocation:false,contextToCloud:false})})).status,200);
+ assert.equal((await fetch(base+'/api/preferences',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(initialProfile)})).status,200);
  browser=await chromium.launch({headless:true,...(process.env.BAMBI_BROWSER_BINARY?{executablePath:process.env.BAMBI_BROWSER_BINARY}:{})});
  const page=await browser.newPage({viewport:{width:1280,height:900}});page.on('pageerror',error=>errors.push(String(error)));
  page.on('websocket',socket=>socket.on('framereceived',frame=>{try{events.push(JSON.parse(String(frame.payload)));}catch{}}));
  await page.route('**/api/warm',route=>route.fulfill({json:{ok:true}}));
- await page.addInitScript(()=>localStorage.setItem('bambi-profile',JSON.stringify({'dialogue-version':1,'conversation-style':'situational','narration-enabled':false,'session-events':false,'mode':'conversation','ai-mode':'voice','voice':'bambi_classic','audio-preset':'bambi_classic','model':'cloud:cydonia-24b-v4.3','master':0,'voice-echoes':true})));
+ await page.addInitScript(profile=>localStorage.setItem('bambi-profile',JSON.stringify(profile)),initialProfile);
  await page.goto(base+'/');await page.waitForFunction(()=>!!window.bambi&&document.getElementById('connection').textContent==='Connected locally');
  assert.equal(await page.locator('#dual-voice').isChecked(),false);
+ assert.equal(await page.locator('#dual-voice').isDisabled(),true,'Text-only playback cannot enable classic voice layers');
  await page.evaluate(()=>{location.hash='voice';document.getElementById('voice-blend-settings').open=true;});
  await page.evaluate(()=>{const select=document.getElementById('model');select.value='cloud:cydonia-24b-v4.3';select.dispatchEvent(new Event('change',{bubbles:true}));});
+ // Start without speech, then enable classic narration. The existing flow defers
+ // its next automatic passage so each explicit test request remains isolated.
+ await page.evaluate(()=>window.bambi.startSession());
+ // Refresh the visible control after the asynchronous saved-profile load.
+ await page.locator('#voice-read-aloud').uncheck();
+ await page.locator('#voice-read-aloud').check();
+ assert.deepEqual(await page.evaluate(()=>({narration:document.getElementById('narration-enabled').checked,events:document.getElementById('session-events').checked,mode:document.getElementById('ai-mode').value})),{narration:true,events:false,mode:'voice'});
  await page.locator('#dual-voice').check();
  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('bambi-profile'))['dual-voice']===true);
  mkdirSync(join(root,'runtime'),{recursive:true});await page.screenshot({path:join(root,'runtime/dual-voice-desktop.png'),fullPage:true});
  await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:join(root,'runtime/dual-voice-mobile.png'),fullPage:true});
  await page.setViewportSize({width:1280,height:900});
  await page.evaluate(async()=>{
-  await window.bambi.startSession();window.fixtureVoices=[];
+  window.fixtureVoices=[];
   const engine=window.bambi.audio,original=engine.playVoice.bind(engine);
-  engine.playVoice=(bytes,start,end,trigger,script)=>{const before=engine.dualGapStart,queueBefore=engine.voicesEnd,now=engine.context.currentTime;return original(bytes,(at,duration,word)=>{window.fixtureVoices.push({track:script?.voiceTrack,start:at,duration,spoken:script?.spokenSeconds,scheduledFromPast:at<now+.034});start(at,duration,word);},end,trigger,script);};
+  engine.playVoice=(bytes,start,end,trigger,script)=>{const now=engine.context.currentTime;return original(bytes,(at,duration,word)=>{window.fixtureVoices.push({track:script?.voiceTrack,start:at,duration,spoken:script?.spokenSeconds,scheduledFromPast:at<now+.034});start(at,duration,word);},end,trigger,script);};
   await window.bambi.ask('Dual voice fixture.',true);
  });
- try{await page.waitForFunction(()=>window.fixtureVoices.length===5,{timeout:10000});}catch(error){console.error(JSON.stringify({voices:await page.evaluate(()=>window.fixtureVoices),status:await page.locator('#ai-status').textContent(),notices:await page.locator('[role=alert],.notice-banner').allTextContents(),events:events.map(e=>({type:e.type,text:e.text,notice:e.text,track:e.voice_track})),requests:requests.map(r=>({input:r.input,voice:r.voice,speed:r.speed}))}));throw error;}await page.waitForFunction(()=>window.bambi.audio.voiceSources.size===0);await page.waitForFunction(()=>document.getElementById('ai-status').textContent==='Your Bambi companion');
+ await completeReply(0);await page.waitForFunction(()=>window.bambi.audio.voiceSources.size===0);
  const voices=await page.evaluate(()=>window.fixtureVoices);
+ writeFileSync(join(root,'runtime/narrator-dual-schedule.json'),JSON.stringify(voices,null,2));
  assert.deepEqual(voices.map(v=>v.track.speaker),['owner','bambi','owner','bambi','owner']);
  assert.deepEqual(voices.filter(v=>v.track.speaker==='bambi').map(v=>[v.track.gainDb,v.track.pan]),[[-14,-.3],[-14,.3]]);
- for(let i=1;i<voices.length;i++){assert.ok(voices[i].start>=voices[i-1].start+voices[i-1].spoken-.002,'Spoken tracks do not overlap');if(voices[i].track.speaker==='owner')assert.ok(voices[i].start>=voices[i-1].start+voices[i-1].spoken+.2-.002,'Owner waits for room tail');assert.equal(voices[i].scheduledFromPast,false,'Every fragment is scheduled ahead on the audio clock');}
- assert.ok(voices[1].start>=voices[0].start+voices[0].spoken-.002,'The voices never speak at once');assert.ok(voices[1].start<=voices[0].start+voices[0].duration+.15,'Late background speech begins directly after the reserved pause');
- assert.ok(events.some(e=>e.type==='done'&&e.audioComplete)||await page.locator('#ai-status').textContent()==='Your Bambi companion');assert.ok(requests.every(r=>!r.input.includes('[owner')&&!r.input.includes('[bambi')));
+ for(const voice of voices)assert.equal(voice.scheduledFromPast,false,'Every fragment is scheduled ahead on the audio clock');
+ for(let i=1;i<voices.length;i+=2){
+  const owner=voices[i-1],inner=voices[i];
+  assert.ok(inner.start<owner.start+owner.spoken-.002,'The inner voice audibly overlaps its external guide');
+ }
+ const owners=voices.filter(v=>v.track.speaker==='owner'),inners=voices.filter(v=>v.track.speaker==='bambi');
+ for(let i=1;i<owners.length;i++)assert.ok(owners[i].start>=owners[i-1].start+owners[i-1].duration-.002,'Owner keeps authored pauses');
+ for(let i=1;i<inners.length;i++)assert.ok(inners[i].start>=inners[i-1].start+inners[i-1].duration-.002,'Inner fragments do not cover one another');
+ const memory=await(await fetch(base+'/api/memory')).json();
+ assert.ok(memory.turns.some(turn=>turn.role==='assistant'&&turn.content.includes('(Imagined inner feminine voice:')),'Heard inner thoughts retain their speaker attribution in conversation history');
+ assert.ok(inferenceRequests.some(r=>r.prefixCharacters>0),'The real prefill continuation path was exercised');assert.ok(requests.every(r=>!r.input.includes('[owner')&&!r.input.includes('[bambi')));
  await page.locator('#dual-voice').uncheck();
  const before=events.length;await page.evaluate(()=>window.bambi.ask('Dual voice fixture.',true));
- await page.waitForFunction(()=>window.fixtureVoices.length===8);await page.waitForFunction(()=>window.bambi.audio.voiceSources.size===0);
+ await completeReply(before);await page.waitForFunction(()=>window.bambi.audio.voiceSources.size===0);assert.equal(await page.evaluate(()=>window.fixtureVoices.length),8);
  assert.ok(events.slice(before).filter(e=>e.type==='audio').every(e=>!e.voice_track&&e.text!=='so warm'&&e.text!=='I feel soft.'));
  await page.locator('#dual-voice').check();await page.evaluate(()=>window.bambi.ask('Dual voice fixture.',true));
  await page.waitForFunction(()=>window.fixtureVoices.length>=10);await page.evaluate(()=>window.bambi.hardStop());
  assert.equal(await page.evaluate(()=>window.bambi.audio.voiceSources.size),0);assert.equal(await page.evaluate(()=>window.bambi.audio.dualVoiceCleanup.size),0);
+ const stoppedCount=await page.evaluate(()=>window.fixtureVoices.length);await page.waitForTimeout(500);
+ assert.equal(await page.evaluate(()=>window.fixtureVoices.length),stoppedCount,'Late fragments cannot restart voice after Stop');assert.equal(await page.evaluate(()=>window.bambi.audio.voiceSources.size),0);
  const profile=await(await fetch(base+'/api/preferences')).json();assert.equal(typeof profile['dual-voice'],'boolean');assert.deepEqual(errors,[]);
- const report={ok:true,voices,ttsRequests:requests.length,errors};writeFileSync(join(root,'runtime/dual-voice-browser.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+ const report={ok:true,completedAt:new Date().toISOString(),scope:'Production browser/server, deterministic loopback inference and synthetic PCM; no real model, physical listening or devices.',voices,ttsRequests:requests.length,inferenceRequests,completedReplies:events.filter(e=>e.type==='done').length,controls:{optIn:true,disable:true,stop:true,lateAfterStop:true,mobile:true},errors};writeFileSync(join(root,'runtime/dual-voice-browser.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));
+}catch(error){mkdirSync(join(root,'runtime'),{recursive:true});writeFileSync(join(root,'runtime/dual-voice-browser-failure.json'),JSON.stringify({error:String(error),events:events.map(e=>({...e,audio:undefined})),requests,inferenceRequests,errors,logs},null,2));throw error;
 }finally{await browser?.close();app.kill('SIGTERM');await once(app,'exit').catch(()=>{});await new Promise(resolve=>stub.close(resolve));rmSync(fixture,{recursive:true,force:true});}

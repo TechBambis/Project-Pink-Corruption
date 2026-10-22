@@ -13,7 +13,7 @@
 .model-choice[data-recommended=true]{border-color:var(--model-accent)}.model-choice:has(input:checked){background:#e9a4d60c;box-shadow:inset 3px 0 var(--model-accent)}
 .model-choice input{margin:5px 0 0;accent-color:var(--model-accent);flex-shrink:0}.model-choice>span{display:grid;gap:6px;min-width:0}.model-choice strong{font-size:15px}.model-choice span span{font-size:12px;color:var(--muted,#c0a8c7)}.model-choice .model-badge{color:var(--model-accent)}
 .model-choice input[type=radio]{width:16px;min-width:16px;height:16px;padding:0}.model-choice>span{overflow-wrap:anywhere}
-.model-experimental{display:flex;gap:10px;align-items:flex-start;font-size:13px;margin:15px 0}.model-experimental input{width:auto}
+.model-experimental,.model-risk{display:flex;gap:10px;align-items:flex-start;font-size:13px;margin:15px 0}.model-experimental input,.model-risk input{width:auto}
 .model-setup progress{width:100%;height:10px;accent-color:var(--model-accent)}.model-progress{overflow-wrap:anywhere;font-size:13px;min-height:24px}.model-error{color:#ffb4ca}.model-wizard-actions{border-top:1px solid var(--line,#50394f);padding-top:18px}.model-wizard-actions [data-finish]{margin-left:auto}
 #model-onboarding{max-width:820px;max-height:85vh;overflow:auto}#model-onboarding>h2{font-size:27px}#model-onboarding button{font:inherit}#model-onboarding [hidden],.model-setup [hidden]{display:none!important}
 @media(max-width:600px){.model-steps{gap:7px}.model-steps button{flex:1;padding:8px;font-size:12px}.model-hardware{grid-template-columns:1fr;gap:3px}.model-hardware dd{margin-bottom:10px}.model-choice{padding:12px}.model-wizard-actions [data-finish]{margin-left:0}}
@@ -25,3 +25,5 @@
 .model-source{padding:15px 0;border-top:1px solid var(--line,#50394f)}.model-source strong,.model-source span{display:block;overflow-wrap:anywhere}.model-source span,.model-source p{font-size:12px;color:var(--muted,#c0a8c7)}.model-source-actions{display:flex;flex-wrap:wrap;gap:8px}.model-source-actions button{font-size:12px;text-align:left}
 .model-setup button:focus-visible{outline:2px solid var(--model-accent);outline-offset:3px}.model-setup [data-download]:enabled,.model-setup [data-prepare]:enabled{border-color:var(--model-accent)}
 @media(max-width:600px){.model-status{padding:14px}.model-actions>button{flex:1 1 150px}.model-source-actions>button{width:100%}}
+
+.model-comparison{min-width:0;margin-top:1rem;border:1px solid var(--border,#65566d);border-radius:.7rem;padding:1rem}.model-comparison-choice{display:grid;gap:.4rem;margin:.8rem 0;overflow-wrap:anywhere}.model-comparison-choice label{display:block}.model-comparison-choice small{opacity:.8}.model-comparison [data-comparison-results] p{overflow-wrap:anywhere}

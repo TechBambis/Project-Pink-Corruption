@@ -18,3 +18,5 @@ Ordinary updates reuse the existing profile; no export is required. Files exclud
 Writes use the expected SQLite revision; stale writes return 409, invalid data 400 and storage failure 500. Imports atomically commit settings, revision and Undo snapshot. Request IDs make retries idempotent; Undo cannot overwrite later edits. UI drafts are scoped to profile/window. All preference writers share this contract.
 
 Run `npm run check`, `node --import tsx --test tests/settings.test.ts` and `npm run test:settings`. The browser harness uses baseline commit `58b4887` for same-profile migration and tests transfer to a fresh profile. It needs Git history and Chromium. Native Windows↔Linux transfer remains an open tester check.
+
+**Profiles & backups** in Extras supports offline share codes, personal settings files and password-encrypted backups. Chats/memories and library metadata are included only when explicitly selected. Preview before restoring; permission grants, device arming and computer-specific model paths do not transfer. Backups contain media metadata rather than the media files, which must be reselected. Keep the backup password separately.

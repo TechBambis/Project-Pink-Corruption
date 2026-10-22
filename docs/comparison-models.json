@@ -1,5 +1,25 @@
 [
   {
+    "alias": "bambi-qwen35-4b-hauhau:q4_k_m",
+    "repo": "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
+    "revision": "c09cdbcdb1fefad6d335809d445621b5f5ba0c6e",
+    "file": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+    "bytes": 2707513696,
+    "sha256": "79e28ecacf84e75b6056cf4059636d435aa9eb67795780f7b7dbc7d32a962741",
+    "license": "apache-2.0",
+    "backend": "llama.cpp",
+    "text_only": true,
+    "context": 24576,
+    "allowed_contexts": [
+      8192,
+      16384,
+      24576
+    ],
+    "runtime": {
+      "cache_type": "f16"
+    }
+  },
+  {
     "repo": "DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF",
     "revision": "8b192a8e203440d6492a133f6cdfa4bf7bffac98",
     "file": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-IQ4_XS.gguf",
@@ -27,5 +47,164 @@
     "context": 16384,
     "text_only": true,
     "license": "apache-2.0"
+  },
+  {
+    "repo": "AIOpsInSpace/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-MTP",
+    "revision": "3542ee23c6418c38ca9eec77acc69ac047343a27",
+    "file": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-MTP-Q4_K_M.gguf",
+    "bytes": 2788710496,
+    "sha256": "1443de63a550a7bd18905589dcebfa5c307da8b2ef86db858a7691fb9a3c15cc",
+    "license": "apache-2.0",
+    "alias": "bambi-qwen35-4b-hauhau-mtp-experiment:q4_k_m",
+    "backend": "llama.cpp",
+    "text_only": true,
+    "context": 24576,
+    "allowed_contexts": [
+      8192,
+      16384,
+      24576
+    ],
+    "runtime": {
+      "cache_type": "f16",
+      "ubatch_size": 128,
+      "speculative": {
+        "type": "draft-mtp",
+        "draft_tokens": 3
+      }
+    }
+  },
+  {
+    "repo": "AIOpsInSpace/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-MTP",
+    "revision": "3542ee23c6418c38ca9eec77acc69ac047343a27",
+    "file": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-MTP-Q4_K_M.gguf",
+    "bytes": 2788710496,
+    "sha256": "1443de63a550a7bd18905589dcebfa5c307da8b2ef86db858a7691fb9a3c15cc",
+    "license": "apache-2.0",
+    "alias": "bambi-qwen35-4b-hauhau-mtp-baseline:q4_k_m",
+    "backend": "llama.cpp",
+    "text_only": true,
+    "context": 24576,
+    "allowed_contexts": [
+      8192,
+      16384,
+      24576
+    ],
+    "runtime": {
+      "cache_type": "f16",
+      "ubatch_size": 128
+    }
+  },
+  {
+    "alias": "bambi-qwen35-9b-dark-roast:iq4_xs",
+    "repo": "mradermacher/Qwen3.5-9B-The-Defiant-Fable-DARK-ROAST-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-i1-GGUF",
+    "revision": "ad376a5c5343273577a89f5c708eb62b1f39ab07",
+    "file": "Qwen3.5-9B-The-Defiant-Fable-DARK-ROAST-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP.i1-IQ4_XS.gguf",
+    "bytes": 5326418656,
+    "sha256": "d05d0096560d2b7ee562e8855605566eddd14c91ef03e7bd76fe66bc0b10ef17",
+    "license": "apache-2.0",
+    "context": 24576,
+    "backend": "llama.cpp",
+    "text_only": true,
+    "allowed_contexts": [
+      16384,
+      24576
+    ],
+    "runtime": {
+      "cache_type": "f16",
+      "ubatch_size": 128,
+      "prompt_cache_mib": 2048
+    }
+  },
+  {
+    "alias": "bambi-qwen35-9b-rp:iq4_xs",
+    "repo": "mradermacher/Qwen3.5-text-9B-NSFW-RP-RolePlay-i1-GGUF",
+    "revision": "07e5b2a936dc9b485082b4118d975362d08f0134",
+    "file": "Qwen3.5-text-9B-NSFW-RP-RolePlay.i1-IQ4_XS.gguf",
+    "bytes": 5196439840,
+    "sha256": "b13bb3ec1b49b56b9162356af1db1fb0a98810ac369991f2a6b881972df34b3e",
+    "license": "apache-2.0",
+    "context": 24576,
+    "backend": "llama.cpp",
+    "text_only": true,
+    "allowed_contexts": [
+      16384,
+      24576
+    ],
+    "runtime": {
+      "cache_type": "f16",
+      "ubatch_size": 128,
+      "prompt_cache_mib": 2048
+    }
+  },
+  {
+    "alias": "bambi-qwen35-9b-defiant-fable-mtp:iq3_m",
+    "repo": "DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF",
+    "revision": "1c3de241dd3b10890b96d163dbb05375a294be62",
+    "file": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-MTP-IQ3_M.gguf",
+    "bytes": 5722667232,
+    "sha256": "726ad4c6c41906e314052e69a294ae3372310c8d11c2e78d4e97784d5beec110",
+    "license": "apache-2.0",
+    "context": 24576,
+    "backend": "llama.cpp",
+    "text_only": true,
+    "allowed_contexts": [
+      16384,
+      24576
+    ],
+    "runtime": {
+      "cache_type": "f16",
+      "ubatch_size": 128,
+      "prompt_cache_mib": 2048
+    }
+  },
+  {
+    "alias": "bambi-qwen35-9b-defiant-fable-mtp-on:iq3_m",
+    "repo": "DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF",
+    "revision": "1c3de241dd3b10890b96d163dbb05375a294be62",
+    "file": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-MTP-IQ3_M.gguf",
+    "bytes": 5722667232,
+    "sha256": "726ad4c6c41906e314052e69a294ae3372310c8d11c2e78d4e97784d5beec110",
+    "license": "apache-2.0",
+    "context": 24576,
+    "backend": "llama.cpp",
+    "text_only": true,
+    "allowed_contexts": [
+      16384,
+      24576
+    ],
+    "runtime": {
+      "cache_type": "f16",
+      "ubatch_size": 128,
+      "prompt_cache_mib": 2048,
+      "speculative": {
+        "type": "draft-mtp",
+        "draft_tokens": 3
+      }
+    }
+  },
+  {
+    "alias": "bambi-qwen35-9b-dark-roast-mtp-on:iq4_xs",
+    "repo": "mradermacher/Qwen3.5-9B-The-Defiant-Fable-DARK-ROAST-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-i1-GGUF",
+    "revision": "ad376a5c5343273577a89f5c708eb62b1f39ab07",
+    "file": "Qwen3.5-9B-The-Defiant-Fable-DARK-ROAST-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP.i1-IQ4_XS.gguf",
+    "bytes": 5326418656,
+    "sha256": "d05d0096560d2b7ee562e8855605566eddd14c91ef03e7bd76fe66bc0b10ef17",
+    "license": "apache-2.0",
+    "context": 24576,
+    "backend": "llama.cpp",
+    "text_only": true,
+    "allowed_contexts": [
+      16384,
+      24576
+    ],
+    "runtime": {
+      "cache_type": "f16",
+      "ubatch_size": 128,
+      "prompt_cache_mib": 2048,
+      "speculative": {
+        "type": "draft-mtp",
+        "draft_tokens": 3
+      }
+    }
   }
 ]

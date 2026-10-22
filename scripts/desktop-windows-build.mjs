@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2026 BambiOS
 // SPDX-License-Identifier: AGPL-3.0-only
 // Build frozen services on Windows itself. Linux inspection is preparation only.
+import {createHash} from 'node:crypto';
 import {readFileSync,writeFileSync,mkdirSync,readdirSync,rmSync,existsSync,statfsSync,openSync,closeSync} from 'node:fs';
 import {resolve,dirname,join,relative,isAbsolute} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {releaseIdentity} from './desktop-source.mjs';
-import {archiveTool,buildOptions,downloadPinned,hashFile,files,copy,copyTree,inventory,logicalPath,sourcePathAllowed,llamaEntries,assertNativeTree,assertWindowsX64,stageWindowsSource,windowsDependencyReport} from './desktop-windows-support.mjs';
+import {archiveTool,buildOptions,downloadPinned,hashFile,files,copy,copyTree,copyCompactLicenses,inventory,logicalPath,sourcePathAllowed,llamaEntries,assertNativeTree,assertWindowsX64,stageWindowsSource,windowsDependencyReport} from './desktop-windows-support.mjs';
 
 const root=resolve(fileURLToPath(new URL('../',import.meta.url)));
 process.chdir(root);
@@ -26,7 +27,7 @@ try{await build();}finally{closeSync(lock);rmSync(lockPath);}
 
 async function build(){
  const space=statfsSync(root);
- if(space.bavail*space.bsize<(alpha?6:2)*1024**3)throw Error(`The ${phase} build needs at least ${alpha?6:2} GiB free for its native build tree and verified archives.`);
+ if(space.bavail*space.bsize<(alpha?12:2)*1024**3)throw Error(`The ${phase} build needs at least ${alpha?12:2} GiB free for its native build tree and verified archives.`);
  const run=(command,args,options={})=>execFileSync(command,args,{stdio:'inherit',windowsHide:true,...options});
  const acquire=async asset=>{const path=join(cache,asset.file);await downloadPinned(asset,path);return path;};
  const nodeArchive=await acquire(pins.node),electronZip=await acquire(pins.electron);
@@ -45,6 +46,12 @@ async function build(){
  if(!existsSync(csc))throw Error('Windows inbox .NET Framework x64 compiler is required for the private Job Object helper.');
  const ownership=join(backend,'native/ownership/bambi-job.exe');mkdirSync(dirname(ownership),{recursive:true});
  run(csc,['/nologo','/target:exe','/platform:x64','/optimize+','/out:'+ownership,resolve('apps/desktop/windows-job.cs')]);assertWindowsX64(ownership);
+ const gpuProbe=join(backend,'native/hardware/bambi-gpu.exe');mkdirSync(dirname(gpuProbe),{recursive:true});
+ run(csc,['/nologo','/target:exe','/platform:x64','/optimize+','/out:'+gpuProbe,resolve('apps/desktop/windows-gpu.cs')]);assertWindowsX64(gpuProbe);
+ // Qualification of the probe is separate from model acceleration. The native
+ // build must at least exercise DXGI and produce valid bounded inventory JSON.
+ const gpuInventory=JSON.parse(execFileSync(gpuProbe,[],{encoding:'utf8',windowsHide:true,timeout:8000,maxBuffer:65536}));
+ if(!Array.isArray(gpuInventory))throw Error('Windows DXGI inventory did not return an adapter list.');
  let speechBuild;
  if(alpha){
   const {buildWindowsNative}=await import('./desktop-windows-native.mjs');
@@ -77,10 +84,10 @@ async function build(){
   for(const child of Object.keys(pkg.dependencies||{}))dependency(child,path);
   if(name==='esbuild')dependency('@esbuild/win32-x64',path);
  }
- for(const name of ['express','ws','zod','tsx'])dependency(name);
+ for(const name of ['express','express-rate-limit','ws','zod','tsx'])dependency(name);
  for(const [path] of dependencies)copyTree(path,join(backend,relative(root,path)),file=>!file.split('/').includes('node_modules'));
  for(const path of ['LICENSE','LICENSING.md','docs/LICENSE.stable2','docs/STABLE_CONTENT.md','docs/LOCAL_AUDIO_LICENSES.md'])copy(resolve(path),join(notices,path));
- copyTree(resolve('docs/licenses'),join(notices,'docs/licenses'));
+ await copyCompactLicenses(resolve('docs/licenses'),join(notices,'source-licenses'));
  copy(resolve('voices/bambi_classic.json'),join(notices,'voices/bambi_classic.json'));
  writeFileSync(join(notices,'DEPENDENCIES.json'),JSON.stringify([...dependencies].map(([path,pkg])=>({path:logicalPath(relative(root,path)),name:pkg.name,version:pkg.version,license:pkg.license,repository:pkg.repository})),null,2)+'\n');
  const {writeSamples}=await import('./desktop-windows-sample.mjs');writeSamples(join(backend,'dist/web/samples'),alpha);
@@ -101,7 +108,7 @@ async function build(){
   qualification:{status:'built-unqualified',nativeNodeSQLite:bundledCheck,installer:false,conversation:false,physicalAudio:false,gpu:false},
   shell:{mainSha256:await hashFile(join(shell,'main.cjs')),permissionPolicySha256:await hashFile(join(shell,'permission-policy.cjs')),preloadSha256:await hashFile(join(shell,'preload.cjs')),runtimeEnvironmentSha256:await hashFile(join(shell,'runtime-environment.cjs'))},
   node:pins.node,electron:pins.electron,builder:pins.builder,loader:'tsx@4.20.6',
-  native:{ownership:{source:'apps/desktop/windows-job.cs',jobLimit:'JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE'},...(alpha?{llama:pins.llama,speech:speechBuild}:{})},
+  native:{ownership:{source:'apps/desktop/windows-job.cs',jobLimit:'JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE'},hardware:{source:'apps/desktop/windows-gpu.cs',interface:'DXGI adapter capacities and process budgets'},...(alpha?{llama:pins.llama,speech:speechBuild}:{})},
   capabilities:{sample:true,ai:alpha,speech:alpha,devices:false,onlineMedia:false},
   dependencies:[...dependencies.values()].map(pkg=>({name:pkg.name,version:pkg.version})),files:await inventory(backend)};
  writeFileSync(join(notices,'RUNTIME-MANIFEST.json'),JSON.stringify(manifest,null,2)+'\n');
@@ -112,9 +119,21 @@ async function build(){
   if(!existsSync(actual)||await hashFile(actual)!==file.sha256)throw Error('Finished Windows backend differs from staging: '+file.path);
  }
  for(const file of await inventory(notices))if(await hashFile(join(output,'win-unpacked/resources/notices',file.path))!==file.sha256)throw Error('Finished notices differ from staging: '+file.path);
+ if(alpha){
+  const {default:AdmZip}=await import('adm-zip');
+  const portable=new AdmZip(join(output,`bambi-local-${version}-windows-x64.zip`));
+  const archiveEntries=portable.getEntries();
+  for(const entry of archiveEntries)if(entry.entryName.startsWith('/')||entry.entryName.includes('\\')||entry.entryName.split('/').includes('..'))throw Error('Unsafe portable ZIP path.');
+  for(const file of manifest.files){
+   const entry=portable.getEntry('resources/backend/'+file.path);
+   if(!entry||entry.isDirectory||entry.header.size!==file.bytes||createHash('sha256').update(entry.getData()).digest('hex')!==file.sha256)throw Error('Portable ZIP backend differs from verified staging: '+file.path);
+  }
+  const program=portable.getEntry('Bambi Local.exe');
+  if(!program||createHash('sha256').update(program.getData()).digest('hex')!==await hashFile(join(output,'win-unpacked/Bambi Local.exe')))throw Error('Portable ZIP executable differs from tested application.');
+ }
  copy(join(backend,'dist/web/corresponding-source.tar.gz'),join(output,`bambi-local-${version}-source.tar.gz`));
  copy(join(notices,'RUNTIME-MANIFEST.json'),join(output,'RUNTIME-MANIFEST.json'));copy(resolve('docs/AI_ALPHA_TESTING.md'),join(output,'TESTER-GUIDE.md'));
- const sums=[];for(const path of files(output).filter(path=>dirname(path)===output&&/\.(?:exe|gz|json|md)$/.test(path)))sums.push(`${await hashFile(path)}  ${relative(output,path)}`);
+ const sums=[];for(const path of files(output).filter(path=>dirname(path)===output&&/\.(?:exe|zip|gz|json|md)$/.test(path)))sums.push(`${await hashFile(path)}  ${relative(output,path)}`);
  writeFileSync(join(output,'SHA256SUMS'),sums.join('\n')+'\n');
  console.log('Windows per-user NSIS artifacts:',output,'\nSource digest:',sourceDigest,'\nNative acceptance and actual installer/download tests remain separate.');
 }

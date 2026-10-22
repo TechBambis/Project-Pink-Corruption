@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
-import { readFileSync } from 'node:fs';
+import phaseData from './session-phases-neutral.json' with {type:'json'};
 import { z } from 'zod';
 import { appendSessionState, type SessionState } from '../ai/session-state';
 import {triggerTimingDirection} from '../session-director/trigger-timing';
@@ -22,9 +22,7 @@ export const PhaseConfigSchema = z.object({
 
 // Local author configuration; reload by restarting the application server.
 // Separately edited bambisleep-phases*.json files are retained but not loaded here.
-export const phaseConfig = PhaseConfigSchema.parse(JSON.parse(readFileSync(
-  new URL('./session-phases-neutral.json', import.meta.url), 'utf8',
-)));
+export const phaseConfig = PhaseConfigSchema.parse(phaseData);
 
 export function appendPhasePrompt(basePrompt: string, session?: SessionState): string {
   if (!session) return basePrompt;
@@ -33,6 +31,6 @@ export function appendPhasePrompt(basePrompt: string, session?: SessionState): s
     appendSessionState(basePrompt, session),
     phaseConfig.phases[session.phase],
     phaseConfig.intensity_overrides[intensity],
-    session.triggerTiming ? triggerTimingDirection(session.phase,session.phaseProgress,session.triggerTiming) : '',
+    session.triggerTiming ? triggerTimingDirection(session.phase,session.phaseProgress,session.triggerTiming,true) : '',
   ].filter(Boolean).join('\n\n');
 }

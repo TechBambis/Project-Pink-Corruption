@@ -7,6 +7,20 @@ import assert from 'node:assert/strict';
 import { Kokoro } from '../packages/speech/tts';
 import {stripVocalFillers} from '../packages/speech/nonverbal';
 
+test('unreachable speech identifies the service, releases its slot and preserves cancellation',async t=>{
+ const provider=new Kokoro('http://127.0.0.1:18883'),controller=new AbortController(),networkError=new TypeError('fetch failed');
+ const consume=async(signal:AbortSignal)=>{for await(const _ of provider.speak('Public test.','af_heart',1,signal)){};};
+ t.mock.method(globalThis,'fetch',async()=>{throw networkError;});
+ await assert.rejects(consume(controller.signal),(error:Error)=>{
+  assert.match(error.message,/Local voice service is unreachable/);assert.equal(error.cause,networkError);return true;
+ });
+ t.mock.method(globalThis,'fetch',async()=>new Response(JSON.stringify({audio:'AAAA',audio_format:'wav',text:'Public test.',timestamps:[]})+'\n'));
+ await consume(controller.signal);
+ const cancelled=new AbortController(),reason=Error('Stopped');
+ t.mock.method(globalThis,'fetch',async()=>{cancelled.abort(reason);throw networkError;});
+ await assert.rejects(consume(cancelled.signal),error=>error===reason);
+});
+
 test('unsupported hums are removed without changing words, pauses or numeric units',()=>{
  for(const [input,expected] of [
   ['Mm. There you are.','There you are.'],['Mmm, all right.','all right.'],['mmh! Mhm… Hmm?',''],

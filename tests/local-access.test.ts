@@ -8,7 +8,7 @@ import {createServer, request, type IncomingHttpHeaders} from 'node:http';
 import {spawn} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
 import {once} from 'node:events';
-import {mkdtempSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, rmSync, symlinkSync, writeFileSync, existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {localRequestAllowed} from '../packages/safety/local-access';
@@ -53,9 +53,19 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
  const directory=mkdtempSync(join(tmpdir(),'bambi-local-access-'));
  const reservation=createServer();reservation.listen(0,'127.0.0.1');await once(reservation,'listening');
  const port=(reservation.address() as {port:number}).port;await new Promise<void>(done=>reservation.close(()=>done()));
- for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])symlinkSync(resolve(name),join(directory,name),process.platform==='win32'?'junction':'dir');
+ for(const name of ['packages','presets','voices','apps','docs','dist','config','scripts','node_modules'])if(existsSync(resolve(name)))symlinkSync(resolve(name),join(directory,name),process.platform==='win32'?'junction':'dir');
  writeFileSync(join(directory,'package.json'),'{"type":"module"}');
  writeFileSync(join(directory,'bootstrap.mjs'),`
+  // Admission/cloud fixtures never launch native hardware discovery. Windows
+  // descendants can otherwise retain the fixture directory after app teardown.
+  import childProcess from 'node:child_process';
+  import {syncBuiltinESMExports} from 'node:module';
+  childProcess.execFile=(_command,_args,options,callback)=>{
+   const finish=typeof options==='function'?options:callback;
+   queueMicrotask(()=>finish(Object.assign(Error('Native commands are excluded from this fixture'),{code:'ENOENT'}),'',''));
+   return {kill:()=>false};
+  };
+  syncBuiltinESMExports();
   import dgram from 'node:dgram';
   import {EventEmitter} from 'node:events';
   dgram.createSocket=()=>{const socket=new EventEmitter();socket.bind=(_p,_h,callback)=>callback?.();socket.unref=()=>socket;socket.send=()=>{};socket.close=()=>{};return socket;};
@@ -76,7 +86,7 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
    if(child.exitCode!==null||Date.now()>deadline)throw Error('Isolated app startup failed: '+output);
    await new Promise(done=>setTimeout(done,25));
   }
-  for(const path of ['/api/preferences','/api/diagnostics/replies']){
+  for(const path of ['/api/preferences','/api/diagnostics/replies','/api/diagnostics/scenes']){
    assert.equal((await probe(path,{Host:`attacker.example:${port}`})).status,403);
    assert.equal((await probe(path,{Origin:'https://attacker.example'})).status,403);
    assert.equal((await probe(path,{Origin:'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'})).status,403);
@@ -89,6 +99,10 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
   for(const path of ['/content/stable-2.0/manifest.json','/content/stable-2.0/workers/ollama.js','/api/hardware'])
    assert.equal((await probe(path)).status,404,'Internal/reference files and retired reports are not served: '+path);
   assert.equal((await probe('/api/preferences',{'Content-Type':'application/json'},'PUT','{broken')).status,400);
+  assert.equal((await probe('/api/access',{'Content-Type':'application/json'},'PUT',JSON.stringify({microphone:true,devices:false,modelDownloads:false,onlineMedia:false,cloudAI:false,localClock:false,approximateLocation:false,contextToCloud:false}))).status,200);
+  for(const body of ['[]','{"length":44,"0":82}'])assert.equal((await probe('/api/transcribe',{'Content-Type':'application/json'},'POST',body)).status,400);
+  for(const query of ['q=one&q=two','q[key]=value'])assert.equal((await probe('/api/knowledge?'+query)).status,400);
+  assert.equal((await probe('/api/voice-lab/comparison/unknown')).status,400);
   assert.equal((await probe('/api/preferences',{'Content-Type':'application/json'},'PUT',JSON.stringify({test:'x'.repeat(128*1024)}))).status,413);
   assert.equal((await probe('/ws',{Host:`attacker.example:${port}`},'GET',undefined,true)).status,403);
   assert.equal((await probe('/ws',{},'GET',undefined,true)).status,403);
@@ -103,7 +117,10 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
   const closed=once(socket,'close');socket.send('x'.repeat(128*1024+1));
   assert.equal((await closed)[0],1009);
   assert.equal((await probe('/api/diagnostics/replies')).status,200,'Oversized messages must not crash the app');
-  // Stop remains available to the app and the native lifecycle script.
+  // Exhaust repeated file/API work, while retaining the native emergency Stop.
+  const statuses=[];
+  for(let batch=0;batch<19;batch++)statuses.push(...await Promise.all(Array.from({length:100},()=>probe('/api/content').then(response=>response.status))));
+  assert(statuses.includes(200));assert(statuses.includes(429));
   assert.equal((await probe('/api/panic',{},'POST')).status,200);
  }finally{
   child.kill('SIGTERM');
