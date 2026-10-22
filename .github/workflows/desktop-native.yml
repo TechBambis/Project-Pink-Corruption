@@ -16,7 +16,7 @@ permissions:
 jobs:
   native:
     if: inputs.quota_checked && github.actor_id == '337824705'
-    runs-on: ${{ inputs.target == 'macos-arm64' && 'macos-14' || inputs.target == 'windows-x64' && 'windows-2022' || 'ubuntu-24.04' }}
+    runs-on: ${{ inputs.target == 'macos-arm64' && 'macos-26' || inputs.target == 'windows-x64' && 'windows-2022' || 'ubuntu-24.04' }}
     timeout-minutes: ${{ inputs.target == 'macos-arm64' && 15 || 60 }}
     env:
       BAMBI_RELEASE_TARGET: ${{ inputs.target }}
