@@ -88,7 +88,6 @@ jobs:
       contents: write # GitHub requires write access to download a draft asset.
     env:
       RELEASE_TAG: ${{ inputs.verify_linux_tag }}
-      BAMBI_SMOKE_OUTPUT: ${{ runner.temp }}/ubuntu-evidence
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,6 +97,8 @@ jobs:
           node-version: '24.18.1'
       - run: npm ci --ignore-scripts
       - run: npx playwright install-deps chromium
+      - name: Locate Ubuntu qualification records
+        run: echo "BAMBI_SMOKE_OUTPUT=$RUNNER_TEMP/ubuntu-evidence" >> "$GITHUB_ENV"
       - name: Receive the exact draft AppImage and make the Ubuntu installer
         env:
           GH_TOKEN: ${{ github.token }}
