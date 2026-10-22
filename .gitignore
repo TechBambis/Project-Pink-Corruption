@@ -257,3 +257,4 @@ test-results/
 !/scripts/release-notes.mjs
 !/scripts/discord-release.mjs
 !/scripts/desktop-ubuntu-release.mjs
+!/scripts/desktop-windows-qualification.mjs

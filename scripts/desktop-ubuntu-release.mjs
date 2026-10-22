@@ -15,8 +15,9 @@ if(process.platform!=='linux'||actor!=='337824705'||repository!=='TechBambis/Pro
 const checkedOutHead=capture('git',['rev-parse','HEAD']),base=`repos/${repository}`;
 // The REST tag lookup only returns published releases. Drafts must be found by
 // listing accessible releases, then all later writes use that immutable ID.
-const release=api(`${base}/releases?per_page=100`).find(value=>value.tag_name===tag);
-if(!release?.draft)throw Error('Only an unpublished draft can receive this installer.');
+const saved=mode==='upload'?JSON.parse(readFileSync(join(evidence,'RECEIPT.json'),'utf8')):null;
+const release=saved?.releaseId?api(`${base}/releases/${saved.releaseId}`):api(`${base}/releases?per_page=100`).find(value=>value.tag_name===tag);
+if(!release?.draft||release.tag_name!==tag)throw Error('Only an unpublished draft can receive this installer.');
 let ref=api(`${base}/git/ref/tags/${tag}`).object;
 if(ref.type==='tag')ref=api(`${base}/git/tags/${ref.sha}`).object;
 if(ref.type!=='commit')throw Error('The release tag must identify a source commit.');
@@ -24,7 +25,7 @@ const head=ref.sha;
 if(head!==checkedOutHead){
  run('git',['fetch','--depth=1','origin',head]);
  const changed=capture('git',['diff','--name-only',head,checkedOutHead]).split('\n').filter(Boolean);
- if(changed.some(path=>path!=='scripts/desktop-ubuntu-release.mjs'))throw Error('Application or qualification source differs from the release tag.');
+ if(changed.some(path=>!['scripts/desktop-ubuntu-release.mjs','scripts/desktop-windows-check.mjs','scripts/desktop-windows-qualification.mjs','.github/workflows/desktop-native.yml','.gitignore'].includes(path)))throw Error('Application or qualification source differs from the release tag.');
 }
 const root=join(temporary,'ubuntu-package'),deb=join(temporary,`bambi-local-${version}-linux-amd64.deb`),receipt=join(evidence,'RECEIPT.json');
 const hash=async path=>{const h=createHash('sha256');for await(const chunk of createReadStream(path))h.update(chunk);return h.digest('hex');};
@@ -47,12 +48,12 @@ if(mode==='receive'){
  if(statSync(deb).size>=2**31)throw Error('Installer exceeds the release asset size limit.');
  run('sudo',['dpkg','--install',deb]);
  if(capture('stat',['-c','%U:%G:%a','/opt/bambi-local/chrome-sandbox'])!=='root:root:4755')throw Error('Installed sandbox ownership mismatch.');
- writeFileSync(receipt,JSON.stringify({version,head,appImage:{name,sha256:asset.digest},deb:{name:deb.split('/').at(-1),bytes:statSync(deb).size,sha256:await hash(deb)},result:'pending-installed-check'},null,2)+'\n');
+ writeFileSync(receipt,JSON.stringify({version,head,releaseId:release.id,appImage:{name,sha256:asset.digest},deb:{name:deb.split('/').at(-1),bytes:statSync(deb).size,sha256:await hash(deb)},result:'pending-installed-check'},null,2)+'\n');
 }else{
  const record=JSON.parse(readFileSync(receipt,'utf8'));
  const reports=readdirSync(evidence).filter(name=>name.startsWith('Linux ü alpha ')).map(name=>JSON.parse(readFileSync(join(evidence,name,'evidence.json'),'utf8')));
  if(record.version!==version||record.head!==head||reports.length!==1||reports[0].errors.length||reports[0].checks.length!==22||reports[0].executable!=='/opt/bambi-local/AppRun'||await hash(deb)!==record.deb.sha256)throw Error('The installed package has not passed its 22 native checks.');
- run('gh',['release','upload',tag,deb,'--repo',repository]);
+ run('gh',['api','--hostname','uploads.github.com',`${base}/releases/${release.id}/assets?name=${record.deb.name}`,'--method','POST','--header','Content-Type: application/vnd.debian.binary-package','--input',deb]);
  const uploaded=api(`${base}/releases/${release.id}`).assets.find(asset=>asset.name===record.deb.name);
  if(!uploaded||uploaded.digest!=='sha256:'+record.deb.sha256||uploaded.size!==record.deb.bytes)throw Error('Uploaded Ubuntu installer digest mismatch.');
  writeFileSync(receipt,JSON.stringify({...record,result:'passed',installedChecks:22},null,2)+'\n');

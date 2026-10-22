@@ -240,6 +240,7 @@ try{
   await current.page.goto('http://127.0.0.1:16969/setup');
   await current.page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='not-installed');
   await current.page.getByRole('button',{name:'3. Install and start',exact:true}).click();
+  await current.page.waitForFunction(()=>document.querySelector('.model-loading')?.hidden===true&&document.querySelector('.model-blocked')?.textContent!=='Reading setup information…');
   const expectedModel=JSON.parse(readFileSync(join(root,'config/desktop-alpha-models.json'),'utf8')).alias;
   const setupChecks=await current.page.evaluate(async expectedModel=>{
    const sleep=ms=>new Promise(r=>setTimeout(r,ms)),checks=[];
@@ -248,7 +249,7 @@ try{
     const start=performance.now(),guarded=document.querySelector('#setup-install').disabled;let observed;
     if(guarded){
      const catalog=await(await fetch('/api/models/catalog')).json(),model=catalog.alternatives.find(row=>row.id===expectedModel);
-     if(!model||model.memoryFit==='fits')throw Error('Unexpected disabled setup download on a compatible host.');
+     if(!model||model.memoryFit==='fits')throw Error('Unexpected disabled setup download on a compatible host: '+document.querySelector('.model-blocked')?.textContent);
      const response=await fetch('/api/desktop/setup/install',{method:'POST'});if(!response.ok)throw Error('Explicit public-fixture download was rejected.');
     }else document.querySelector('#setup-install').click();
     while(performance.now()-start<30000){
