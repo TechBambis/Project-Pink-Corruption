@@ -243,7 +243,7 @@ test-results/
 !/scripts/react-player-browser-check.mjs
 !/scripts/regie-browser-check.mjs
 !/docs/SPOKEN_CHARACTER.md
-!/docs/RELEASE_NOTES_ALPHA42.md
+!/docs/RELEASE_NOTES_ALPHA43.md
 
 # Only local application owners belong in this repository.
 /apps/*
@@ -252,3 +252,8 @@ test-results/
 !/apps/web/
 !/apps/extension/
 /packages/runtime/*/
+
+# Reviewed local-release communication; credentials remain private.
+!/scripts/release-notes.mjs
+!/scripts/discord-release.mjs
+!/scripts/desktop-ubuntu-release.mjs

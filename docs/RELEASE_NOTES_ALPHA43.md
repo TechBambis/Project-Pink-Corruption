@@ -1,4 +1,4 @@
-# Bambi Local alpha.42 candidate
+# Bambi Local alpha.43 candidate
 
 This candidate builds on alpha.41 and retains its Windows installer and portable ZIP, Linux packaging, Apple Silicon sources, model setup, settings transfer and profile backups.
 
@@ -9,6 +9,7 @@ This candidate builds on alpha.41 and retains its Windows installer and portable
 - Add an optional React renderer for the local player (`?ui=react`), using the existing runtime for transport, audio, input and settings. The existing renderer remains the default.
 - Preserve character and journey selections through validated saves, portable settings and profile restart. Ordinary preference saves cannot activate runtime preparation options.
 - Retain bounded native ownership and improve GPU offload evidence when an auxiliary model reports its own smaller layer count.
+- Bound repeated local HTTP requests, keep emergency Stop available, and make malformed speech parsing linear. Remove private comparison pages and routes.
 - Restrict Git candidates and corresponding-source snapshots to the local application owners. Ordinary scene acceptance generates synthetic effects and needs no private recordings.
 
 ## Verification and release state

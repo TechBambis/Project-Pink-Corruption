@@ -2,6 +2,14 @@ name: Manual desktop release
 on:
   workflow_dispatch:
     inputs:
+      verify_linux_tag:
+        description: Verify the matching draft AppImage and prepare its Ubuntu installer instead of building
+        type: string
+        default: ''
+      announce_tag:
+        description: Announce this published release instead of building (leave empty to build)
+        type: string
+        default: ''
       target:
         type: choice
         options: [windows-x64, linux-x64, macos-arm64]
@@ -39,6 +47,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   native:
+    if: inputs.announce_tag == '' && inputs.verify_linux_tag == ''
     uses: ./.github/workflows/desktop-native.yml
     with:
       target: ${{ inputs.target }}
@@ -49,3 +58,61 @@ jobs:
       upload_packages: ${{ inputs.upload_packages }}
       transfer_packages: ${{ inputs.transfer_packages }}
       remaining_artifact_mib: ${{ inputs.remaining_artifact_mib }}
+  announce:
+    if: inputs.announce_tag != '' && inputs.verify_linux_tag == '' && github.actor_id == '337824705'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: write
+    concurrency:
+      group: discord-release-changelog
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.18.1'
+      - name: Post the matching published local release to Discord
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          RELEASE_TAG: ${{ inputs.announce_tag }}
+        run: node scripts/discord-release.mjs "$RELEASE_TAG"
+  ubuntu:
+    if: inputs.verify_linux_tag != '' && inputs.announce_tag == '' && inputs.quota_checked && github.actor_id == '337824705'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: write # GitHub requires write access to download a draft asset.
+    env:
+      RELEASE_TAG: ${{ inputs.verify_linux_tag }}
+      BAMBI_SMOKE_OUTPUT: ${{ runner.temp }}/ubuntu-evidence
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.18.1'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install-deps chromium
+      - name: Receive the exact draft AppImage and make the Ubuntu installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/desktop-ubuntu-release.mjs receive
+      - name: Check the installed Ubuntu application with its sandbox enabled
+        run: xvfb-run -a node scripts/desktop-alpha-check.mjs /opt/bambi-local/AppRun
+      - name: Upload only the verified Ubuntu installer to the same draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/desktop-ubuntu-release.mjs upload
+      - name: Save Ubuntu qualification
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ubuntu-qualification-${{ github.run_id }}
+          retention-days: 1
+          path: ${{ runner.temp }}/ubuntu-evidence
+          if-no-files-found: warn

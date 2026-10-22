@@ -10,7 +10,7 @@
 
 Studio includes a chime sample for import/preview/export. Export your own Studio drafts before closing.
 
-On Ubuntu 24.04, install the Debian package with the system package installer, or `sudo apt install ./bambi-local-0.1.0-alpha.41-linux-amd64.deb`. It installs the Chromium sandbox helper with the required ownership and permissions.
+On Ubuntu 24.04, install the Debian package with the system package installer, or `sudo apt install ./bambi-local-0.1.0-alpha.43-linux-amd64.deb`. It installs the Chromium sandbox helper with the required ownership and permissions.
 
 If Linux cannot mount the AppImage, run `chmod +x FILE.AppImage`, then `./FILE.AppImage --appimage-extract` and `squashfs-root/AppRun`. `--bambi-port=N` selects three consecutive ports; `--bambi-user-data=/absolute/path` selects a dedicated profile.
 

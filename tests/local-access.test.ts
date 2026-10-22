@@ -99,6 +99,8 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
   for(const path of ['/content/stable-2.0/manifest.json','/content/stable-2.0/workers/ollama.js','/api/hardware'])
    assert.equal((await probe(path)).status,404,'Internal/reference files and retired reports are not served: '+path);
   assert.equal((await probe('/api/preferences',{'Content-Type':'application/json'},'PUT','{broken')).status,400);
+  assert.equal((await probe('/api/access',{'Content-Type':'application/json'},'PUT',JSON.stringify({microphone:true,devices:false,modelDownloads:false,onlineMedia:false,cloudAI:false,localClock:false,approximateLocation:false,contextToCloud:false}))).status,200);
+  for(const body of ['[]','{"length":44,"0":82}'])assert.equal((await probe('/api/transcribe',{'Content-Type':'application/json'},'POST',body)).status,400);
   for(const query of ['q=one&q=two','q[key]=value'])assert.equal((await probe('/api/knowledge?'+query)).status,400);
   assert.equal((await probe('/api/voice-lab/comparison/unknown')).status,400);
   assert.equal((await probe('/api/preferences',{'Content-Type':'application/json'},'PUT',JSON.stringify({test:'x'.repeat(128*1024)}))).status,413);

@@ -6,9 +6,9 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {copy,copyTree,sourcePathAllowed,inventory,digest,hashFile} from './desktop-windows-support.mjs';
 
-const roots=['apps','packages','config','presets','tests','scripts','voices'];
+const roots=['apps','packages','config','presets','tests','scripts','voices','release-notes'];
 const top=['package.json','package-lock.json','tsconfig.json','.gitignore','desktop-builder.cjs','desktop-alpha-builder.cjs','desktop-windows-builder.cjs','LICENSE','LICENSING.md','README.md'];
-const docs=['comparison-models.json','qwen36-model.json','MODEL_SETUP.md','PRIVACY_ACCESS.md','DESKTOP_RELEASE.md','AI_ALPHA_TESTING.md','SETTINGS_BACKUP.md','SPOKEN_CHARACTER.md','RELEASE_NOTES_ALPHA42.md','anubis-model.json','community-models.json','LICENSE.stable2','STABLE_CONTENT.md','LOCAL_AUDIO_LICENSES.md','LOCAL_AUDIO.md','RELEASE-SECURITY.md','LOCAL_SECURITY.md','DEVICES.md','BAMBICLOUD.md','CLOUD_COMPUTE.md'];
+const docs=['comparison-models.json','qwen36-model.json','MODEL_SETUP.md','PRIVACY_ACCESS.md','DESKTOP_RELEASE.md','AI_ALPHA_TESTING.md','SETTINGS_BACKUP.md','SPOKEN_CHARACTER.md','RELEASE_NOTES_ALPHA43.md','anubis-model.json','community-models.json','LICENSE.stable2','STABLE_CONTENT.md','LOCAL_AUDIO_LICENSES.md','LOCAL_AUDIO.md','RELEASE-SECURITY.md','LOCAL_SECURITY.md','DEVICES.md','BAMBICLOUD.md','CLOUD_COMPUTE.md'];
 
 /** One source allowlist for every native builder; runtime/user data never enter it. */
 export async function stageDesktopSource(root,destination,version){

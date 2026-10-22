@@ -2,7 +2,7 @@
 
 Bambi Local is a free local companion for the hypnosis community: chat, voice, spirals, your own media and Session Studio.
 
-[**Download for Windows, Linux or Apple Silicon Mac**](https://github.com/TechBambis/Project-Pink-Corruption/releases/tag/v0.1.0-alpha.41)
+[**Download for Windows, Linux or Apple Silicon Mac**](https://github.com/TechBambis/Project-Pink-Corruption/releases/tag/v0.1.0-alpha.43)
 
 Windows: install the **.exe**. Ubuntu 24.04: install the **.deb**. Other Linux systems: open the **.AppImage**. Apple Silicon Mac: extract the ZIP and copy Bambi Local to Applications. Download models through **Get AI & voice models** in Setup. Default voice: **Bambi Mix (Kokoro)**. No developer tools needed.
 
