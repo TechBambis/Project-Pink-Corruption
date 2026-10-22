@@ -3,6 +3,8 @@
 
 /** Portable preference contract. Keep bounds/options aligned with the controls. */
 export const preferenceRules = {
+  // Retained to read old backups; no longer exposed as a control or prompt gate.
+  "raw-roleplay": {"type":"boolean"},
   "adaptive-delivery": {"type":"boolean"},
   "ai-mode": {"type":"enum","values":["off","text","voice","ambient","interactive"]},
   "audio-preset": {"type":"enum","values":["bambi_local_clean","bambi_classic","bambi_classic_deep","bambi_voice_test"]},
@@ -82,7 +84,7 @@ export const preferenceRules = {
   "persona": {"type":"text","max":300},
   "phase-visuals": {"type":"boolean"},
   "player-cue-markers": {"type":"boolean"},
-  "prompt-template": {"type":"enum","values":["bambisleep-classic","gentle-induction","english-conversation","custom"]},
+  "prompt-template": {"type":"enum","values":["bambisleep-classic","gentle-induction","english-conversation","bambi-companion","custom"]},
   "q8-kv-cache": {"type":"boolean"},
   "reduced": {"type":"boolean"},
   "response-length": {"type":"enum","values":["220","600","2048","8192"]},

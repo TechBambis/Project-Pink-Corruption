@@ -32,8 +32,8 @@ test('custom groups can combine, deduplicate and silence cues without unlocking 
   assert.deepEqual(triggersForPhase('induction',0,config),['BAMBI SLEEP','BIMBO DOLL','BAMBI WAKE AND OBEY']);
   config.stages.induction=[];
   const prompt=appendPhasePrompt('BASE',{...state(0),intensity:5,triggerTiming:config});
-  assert.match(prompt,/Only these trigger names may be spoken in this response: \[\]/);
-  assert.match(prompt,/Do not introduce or fire any named trigger/);
+  assert.match(prompt,/Only these exact cue names may be spoken: \[\]/);
+  assert.match(prompt,/No named cues/);
   config.enabled=false;assert.ok(!appendPhasePrompt('BASE',{...state(0),triggerTiming:config}).includes('CURRENT TRIGGER TIMING (takes precedence'));
 });
 test('configuration survives serialization and rejects invalid categories and thresholds',()=>{

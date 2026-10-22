@@ -4,11 +4,11 @@
 
 import {breathInstruction,type BreathCue} from './breath';
 import { lines } from '../ai';
-import {scriptUnits,type PlaybackCue} from './script';
+import {scriptUnits,boundedSpeechUnits,type PlaybackCue} from './script';
 import type {SoundCue} from '../audio/sound-design';
 import type {DeviceCommand} from '../devices/commands';
 import type {TickCue} from '../audio/tick';
-import {isSpokenOneShot} from '../../config/trigger-sequence';
+import {isSpokenOneShot,implicitTriggerNames} from '../../config/trigger-sequence';
 import {readFileSync} from 'node:fs';
 import {DualVoiceSession,voiceScriptRuns,type VoiceTrack} from './dual-voice';
 import {findTriggers} from '../../config/trigger-sounds';
@@ -35,6 +35,7 @@ export class Kokoro implements SpeechProvider {
  }
  async voices(){const r=await fetch(this.url+'/v1/audio/voices',{signal:AbortSignal.timeout(3000)});if(!r.ok)throw Error('Kokoro unavailable');const x=await r.json();return x.voices.map((v:string|{id:string})=>typeof v==='string'?v:v.id);}
  async *speak(text:string,voice:string,speed:number,signal:AbortSignal,preset='bambi_local_clean',triggerNames?:string[],isolatedVoice=false,dualVoice?:DualVoiceSession,delivery?:DeliveryMode,onTiming?:(name:string,ms:number)=>void):AsyncGenerator<SpeechChunk>{
+ triggerNames=implicitTriggerNames(triggerNames??[]);
  if(delivery)text=deliveryText(text);
  const runs=/\[(?:owner\]|bambi[:\]])/i.test(text)?voiceScriptRuns(text,!!dualVoice):[{speaker:'owner' as const,text}];
  for(const run of runs){
@@ -43,7 +44,8 @@ export class Kokoro implements SpeechProvider {
  if(background&&findTriggers(run.text,[...triggerNames??[],...triggerAliases]).length)continue;
  const content=background?run.text.replace(/…|\.{3,}/g,' ').replace(/\[(?!pause:)[^\]]*\]/gi,''):run.text;
  const track=dualVoice?.track(run.speaker);
- for(const unit of background?[{text:content}]:scriptUnits(content,triggerNames)){
+ const nativeMoss=!background&&isMossVoice(voice);
+ for(const unit of boundedSpeechUnits(background?[{text:content}]:scriptUnits(content,triggerNames),nativeMoss?400:3000,nativeMoss?40:Infinity)){
  if(!unit.text.trim()&&!('control' in unit&&unit.control))continue;
  if(unit.control){yield {audio:'',audio_format:'wav',timestamps:[],text:'',control:true,cues_before:unit.cuesBefore,ticks:unit.ticks};continue;}
  const queuedAt=performance.now();

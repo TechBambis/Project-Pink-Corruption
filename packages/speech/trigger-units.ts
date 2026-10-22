@@ -65,7 +65,10 @@ export function safePhraseBoundaries(text:string,names:string[]=[],clauses=false
   if(/["”']/.test(text[end]??''))end++;
   while(/[*_`]/.test(text[end]??''))end++;
   if(end>=text.length||! /\s/.test(text[end]))continue;
-  if(quote&&end===i+1||emphasis&&end===i+1)continue;
+  // A quotation or emphasized paragraph can contain several complete spoken
+  // sentences. Waiting for its final delimiter can hold minutes of speech.
+  // Keep the stricter rule for early clauses; words and formatting stay intact.
+  if(!sentence&&(quote&&end===i+1||emphasis&&end===i+1))continue;
   if(triggers.some(t=>t.index<end&&t.index+t.name.length>end))continue;
   // A named unit can itself contain punctuation and can still be arriving.
   if([...names,...triggerAliases].some(name=>{
@@ -88,6 +91,7 @@ export function safePhraseBoundaries(text:string,names:string[]=[],clauses=false
 /** Bounded streaming phrases which never cut a known trigger between words. */
 export class TriggerSentenceChunker {
  private buffer='';private released=false;
+ get pendingCharacters(){return this.buffer.length;}
  constructor(private names:string[]=triggerAliases,private conversation=false,private reserveLow:()=>boolean=()=>true,private earlyClauses=true){}
  push(text:string){
   this.buffer+=text;const out:string[]=[];

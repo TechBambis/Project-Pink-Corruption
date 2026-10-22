@@ -6,6 +6,7 @@ import {spiralStyles} from '../session-director/regie/registry';
 import {sceneNames} from '../safety/actions';
 import {sessionDirections} from '../session-director/direction';
 import {TriggerTimingSchema,defaultTriggerTiming} from '../session-director/trigger-timing';
+import {journeyIds} from '../session-director/journeys';
 import {migrateVisualPreferences} from '../visuals/preferences';
 
 export type SettingValue=string|number|boolean;
@@ -31,7 +32,7 @@ export const settingsRegistry:Record<string,SettingDefinition>={
   "direction-withdrawal":field(z.boolean(),true,"portable","session"),
   "q8-kv-cache":field(z.boolean(),false,"machine-specific","machine"),
   "session-interaction":field(z.enum(["interactive", "uninterrupted"]),"interactive","portable","session"),
-  "session-journey":field(z.enum(["custom"]),"custom","portable","session"),
+  "session-journey":field(z.enum(["custom",...journeyIds]),"custom","portable","session"),
   "guided-style":field(z.string().max(300),"Soft, playful, dreamy and affectionate","personal","personal"),
   "conversation-style":field(z.enum(["situational", "reactive"]),"reactive","portable","session"),
   "bambicloud-cues":field(z.boolean(),true,"portable","session"),
@@ -93,7 +94,7 @@ export const settingsRegistry:Record<string,SettingDefinition>={
   "bus-voice":field(numericChoice(0,1,0.01),"0.85","portable","audio"),
   "bus-ambient":field(numericChoice(0,0.5,0.01),"0","portable","audio"),
   "bus-effects":field(numericChoice(0,1,0.01),"0.2","portable","audio"),
-  "prompt-template":field(z.enum(["bambisleep-classic", "gentle-induction", "custom"]),"bambisleep-classic","portable","session"),
+  "prompt-template":field(z.enum(["bambisleep-classic", "gentle-induction", "english-conversation", "bambi-companion", "custom"]),"bambisleep-classic","portable","session"),
   "bambi-name":field(z.string().max(50),"Bambi","personal","personal"),
   "trigger-selection":field(jsonSetting(z.array(z.string().min(1).max(100)).max(100)),"[]","portable","triggers"),
   "triggers-enabled":field(z.boolean(),true,"portable","triggers"),

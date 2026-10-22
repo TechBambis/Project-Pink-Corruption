@@ -7,6 +7,7 @@ import {execFileSync} from 'node:child_process';
 import {copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync} from 'node:fs';
 import {dirname, join, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {localSourceArea} from './desktop-windows-support.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8'}).split('\0').filter(Boolean);
@@ -18,6 +19,7 @@ const publicSounds = new Set(['tick-clicks.json', 'tick_main.wav', 'tick_sub.wav
 const publicVoices = new Set(['.gitkeep', 'bambi_classic.npy', 'bambi_classic.json']);
 let bytes = 0;
 for (const file of candidates) {
+  if (!localSourceArea(file)) issues.push(`${file}: outside the local application source owners`);
   const parts = file.split('/');
   const base = parts.at(-1);
   const localDirectory = /^(?:\.runtime|runtime|models|vendor|data)\//.test(file) && base !== '.gitkeep';

@@ -163,6 +163,9 @@ export type BambiEventType = BambiEvent['type'];
 export const eventDurationMs = (event: BambiEvent) => event.timing.prepMs + event.timing.activeMs + event.timing.returnMs;
 
 export const MotifSchema = z.object({ id, visualPreset: z.enum(sceneNames), audioPreset: z.string().max(100).optional(), textAnchor: z.string().max(200), firstIntroducedAtMs: timestamp }).strict();
+// Translating measured PCM boundaries re-associates floating-point sums. One
+// microsecond is below one audio sample and matches the parent-phase tolerance.
+const boundaryToleranceMs=.001;
 export const ProgramSchema = z.object({
   version: z.literal(1), durationMs: ms.refine(n => n > 0), baseline: PresentationStateSchema,
   continuous: z.boolean().optional(),
@@ -172,8 +175,8 @@ export const ProgramSchema = z.object({
 }).strict().superRefine((program, ctx) => {
   const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
   const responseLimit=program.continuous?Math.max(program.durationMs,...program.events.map(e=>e.atMs+eventDurationMs(e))):program.durationMs;
-  let responseEnd=0;for(const window of program.responseWindows??[]){if(window.fromMs<responseEnd||window.toMs<=window.fromMs||window.toMs>responseLimit)issue('Listener response windows must be finite, ordered and inside the session');responseEnd=window.toMs;}
-  let promptEnd=0;for(const prompt of program.responsePrompts??[]){if(prompt.fromMs<promptEnd||prompt.toMs<=prompt.fromMs||prompt.toMs>responseLimit)issue('Response prompts must be finite, ordered and inside the session');promptEnd=prompt.toMs;}
+  let responseEnd=0;for(const window of program.responseWindows??[]){if(window.fromMs<responseEnd-boundaryToleranceMs||window.toMs<=window.fromMs||window.toMs>responseLimit+boundaryToleranceMs)issue('Listener response windows must be finite, ordered and inside the session');responseEnd=window.toMs;}
+  let promptEnd=0;for(const prompt of program.responsePrompts??[]){if(prompt.fromMs<promptEnd-boundaryToleranceMs||prompt.toMs<=prompt.fromMs||prompt.toMs>responseLimit+boundaryToleranceMs)issue('Response prompts must be finite, ordered and inside the session');promptEnd=prompt.toMs;}
   const ids = new Set<string>(), motifs = new Map(program.motifs.map(m => [m.id, m]));
   if (motifs.size !== program.motifs.length) issue('Duplicate motif identity');
   let end = 0;
@@ -181,8 +184,8 @@ export const ProgramSchema = z.object({
     if (ids.has(event.id)) issue('Duplicate event identity'); ids.add(event.id);
     const cycle = program.continuous ? Math.floor(event.atMs / program.durationMs) * program.durationMs : 0;
     const i = sessionPhases.indexOf(event.phase), from = cycle + phaseStarts[i] * program.durationMs, to = cycle + (phaseStarts[i + 1] ?? 1) * program.durationMs;
-    if (event.atMs < from || event.atMs + eventDurationMs(event) > to + .001) issue('Event extends outside its fixed parent phase');
-    if (event.atMs < end) issue('Foreground events cannot overlap; compose stages explicitly');
+    if (event.atMs < from || event.atMs + eventDurationMs(event) > to + boundaryToleranceMs) issue('Event extends outside its fixed parent phase');
+    if (event.atMs < end-boundaryToleranceMs) issue('Foreground events cannot overlap; compose stages explicitly');
     end = event.atMs + eventDurationMs(event);
     if (event.motifId && (!motifs.has(event.motifId) || motifs.get(event.motifId)!.firstIntroducedAtMs > event.atMs)) issue('Motif must be introduced before recall');
     if (event.phase === 'awakening' && !['soft_return', 'layer_shift', 'silence', 'motif_recall'].includes(event.type)) issue('Awakening cannot start a new temporary reinforcing mechanism');

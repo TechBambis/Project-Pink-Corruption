@@ -83,7 +83,11 @@ class Renderer:
     def chunks(self, text, config, cancel=lambda: False, trigger=False):
         """One phrase at a time, with silence and real backpressure at the HTTP stream."""
         offset = 0
-        for phrase in phrases(text, config['timing']):
+        # Let the voice model speak commas and semicolons in context. Splitting
+        # an address such as "Stay here, Bambi, and listen." into three renders
+        # adds a preset pause and another synthesis boundary at every comma.
+        # Sentence boundaries, explicit pauses and the phrase size limit remain.
+        for phrase in phrases(text, config['timing'], split_clauses=False):
             if cancel():
                 return
             buses, spoken_seconds, timestamps = self.vocal_unit(phrase, config, trigger=trigger, with_timestamps=True)

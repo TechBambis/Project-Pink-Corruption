@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Separate commercial permissions: see LICENSING.md.
 
-import type { LLMBackend, Message } from './index';
-import { lines } from './index';
+import type { LLMBackend, Message, StructuredOptions } from './index';
+import { lines, structuredOptions } from './index';
+import {parseStructuredOutput} from './structured';
 import { z } from 'zod';
 import type { SamplingProfile } from '../../config/sampling';
 import { PrefillEchoFilter } from './prefill';
@@ -101,19 +102,19 @@ export class CloudBackend implements LLMBackend {
     if (!Array.isArray(available) || !available.some(model => (this.config.kind === 'ollama' ? model?.name : model?.id) === this.config.model)) throw Error('Configured cloud model is not available');
     return [CLOUD_MODEL_ALIAS];
   }
-  async structured(messages: Message[], _model: string, signal: AbortSignal, _context: number, schema: unknown) {
+  async structured(messages: Message[], _model: string, signal: AbortSignal, _context: number, schema: unknown, options?:StructuredOptions) {
+    const budget=structuredOptions({maxTokens:64,...options});
     if (this.config.kind === 'ollama') {
       const response = await this.request('/api/chat', {model:this.config.model,messages,stream:false,think:false,format:schema,
-        options:{num_ctx:this.config.context,num_predict:64,temperature:0,top_k:1,top_p:1,repeat_penalty:1,seed:0}}, signal);
+        options:{num_ctx:this.config.context,num_predict:budget.maxTokens,temperature:budget.temperature,top_k:budget.temperature?40:1,top_p:1,repeat_penalty:1,...(budget.temperature?{}:{seed:0})}}, signal);
       const data = await response.json();
       if(data.error)throw Error('Cloud generation failed');
-      try { return JSON.parse(data.message?.content ?? ''); }
-      catch { throw Error('Cloud structured response is invalid'); }
+      return parseStructuredOutput(data.message?.content,data.done_reason);
     }
     const response = await this.request('/v1/chat/completions', { model: this.config.model, messages, stream: false,
-      temperature: 0, max_tokens: 64, response_format: this.config.kind === 'llama.cpp' ? { type: 'json_object', schema } : { type: 'json_object' } }, signal);
+      temperature: budget.temperature, max_tokens: budget.maxTokens, response_format: this.config.kind === 'llama.cpp' ? { type: 'json_object', schema } : { type: 'json_object' } }, signal);
     const data = await response.json();
-    return JSON.parse(data.choices?.[0]?.message?.content ?? '');
+    return parseStructuredOutput(data.choices?.[0]?.message?.content,data.choices?.[0]?.finish_reason);
   }
   async *stream(messages: Message[], _model: string, signal: AbortSignal, _context = this.config.context, maxTokens = 2048, sampling: SamplingProfile = 'qwen') {
     const echo = new PrefillEchoFilter(messages.at(-1)?.role === 'assistant' ? messages.at(-1)!.content : '');

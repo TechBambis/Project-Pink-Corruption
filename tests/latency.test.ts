@@ -55,10 +55,12 @@ test('warmup and conversation retain the complete prefix across sound and device
  for(const sound of [false,true])for(const device of ['Device control is disabled.','Device control is enabled.']){
   const reply=buildReplyPrompt(base,'Hello.',sound,device,undefined,'',true);
   assert.ok(reply.startsWith(warm+'\n\n'));
-  assert.ok(reply.includes(device));
-  assert.ok(reply.includes('sound and tick metadata are disabled'));
+  assert.ok(reply.includes('No device commands.'));
+  assert.ok(reply.includes('No presentation actions.'));
+  assert.ok(!reply.includes(device),'Conversation does not carry an inactive device command protocol');
+  assert.ok(reply.includes('Sound and tick metadata are disabled'));
   assert.ok(!reply.includes('=== SOUND CONTROL ==='));
-  assert.ok(reply.includes('Do not include device, sound or tick control markers.'));
+  assert.ok(reply.includes('No sound, SFX or tick markers.'));
  }
 });
 

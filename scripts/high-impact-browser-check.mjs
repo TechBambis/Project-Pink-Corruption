@@ -11,15 +11,20 @@ import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
 import assert from 'node:assert/strict';
 import {once} from 'node:events';
+import {tsImport} from 'tsx/esm/api';
+
+const {unfilteredLanguageDirection:languageFreedomNote}=await tsImport('../packages/ai/language-style.ts',import.meta.url);
 
 const root=fileURLToPath(new URL('../',import.meta.url)),realStreaming=process.env.BAMBI_BROWSER_STREAMING==='1';
+const reactUI=process.env.BAMBI_BROWSER_UI==='react';
 const streamingFixture=join(root,'.runtime/streaming-speech/test.wav');
-if(realStreaming&&!existsSync(streamingFixture))throw Error('Streaming integration needs the public test WAV at .runtime/streaming-speech/test.wav. See docs/LOCAL_AUDIO.md#microphone-recognition.');
+if(realStreaming&&!existsSync(streamingFixture))throw Error('Streaming integration needs the public test WAV at .runtime/streaming-speech/test.wav. See docs/STREAMING_SPEECH.md.');
 const wav=Buffer.alloc(44+32000);wav.write('RIFF',0);wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(16000,24);wav.writeUInt32LE(32000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(32000,40);
 // Allow a realistic display window for each word on the two-core CI runner.
 const captionSeconds=2,captionWav=Buffer.alloc(44+32000*captionSeconds);wav.copy(captionWav,0,0,44);captionWav.writeUInt32LE(captionWav.length-8,4);captionWav.writeUInt32LE(captionWav.length-44,40);
 const raceWav=Buffer.alloc(44+8000);wav.copy(raceWav,0,0,44);raceWav.writeUInt32LE(raceWav.length-8,4);raceWav.writeUInt32LE(raceWav.length-44,40);
 const inferenceRequests=[];
+const narrationInputs=[];
 const voiceLabRenders=[];
 const nativeMossUrl=process.env.BAMBI_BROWSER_MOSS_URL;
 let nativeMossToken;
@@ -45,6 +50,7 @@ const stub=createServer(async(req,res)=>{
  if(req.url==='/lab/catalog'){res.end(JSON.stringify({voices:['af_heart','af_bella'],presets:Object.fromEntries(['bambi_local_clean','bambi_classic','bambi_classic_deep','bambi_voice_test'].map(id=>[id,JSON.parse(readFileSync(join(root,'presets/audio',id+'.json'),'utf8'))])),calibrationText:'A public comparison.',providers:{kokoro:{label:'Kokoro',available:true,voices:['af_heart','af_bella'],voiceBlending:true},supertonic3:{label:'Supertonic 3',available:true,voices:['F1','F2','F3','F4','F5'],voiceBlending:false},moss:{label:'MOSS reference',available:true,voices:['moss_doll_q8'],voiceBlending:false,wordTimings:false,maxTextLength:1000,labOnly:false},qwen3:{label:'Qwen VoiceDesign',available:true,voices:['doll','brat','tease','custom'],voiceBlending:false,instructions:{doll:'Original adult doll voice.',brat:'Original adult bratty voice.',tease:'Original adult teasing voice.'}}}}));return;}
  if(req.url==='/lab/render'){voiceLabRenders.push(body);if(nativeMossUrl&&body.provider==='moss'){await forwardNativeMoss('/lab/render',body,res);return;}if(body.text==='Delayed public comparison.')await new Promise(resolve=>setTimeout(resolve,1500));res.setHeader('Content-Type','audio/wav');res.setHeader('X-Audio-Duration','1');res.setHeader('X-Render-Seconds','.1');res.setHeader('X-Audio-Peak','.2');res.setHeader('X-Audio-Provider',body.provider??'kokoro');res.end(wav);return;}
  if(req.url==='/dev/captioned_speech'){
+  narrationInputs.push(body.input);
   if(body.provider==='moss'){
    if(nativeMossUrl){await forwardNativeMoss('/dev/captioned_speech',body,res);return;}
    res.setHeader('Content-Type','application/x-ndjson');
@@ -59,28 +65,50 @@ const stub=createServer(async(req,res)=>{
 
  if(req.url==='/apply-template'){res.end(JSON.stringify({prompt:JSON.stringify(body.messages)}));return;}
  if(req.url==='/tokenize'){res.end(JSON.stringify({tokens:Array(Math.ceil(body.content.length/4)).fill(1)}));return;}
- if(!body.stream){res.end(JSON.stringify({choices:[{message:{content:'{"action":"adapt"}'}}]}));return;}
+ if(!body.stream&&!body.messages?.at(-1)?.content.startsWith('APPLICATION SPOKEN CORRECTION:')){res.end(JSON.stringify({choices:[{message:{content:'{"action":"adapt"}'}}]}));return;}
  if(req.url==='/v1/chat/completions')inferenceRequests.push(body);
+ if(body.messages?.at(-1)?.content.startsWith('APPLICATION SPOKEN CORRECTION:')){
+  const rejected=body.messages.at(-2).content;
+  if(rejected==='Wait here, pet.')await new Promise(resolve=>setTimeout(resolve,700));
+  const replacement=rejected==='Again, pet.'?'Again, pet.':rejected==='Wait here, pet.'?'The delayed replacement stays private.':'Stay here, Bambi.';
+  if(!body.stream){res.end(JSON.stringify({choices:[{message:{content:JSON.stringify({text:replacement})}}]}));return;}
+  res.setHeader('Content-Type','text/event-stream');res.end('data: '+JSON.stringify({choices:[{delta:{content:replacement}}]})+'\n\ndata: [DONE]\n\n');return;
+ }
+ const addressFixtures={'Public address contract fixture.':'Stay here, pet.','Public repeated address fixture.':'Again, pet.','Public delayed address fixture.':'Wait here, pet.','Public first-person narration fixture.':'I lean in close, my lips brushing against your ear as I whisper, "Stay here, Bambi."',
+  'Public third-person eyes fixture.':'Her eyes narrow dangerously at your crude outburst.',
+  'Public third-person mixed fixture.':'"Listen to me, Bambi." She steps closer, towering over you.',
+  'Public quotation speech fixture.':'"Listen, Bambi."',
+ };
+ if(addressFixtures[body.messages?.at(-1)?.content]){
+  const phrase=addressFixtures[body.messages.at(-1).content],at=phrase.indexOf('pet');
+  res.setHeader('Content-Type','text/event-stream');res.write('data: '+JSON.stringify({choices:[{delta:{content:'[owner] '+phrase.slice(0,at+2)}}]})+'\n\n');
+  await new Promise(resolve=>setTimeout(resolve,75));res.end('data: '+JSON.stringify({choices:[{delta:{content:phrase.slice(at+2)+'\n'}}]})+'\n\ndata: [DONE]\n\n');return;
+ }
+ if(body.messages?.at(-1)?.content==='Public incomplete speech fixture.'){
+  res.setHeader('Content-Type','text/event-stream');
+  res.end('data: '+JSON.stringify({choices:[{delta:{content:'[owner] This complete thought can play.\n[bambi] '+ 'unfinished '.repeat(350)}}]})+'\n\ndata: [DONE]\n\n');return;
+ }
  if(body.messages?.at(-1)?.content==='Public native cancellation fixture.'){
-  res.setHeader('Content-Type','text/event-stream');res.end('data: '+JSON.stringify({choices:[{delta:{content:'There is no hurry to decide, so take a moment to think and tell me which option feels more comfortable before we choose the next step together in a calm and steady voice.'}}]})+'\n\ndata: [DONE]\n\n');return;
+  res.setHeader('Content-Type','text/event-stream');res.end('data: '+JSON.stringify({choices:[{delta:{content:'[owner] There is no hurry to decide, so take a moment to think and tell me which option feels more comfortable before we choose the next step together in a calm and steady voice.\n'}}]})+'\n\ndata: [DONE]\n\n');return;
  }
  if(body.messages?.at(-1)?.content==='Public early clause fixture.'){
-  res.setHeader('Content-Type','text/event-stream');res.write('data: '+JSON.stringify({choices:[{delta:{content:'I understand what you need, '}}]})+'\n\n');
-  await waitPublicOutput();
-  res.end('data: '+JSON.stringify({choices:[{delta:{content:'and I will explain the reason clearly. '}}]})+'\n\ndata: [DONE]\n\n');return;
+  res.setHeader('Content-Type','text/event-stream');res.write('data: '+JSON.stringify({choices:[{delta:{content:'[owner] I understand what you need, '}}]})+'\n\n');
+  await new Promise(resolve=>setTimeout(resolve,250));
+  res.end('data: '+JSON.stringify({choices:[{delta:{content:'and I will explain the reason clearly.\n'}}]})+'\n\ndata: [DONE]\n\n');return;
  }
  if(/^Public live race \d+\.$/.test(body.messages?.at(-1)?.content??'')){
-  res.setHeader('Content-Type','text/event-stream');res.end('data: '+JSON.stringify({choices:[{delta:{content:'The delayed public race is ready. The next public race follows.'}}]})+'\n\ndata: [DONE]\n\n');return;
+  res.setHeader('Content-Type','text/event-stream');res.end('data: '+JSON.stringify({choices:[{delta:{content:'[owner] The delayed public race is ready.\n[owner] The next public race follows.\n'}}]})+'\n\ndata: [DONE]\n\n');return;
  }
  if(body.messages?.at(-1)?.content==='Public live scheduling fixture.'){
   res.setHeader('Content-Type','text/event-stream');
-  res.write('data: '+JSON.stringify({choices:[{delta:{content:'The first public thought is complete. '}}]})+'\n\n');
+  res.write('data: '+JSON.stringify({choices:[{delta:{content:'[owner] The first public thought is complete.\n'}}]})+'\n\n');
   await new Promise(resolve=>setTimeout(resolve,75));
-  res.write('data: '+JSON.stringify({choices:[{delta:{content:'The next public thought follows calmly. '}}]})+'\n\n');
+  res.write('data: '+JSON.stringify({choices:[{delta:{content:'[owner] The next public thought follows calmly.\n'}}]})+'\n\n');
   await waitPublicOutput();
   res.end('data: [DONE]\n\n');return;
  }
- res.setHeader('Content-Type','text/event-stream');res.end('data: '+JSON.stringify({choices:[{delta:{content:'The color is green.'}}]})+'\n\ndata: [DONE]\n\n');
+ const defaultReply=body.messages?.some(message=>message.content.includes('=== EVENT OUTPUT CONTRACT ==='))?'The color is green.':'[owner] The color is green.\n';
+ res.setHeader('Content-Type','text/event-stream');res.end('data: '+JSON.stringify({choices:[{delta:{content:defaultReply}}]})+'\n\ndata: [DONE]\n\n');
 });
 stub.listen(0,'127.0.0.1');await once(stub,'listening');const stubPort=stub.address().port;
 const reservation=createServer();reservation.listen(0,'127.0.0.1');await once(reservation,'listening');const port=reservation.address().port;await new Promise(resolve=>reservation.close(resolve));
@@ -157,7 +185,20 @@ try{
  await page.goto(base+'/setup');await page.waitForFunction(()=>document.getElementById('readiness').textContent.includes('Cloud AI: ready'));
  // Use the built worker and real local ONNX model with synthetic silence. No microphone or recording.
  const mainAsset=readFileSync(join(fixture,'dist/web/index.html'),'utf8').match(/src="([^\"]*\/main-[^\"]+\.js)"/)[1];
- const workerAsset=readFileSync(join(fixture,'dist/web',mainAsset),'utf8').match(/\/assets\/detector-worker-[\w-]+\.js/)[0];
+ // Follow the current build's imports: the optional renderer splits the original
+ // main module behind a bootstrap. Do not pick stale assets left by older builds.
+ const pendingAssets=[mainAsset],seenAssets=new Set();let workerAsset;
+ while(pendingAssets.length&&!workerAsset){
+  const asset=pendingAssets.pop();if(seenAssets.has(asset))continue;seenAssets.add(asset);
+  const source=readFileSync(join(fixture,'dist/web',asset),'utf8');
+  workerAsset=source.match(/\/assets\/detector-worker-[\w-]+\.js/)?.[0];
+  for(const match of source.matchAll(/["']((?:\.\/|\/?assets\/)[\w.-]+\.js)["']/g)){
+   const imported=match[1].startsWith('assets/')?'/'+match[1]:match[1];
+   const path=new URL(imported,'http://fixture'+asset).pathname;
+   if(existsSync(join(fixture,'dist/web',path)))pendingAssets.push(path);
+  }
+ }
+ assert.ok(workerAsset,'The current build includes its local speech worker');
  const speechWorker=await page.evaluate(async path=>{
   const worker=new Worker(path),received=[],waiting=[];
   worker.onmessage=({data})=>{received.push(data);for(const notify of [...waiting])notify(data);};
@@ -185,11 +226,34 @@ try{
  const path=await download.path();assert.equal(JSON.parse(readFileSync(path,'utf8')).assets.length,1);await page.setInputFiles('#import',path);await page.waitForFunction(()=>document.getElementById('status').textContent.includes('Package opened'));
  await page.click('#preview');await page.waitForFunction(()=>document.getElementById('caption').textContent==='A quiet test moment.');await page.click('#stop');assert.equal(await page.locator('#clock').textContent(),'00:00');
  mkdirSync('runtime',{recursive:true});await page.screenshot({path:'runtime/session-studio-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'runtime/session-studio-mobile.png',fullPage:true});
- await page.setViewportSize({width:1280,height:900});await page.goto(base+'/');await page.waitForFunction(()=>!!window.bambi&&[...document.getElementById('model').options].some(option=>option.value==='cloud:cydonia-24b-v4.3')&&document.getElementById('connection').textContent==='Connected locally');
+ await page.setViewportSize({width:1280,height:900});await page.goto(base+(reactUI?'/?ui=react':'/'));await page.waitForFunction(()=>!!window.bambi&&[...document.getElementById('model').options].some(option=>option.value==='cloud:cydonia-24b-v4.3')&&document.getElementById('connection').textContent==='Connected locally');
  // These checks exercise conversational replies; Guided defaults are covered by navigation-browser-check.
  await page.evaluate(()=>{document.querySelector('#experience-choices [data-experience="conversation"]').click();});
  // Settings panels are intentionally collapsed; configure through the same change events.
  await page.evaluate(()=>{for(const [id,value] of [['model','cloud:cydonia-24b-v4.3'],['mode','conversation'],['ai-mode','text']]){const select=document.getElementById(id);select.value=value;select.dispatchEvent(new Event('change',{bubbles:true}));}});
+ // Both renderers delegate to the same runtime owner and preference persistence.
+ const runtimeSettings=await page.evaluate(()=>{
+  const ui=window.bambi.ui,original=ui.audio.getSnapshot();
+  const alternative=original.voices.find(voice=>voice.id!==original.voice);
+  if(!alternative)throw Error('Fixture needs a second available voice');
+  ui.setVolume(.41);ui.setVoice(alternative.id);
+  const selected=ui.audio.getSnapshot(),saved=JSON.parse(localStorage.getItem('bambi-profile'));
+  ui.setVolume(NaN);ui.setVoice('unavailable-fixture-voice');
+  const rejectsInvalid=ui.audio.getSnapshot()===selected;
+  ui.setVoice(original.voice);
+  return {volume:selected.volume,voice:selected.voice,expectedVoice:alternative.id,savedVolume:saved.master,savedVoice:saved.voice,
+   rejectsInvalid,originalVolume:original.volume,originalVoice:original.voice,connection:ui.status.getSnapshot().connection};
+ });
+ assert.equal(runtimeSettings.volume,.41);assert.equal(runtimeSettings.voice,runtimeSettings.expectedVoice);
+ assert.equal(runtimeSettings.savedVolume,'0.41');assert.equal(runtimeSettings.savedVoice,runtimeSettings.expectedVoice);
+ assert.equal(runtimeSettings.rejectsInvalid,true);assert.equal(runtimeSettings.connection,'connected');
+ await page.waitForFunction(async voice=>{const saved=await(await fetch('/api/preferences')).json();return saved.master==='0.41'&&saved.voice===voice;},runtimeSettings.originalVoice);
+ await page.evaluate(volume=>window.bambi.ui.setVolume(volume),runtimeSettings.originalVolume);
+ await page.locator('#master').focus();await page.locator('#master').press('Home');
+ assert.equal(await page.evaluate(()=>window.bambi.ui.audio.getSnapshot().volume),0,'Keyboard volume changes reach the owner');
+ await page.locator('#master').press('End');
+ assert.equal(await page.evaluate(()=>window.bambi.ui.audio.getSnapshot().volume),1);
+ await page.evaluate(volume=>window.bambi.ui.setVolume(volume),runtimeSettings.originalVolume);
  // Failed background preparation must not retry on every health refresh.
  failWarm=true;
  await page.evaluate(()=>{const select=document.getElementById('sampling-profile');select.value=select.value==='qwen'?'creative':'qwen';select.dispatchEvent(new Event('change',{bubbles:true}));});
@@ -204,13 +268,55 @@ try{
  failWarm=false;await page.evaluate(()=>window.bambi.startSession());
  await page.waitForFunction(()=>window.bambi.director.active&&window.bambi.clock.running);assert.ok(warmCalls>failedWarmCalls,'Start retries failed preparation');
  await page.locator('#chat-input').focus();
- await page.evaluate(async()=>{await fetch('/api/memory/facts',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'color',value:'green'})});document.getElementById('chat-input').value='What color did I choose?';document.getElementById('chat-input').dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('chat-form').requestSubmit();});
+ const beforeUserTurns=await page.locator('#messages .user').count();
+ const runtimeChat=await page.evaluate(async()=>{
+  await fetch('/api/memory/facts',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'color',value:'green'})});
+  const ui=window.bambi.ui,engine=window.bambi.audio;
+  ui.toggleMute();const muted=ui.audio.getSnapshot().muted;
+  ui.toggleMute();const sameEngine=window.bambi.audio===engine;
+  ui.setDraft('What color did I choose?');
+  const draft=ui.chat.getSnapshot().draft;
+  await Promise.all([ui.submitDraft(),ui.submitDraft()]);
+  return {draft,muted,unmuted:!ui.audio.getSnapshot().muted,sameEngine,cleared:ui.chat.getSnapshot().draft===''};
+ });
+ assert.equal(runtimeChat.draft,'What color did I choose?');assert.equal(runtimeChat.cleared,true);
+ assert.equal(runtimeChat.muted,true);assert.equal(runtimeChat.unmuted,true);assert.equal(runtimeChat.sameEngine,true);
+ assert.equal(await page.locator('#messages .user').count(),beforeUserTurns+1,'A repeated UI submit forwards one user turn');
  try{await page.waitForFunction(()=>document.querySelector('#messages')?.textContent.includes('The color is green.'));}catch(error){console.error(await page.evaluate(()=>({status:document.getElementById('ai-status').textContent,model:document.getElementById('model').value,notices:[...document.querySelectorAll('[role="status"]')].map(node=>node.textContent),messages:document.getElementById('messages').textContent})));throw error;}
  await page.waitForFunction(()=>document.getElementById('composer-reply').textContent.includes('The color is green.'));
+ assert.equal(await page.evaluate(()=>window.bambi.ui.chat.getSnapshot().replyText),await page.locator('#composer-reply').textContent());
  assert.equal(await page.locator('#chat-input').inputValue(),'','Sending clears only the user draft');
  assert.equal(await page.locator('#composer-reply').getAttribute('hidden'),null,'Empty focused field keeps the reply available after sending');
+ // Exercise actual input events as well as the shared command interface.
+ const keyboardTurns=await page.locator('#messages .user').count();
+ const keyboardReplies=await page.locator('#messages .assistant').count();
+ const audioBeforeTyping=await page.evaluate(()=>{const {volume,voice}=window.bambi.ui.audio.getSnapshot();return {volume,voice};});
+ await page.fill('#chat-input','Public keyboard composer fixture.');
+ assert.equal(await page.evaluate(()=>window.bambi.ui.chat.getSnapshot().draft),'Public keyboard composer fixture.');
+ if(reactUI){
+  await page.locator('#chat-input').dispatchEvent('keydown',{key:'Enter',code:'Enter',isComposing:true});
+  assert.equal(await page.locator('#messages .user').count(),keyboardTurns,'IME confirmation must not send a draft');
+ }
+ await page.locator('#chat-input').press('Shift+Enter');
+ assert.match(await page.locator('#chat-input').inputValue(),/\n$/,'Shift Enter retains a multiline draft');
+ await page.locator('#chat-input').press('Enter');
+ await page.waitForFunction(()=>window.bambi.ui.chat.getSnapshot().draft==='');
+ await page.waitForFunction(count=>document.querySelectorAll('#messages .user').length===count,keyboardTurns+1);
+ assert.equal(await page.locator('#messages .user').count(),keyboardTurns+1,'Enter sends exactly once');
+ await page.waitForFunction(count=>document.querySelectorAll('#messages .assistant').length===count&&document.getElementById('mic').dataset.activity==='idle'&&window.bambi.ui.chat.getSnapshot().replyText.includes('The color is green.'),keyboardReplies+1);
+ assert.equal(await page.locator('#raw-roleplay').count(),0,'Language freedom has no optional switch');
+ await page.fill('#chat-input','Public send button fixture.');
+ await page.locator('#chat-form button[type="submit"]').click();
+ await page.waitForFunction(()=>window.bambi.ui.chat.getSnapshot().draft==='');
+ await page.waitForFunction(count=>document.querySelectorAll('#messages .user').length===count,keyboardTurns+2);
+ assert.equal(await page.locator('#messages .user').count(),keyboardTurns+2,'The send button sends exactly once');
+ assert.deepEqual(await page.evaluate(()=>{const {volume,voice}=window.bambi.ui.audio.getSnapshot();return {volume,voice};}),audioBeforeTyping,'Composer commits cannot overwrite audio preferences');
+ await page.waitForFunction(count=>document.querySelectorAll('#messages .assistant').length===count&&document.getElementById('mic').dataset.activity==='idle'&&window.bambi.ui.chat.getSnapshot().replyText.includes('The color is green.'),keyboardReplies+2);
+ assert.equal(await page.evaluate(()=>window.fixtureRequests.at(-1).rawRoleplay),false,'Legacy request flags do not gate language freedom');
+ const rawPayload=inferenceRequests.findLast(request=>request.messages.at(-1)?.content==='Public send button fixture.');
+ assert.ok(rawPayload.messages[0].content.includes(languageFreedomNote),'Real chat system receives raw language override');
  const memory=await(await fetch(base+'/api/memory')).json();assert.equal(memory.facts[0].value,'green');assert.ok(memory.turns.some(turn=>turn.role==='assistant'&&turn.content.includes('green')));
- await page.evaluate(()=>{document.getElementById('ai-mode').value='voice';document.getElementById('ai-mode').dispatchEvent(new Event('change',{bubbles:true}));document.getElementById('master').value='0';document.getElementById('master').dispatchEvent(new Event('input',{bubbles:true}));});
+ await page.evaluate(()=>{document.getElementById('ai-mode').value='voice';document.getElementById('ai-mode').dispatchEvent(new Event('change',{bubbles:true}));window.bambi.ui.setVolume(0);});
  await page.evaluate(()=>window.bambi.ask('Tell me my color in one sentence.'));
  await page.waitForFunction(async()=>{const report=await(await fetch('/api/diagnostics/replies')).json();return report.replies.some(reply=>reply.stages['playback-start']!==undefined&&reply.status==='done');});
  await page.waitForFunction(()=>document.getElementById('word').textContent===''&&document.getElementById('mic').dataset.activity==='idle');
@@ -235,11 +341,59 @@ try{
  const liveTraces=await(await fetch(base+'/api/diagnostics/replies')).json(),liveTrace=liveTraces.replies.find(r=>r.id===liveId);
  writeFileSync(join(root,'runtime/live-voice-audit/browser-after.json'),JSON.stringify({evidence:'Production server/browser with simulated inference and silent WAV; output-clock estimates',trace:liveTrace,schedule:liveSchedule},null,2));
  assert.ok(liveTrace.stages['playback-start']<liveTrace.stages.generated,'First output overlaps the still-open generation stream: '+JSON.stringify(liveTrace.stages));
+ const gateAudioStart=narrationInputs.length;
+ await page.evaluate(()=>window.bambi.ask('Public address contract fixture.'));
+ await page.waitForFunction(()=>window.fixtureDones.some(done=>done.requestId===window.fixtureRequests.at(-1)?.requestId));
+ assert.equal(await page.locator('#messages .assistant').last().locator('p').textContent(),'Stay here, Bambi.');
+ assert.ok(narrationInputs.slice(gateAudioStart).some(text=>text.includes('Stay here, Bambi.')));
+ assert.ok(!narrationInputs.slice(gateAudioStart).some(text=>/\bpet\b/i.test(text)),'Rejected text never reaches speech synthesis');
+ const gateFrames=await page.evaluate(()=>window.fixtureIncoming.filter(frame=>frame.type==='token'||frame.type==='audio').slice(-20));
+ assert.ok(!gateFrames.some(frame=>/\bpet\b/i.test(frame.text??'')),'Rejected text never reaches the UI');
+ const proseAudioStart=narrationInputs.length;
+ await page.evaluate(()=>window.bambi.ask('Public first-person narration fixture.'));
+ await page.waitForFunction(()=>window.fixtureDones.some(done=>done.requestId===window.fixtureRequests.at(-1)?.requestId));
+ assert.equal(await page.locator('#messages .assistant').last().locator('p').textContent(),'Stay here, Bambi.');
+ assert.ok(narrationInputs.slice(proseAudioStart).some(text=>text.includes('Stay here, Bambi.')));
+ assert.ok(!narrationInputs.slice(proseAudioStart).some(text=>/lean in|lips brushing|I whisper/i.test(text)),'First-person narration never reaches TTS');
+ for(const fixture of ['Public third-person eyes fixture.','Public third-person mixed fixture.']){
+  const audioStart=narrationInputs.length;
+  await page.evaluate(text=>window.bambi.ask(text),fixture);
+  await page.waitForFunction(()=>window.fixtureDones.some(done=>done.requestId===window.fixtureRequests.at(-1)?.requestId));
+  const visible=await page.locator('#messages .assistant').last().locator('p').textContent();
+  assert.ok(!/her eyes|she steps|towering over/i.test(visible),'Third-person narration never reaches the chat display');
+  assert.ok(visible.includes('Stay here, Bambi.'),'A corrected spoken replacement is displayed');
+  assert.ok(!narrationInputs.slice(audioStart).some(text=>/her eyes|she steps|towering over/i.test(text)),'Third-person narration never reaches TTS');
+  assert.ok(narrationInputs.slice(audioStart).some(text=>text.includes('Stay here, Bambi.')));
+ }
+ const quoteAudioStart=narrationInputs.length;
+ await page.evaluate(()=>window.bambi.ask('Public quotation speech fixture.'));
+ await page.waitForFunction(()=>window.fixtureDones.some(done=>done.requestId===window.fixtureRequests.at(-1)?.requestId));
+ assert.ok(narrationInputs.slice(quoteAudioStart).some(text=>text==='Listen, Bambi.'));
+ assert.ok(narrationInputs.slice(quoteAudioStart).every(text=>!/["“”]/.test(text)),'Quotation delimiters never reach the speech renderer');
+ assert.notEqual(await page.evaluate(()=>window.fixtureDones.at(-1).audioComplete),false);
+ await page.evaluate(()=>window.bambi.ask('Public repeated address fixture.'));
+ await page.waitForFunction(()=>window.fixtureDones.some(done=>done.requestId===window.fixtureRequests.at(-1)?.requestId));
+ assert.equal(await page.evaluate(()=>window.fixtureDones.at(-1).audioComplete),false,'Repeated failures cannot arm automatic narration');
+ await page.evaluate(()=>window.bambi.ask('Public delayed address fixture.'));
+ await page.waitForFunction(async()=>{const diagnostics=await(await fetch('/api/diagnostics/replies')).json();return diagnostics.replies.at(-1)?.events?.some(event=>event.name==='spoken-contract-repair');});
+ await page.evaluate(()=>window.bambi.hardStop());await new Promise(resolve=>setTimeout(resolve,900));
+ assert.ok(!(await page.locator('#messages').textContent()).includes('The delayed replacement stays private.'),'Stop prevents a delayed replacement from committing');
+ // Resume through the public owner to keep later transport checks independent.
+ await page.evaluate(()=>window.bambi.startSession());
+ await page.evaluate(()=>window.bambi.ask('Public incomplete speech fixture.'));
+ await page.waitForFunction(()=>window.fixtureDones.some(d=>d.requestId===window.fixtureRequests.at(-1)?.requestId));
+ const failedDone=await page.evaluate(()=>window.fixtureDones.findLast(d=>d.requestId===window.fixtureRequests.at(-1)?.requestId));
+ assert.equal(failedDone.audioComplete,false,'A malformed speech stream cannot arm automatic narration again');
+ const failedReport=await(await fetch(base+'/api/diagnostics/replies')).json(),failedTrace=failedReport.replies.find(r=>r.id===failedDone.id);
+ assert.equal(failedTrace.status,'error');assert.ok(failedTrace.events.some(event=>event.name==='spoken-format-rejected'),JSON.stringify(failedTrace));
+ const failedMemory=await(await fetch(base+'/api/memory/export')).json(),heard=failedMemory.turns.findLast(turn=>turn.role==='assistant');
+ assert.equal(heard.content,'This complete thought can play.','Only completed, heard speech belongs in history');
+ assert.equal(heard.interruption,'invalid-spoken-format');
  await page.evaluate(()=>window.bambi.ask('Public early clause fixture.'));
  await page.waitForFunction(()=>window.fixtureDones.some(d=>d.requestId===window.fixtureRequests.at(-1)?.requestId));
  const earlyId=await page.evaluate(()=>window.fixtureBegins.findLast(b=>b.requestId===window.fixtureRequests.at(-1)?.requestId)?.id);
  const earlyTraces=await(await fetch(base+'/api/diagnostics/replies')).json(),earlyTrace=earlyTraces.replies.find(r=>r.id===earlyId);
- assert.ok(earlyTrace.stages['playback-start']<earlyTrace.stages.generated,'A complete comma clause plays before the remainder is generated');
+ assert.ok(earlyTrace.stages['playback-start']>=earlyTrace.stages.generated,'An unfinished comma clause waits for the complete validated sentence');
  // Boundary adaptation must cancel the already scheduled, unheard second phrase.
  // Isolate the boundary race from inference admission for the listening planner.
  await page.route('**/api/listen',route=>route.fulfill({json:{action:'adapt'}}));
@@ -315,7 +469,8 @@ try{
    if(phase===2)await page.waitForFunction(()=>window.fixtureLiveSchedule.some(e=>!e.ended));
    if(phase===3){await page.waitForFunction(()=>window.fixtureOutgoing.some(e=>e.type==='playback-start'));await page.waitForTimeout(35);}
    if(phase===4){await page.waitForFunction(()=>window.fixtureOutgoing.some(e=>e.type==='playback-start'));await page.waitForTimeout(275);}
-   const stopped=await page.evaluate(()=>{const id=window.fixtureIncoming.find(e=>e.type==='begin')?.id;window.bambi.hardStop();return {id,atMs:performance.now(),text:document.getElementById('composer-reply').textContent};});
+   const stopped=await page.evaluate(()=>{const id=window.fixtureIncoming.find(e=>e.type==='begin')?.id;window.bambi.ui.stop();return {id,atMs:performance.now(),text:document.getElementById('composer-reply').textContent,state:window.bambi.ui.getSnapshot().state,session:window.bambi.ui.session.getSnapshot()};});
+   assert.equal(stopped.state,'idle');assert.equal(stopped.session.stage,'ABORTED');assert.equal(stopped.session.elapsedSeconds,0);
    await page.waitForTimeout(30);
    const stale=await page.evaluate(({id,atMs})=>({ack:window.fixtureOutgoing.filter(e=>e.type==='ack'&&e.id===id&&e.played&&e.atMs>atMs),started:window.fixtureOutgoing.filter(e=>e.type==='playback-start'&&e.id===id&&e.atMs>atMs),running:window.bambi.director.active,caption:document.getElementById('word').textContent}),stopped);
    assert.deepEqual(stale.ack,[]);assert.deepEqual(stale.started,[]);assert.equal(stale.running,false);assert.equal(stale.caption,'');
@@ -352,7 +507,7 @@ try{
  const longSpeech=Buffer.alloc(44+16000*2*30);wav.copy(longSpeech,0,0,44);longSpeech.writeUInt32LE(longSpeech.length-8,4);longSpeech.writeUInt32LE(longSpeech.length-44,40);
  await page.evaluate(async encoded=>{
   document.getElementById('narration-enabled').checked=false;document.getElementById('narration-enabled').dispatchEvent(new Event('input',{bubbles:true}));
-  document.getElementById('master').value='.1';document.getElementById('master').dispatchEvent(new Event('input',{bubbles:true}));
+  window.bambi.ui.setVolume(.1);
   document.activeElement?.blur();
   await window.bambi.audio.playVoice(Uint8Array.from(atob(encoded),c=>c.charCodeAt(0)).buffer,()=>{},()=>{window.fixtureLongSpeechEnded=true;},undefined,{conversation:true,spokenSeconds:30});
  },longSpeech.toString('base64'));
@@ -394,7 +549,7 @@ try{
  assert.equal(stopped.before,stopped.after);assert.equal(stopped.obsoleteTextShown,false);assert.equal(stopped.sceneUnchanged,true);
  await page.waitForFunction(()=>window.bambi.audio.context.state==='suspended');
  // Stop in the same task as issuing a request, before its begin can be handled.
- await page.evaluate(async()=>{await window.bambi.ask('A fresh request before immediate Stop.');window.bambi.hardStop();});
+ await page.evaluate(async()=>{await window.bambi.ask('A fresh request before immediate Stop.');window.bambi.ui.stop();});
  const immediatelyStopped=await page.evaluate(audio=>{
   const request=window.fixtureRequests.at(-1),id='fixture-before-begin';
   for(const data of [{type:'begin',dialogue:true},{type:'token',text:'OBSOLETE_BEFORE_BEGIN'},{type:'audio',seq:901,text:'OBSOLETE_BEFORE_BEGIN',audio}])window.fixtureSocket.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({...data,id,requestId:request.requestId})}));
@@ -406,7 +561,7 @@ try{
  if(realStreaming)await page.route('**/fixture-streaming.wav',route=>route.fulfill({contentType:'audio/wav',body:readFileSync(streamingFixture)}));
  await page.evaluate(realStreaming=>{
   window.fixtureMicContexts=[];window.fixtureMicStreams=[];
-  if(!realStreaming){document.getElementById('mic-recognizer').value='whisper';document.getElementById('mic-recognizer').dispatchEvent(new Event('input',{bubbles:true}));}
+  document.getElementById('mic-recognizer').value=realStreaming?'streaming':'auto';document.getElementById('mic-recognizer').dispatchEvent(new Event('input',{bubbles:true}));
   navigator.mediaDevices.getUserMedia=async()=>{
    const context=new AudioContext(),destination=context.createMediaStreamDestination(),silence=context.createConstantSource();
    silence.offset.value=0;silence.connect(destination);silence.start();await context.resume();
@@ -419,6 +574,7 @@ try{
  await page.waitForFunction(()=>document.getElementById('mic').dataset.captureState==='ready'&&window.fixtureWorkers.some(worker=>worker.frames>=3),null,{timeout:30000});
  let streamingRecognition=null,listenerResponseCapture=null;
  if(!realStreaming){
+  assert.equal(await page.evaluate(()=>!!window.fixtureSpeechSocket),false,'Automatic recognition prefers installed Whisper when both recognizers are available');
   await page.route('**/api/transcribe',route=>route.fulfill({json:{text:'My recognized microphone words because',latencyMs:1}}));
   await page.evaluate(()=>{document.getElementById('mic-smart-turns').checked=true;const worker=window.fixtureWorkerInstances.at(-1);worker.onmessage({data:{type:'event',epoch:worker.fixture.epoch,event:{msg:'SPEECH_REAL_START'}}});worker.onmessage({data:{type:'event',epoch:worker.fixture.epoch,event:{msg:'SPEECH_END',audio:new Float32Array(16000)}}});});
   await page.waitForFunction(()=>document.getElementById('composer-reply').textContent==='My recognized microphone words because');
@@ -504,7 +660,7 @@ try{
  assert.equal(await page.evaluate(()=>window.bambi.clock.running),false);
  await page.waitForFunction(()=>document.getElementById('mic').dataset.captureState==='muted'&&window.fixtureWorkers.every(worker=>worker.terminated)&&window.fixtureMicStreams.every(stream=>stream.getTracks().every(track=>track.readyState==='ended')));
  assert.equal(await page.evaluate(()=>window.bambi.audio.context.state),'suspended');
- assert.equal(await page.evaluate(()=>document.getElementById('panic').hidden),true);
+ assert.equal(await page.evaluate(()=>document.getElementById('panic').hidden),!reactUI);
  assert.equal(await page.evaluate(()=>document.getElementById('messages').textContent===window.fixtureRetainedChat),true,'Natural completion retains the conversation');
  await page.evaluate(async()=>{await Promise.all(window.fixtureMicContexts.map(context=>context.close()));});
  await page.evaluate(()=>{
@@ -523,7 +679,7 @@ try{
   await route.fulfill({json:{payloadId:body.payloadId,text,audio:wav.toString('base64'),durationMs:1000,targetMs:body.event.speech.targetMs,textAttempts:0,words:text.split(' ').map((word,i,all)=>({word,atMs:i/all.length*1000})),...(eye?{cueOffsetMs:0}:{}),...(required?{triggerOffsetMs:0}:{})}});
  });
  await page.evaluate(async()=>{
-  document.getElementById('duration').value='1200';document.getElementById('master').value='0';
+  document.getElementById('duration').value='1200';window.bambi.ui.setVolume(0);
   document.getElementById('ai-mode').value='voice';document.getElementById('narration-enabled').checked=true;
   document.getElementById('session-events').checked=true;document.getElementById('event-haptics').checked=false;
   document.getElementById('session-events').dispatchEvent(new Event('input',{bubbles:true}));
@@ -558,10 +714,11 @@ try{
  for(const [key,value] of Object.entries(browserCharacter))assert.deepEqual(eventRequest[key],value,`Event request retains ${key}`);
  const parity=[];
  for(const promptId of ['bambisleep-classic','gentle-induction','english-conversation','custom']){
-  const character={promptId,persona:'A curious botanical storyteller.',username:'Explorer',selectedTriggers:['BAMBI SLEEP'],collar:true,collarName:'Shared collar fixture'};
+  const character={promptId,persona:'A curious botanical storyteller.',username:'Explorer',selectedTriggers:['BAMBI SLEEP'],collar:true,collarName:'Shared collar fixture',rawRoleplay:promptId==='custom'};
   const response=await fetch(base+'/api/warm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...character,model:'cloud:cydonia-24b-v4.3',interaction:'reactive',speak:false,narration:false})});
   assert.equal(response.status,200,await response.text());
   const prepared=inferenceRequests.at(-1).messages[0].content;
+  assert.equal(prepared.includes(languageFreedomNote),true,'Warmup always includes language freedom, including a legacy false flag');
   const marker='=== LANGUAGE & VOICE ===',characterText=prepared.slice(0,prepared.indexOf(marker));
   assert.ok(characterText.length>100,'Preparation received a complete character');
   const rendered=await fetch(base+'/api/events/render',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...eventRequest,...character,model:'cloud:cydonia-24b-v4.3'})});
@@ -570,6 +727,7 @@ try{
   assert.ok(generated[0].content.startsWith(characterText+marker),`Event generation uses the same ${promptId} character`);
   assert.ok(generated[0].content.includes('REAL LISTENER & CONVERSATION EVIDENCE'));
   assert.ok(generated[0].content.includes('EVENT OUTPUT CONTRACT'));
+  assert.equal(generated[0].content.includes(languageFreedomNote),true,'Event generation always includes language freedom, including a legacy false flag');
   assert.ok(generated[1].content.includes('FINAL OUTPUT CONTRACT'));
   parity.push(promptId);
  }
@@ -662,5 +820,7 @@ try{
 }catch(error){
  mkdirSync('runtime',{recursive:true});writeFileSync('runtime/high-impact-browser-check.json',JSON.stringify({ok:false,error:String(error),errors,serverLog:logs.slice(-20000)},null,2));throw error;
 }finally{
- closing=true;await browser?.close();app.kill('SIGTERM');await Promise.race([once(app,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);if(app.exitCode===null)app.kill('SIGKILL');stub.closeAllConnections();await new Promise(resolve=>stub.close(resolve));rmSync(fixture,{recursive:true,force:true});
+ closing=true;
+ if(browser)for(const context of browser.contexts())for(const page of context.pages())if(!page.isClosed())await page.unrouteAll({behavior:'wait'});
+ await browser?.close();app.kill('SIGTERM');await Promise.race([once(app,'exit'),new Promise(resolve=>setTimeout(resolve,3000))]);if(app.exitCode===null)app.kill('SIGKILL');stub.closeAllConnections();await new Promise(resolve=>stub.close(resolve));rmSync(fixture,{recursive:true,force:true});
 }

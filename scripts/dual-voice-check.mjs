@@ -96,10 +96,19 @@ try{
  });
  await completeReply(0);await page.waitForFunction(()=>window.bambi.audio.voiceSources.size===0);
  const voices=await page.evaluate(()=>window.fixtureVoices);
+ writeFileSync(join(root,'runtime/narrator-dual-schedule.json'),JSON.stringify(voices,null,2));
  assert.deepEqual(voices.map(v=>v.track.speaker),['owner','bambi','owner','bambi','owner']);
  assert.deepEqual(voices.filter(v=>v.track.speaker==='bambi').map(v=>[v.track.gainDb,v.track.pan]),[[-14,-.3],[-14,.3]]);
- for(let i=1;i<voices.length;i++){assert.ok(voices[i].start>=voices[i-1].start+voices[i-1].spoken-.002,'Spoken tracks do not overlap');if(voices[i].track.speaker==='owner')assert.ok(voices[i].start>=voices[i-1].start+voices[i-1].spoken+.2-.002,'Owner waits for room tail');assert.equal(voices[i].scheduledFromPast,false,'Every fragment is scheduled ahead on the audio clock');}
- assert.ok(voices[1].start>=voices[0].start+voices[0].spoken-.002,'The voices never speak at once');assert.ok(voices[1].start<=voices[0].start+voices[0].duration+.15,'Late background speech begins directly after the reserved pause');
+ for(const voice of voices)assert.equal(voice.scheduledFromPast,false,'Every fragment is scheduled ahead on the audio clock');
+ for(let i=1;i<voices.length;i+=2){
+  const owner=voices[i-1],inner=voices[i];
+  assert.ok(inner.start<owner.start+owner.spoken-.002,'The inner voice audibly overlaps its external guide');
+ }
+ const owners=voices.filter(v=>v.track.speaker==='owner'),inners=voices.filter(v=>v.track.speaker==='bambi');
+ for(let i=1;i<owners.length;i++)assert.ok(owners[i].start>=owners[i-1].start+owners[i-1].duration-.002,'Owner keeps authored pauses');
+ for(let i=1;i<inners.length;i++)assert.ok(inners[i].start>=inners[i-1].start+inners[i-1].duration-.002,'Inner fragments do not cover one another');
+ const memory=await(await fetch(base+'/api/memory')).json();
+ assert.ok(memory.turns.some(turn=>turn.role==='assistant'&&turn.content.includes('(Imagined inner feminine voice:')),'Heard inner thoughts retain their speaker attribution in conversation history');
  assert.ok(inferenceRequests.some(r=>r.prefixCharacters>0),'The real prefill continuation path was exercised');assert.ok(requests.every(r=>!r.input.includes('[owner')&&!r.input.includes('[bambi')));
  await page.locator('#dual-voice').uncheck();
  const before=events.length;await page.evaluate(()=>window.bambi.ask('Dual voice fixture.',true));

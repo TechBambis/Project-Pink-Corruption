@@ -10,6 +10,7 @@ import type { SessionPhase } from '../phases';
 /** These cards describe owned engine capabilities, not fixed episode sequences. */
 export const capabilities = [
   { id: 'guide', purpose: 'Develop one connected idea; introduce an image or prepare a later action.' },
+  { id: 'reveal', purpose: 'Speak one connected thought while changing the image and ambient mix at an exact measured word or phrase from that thought. before is the initial look; look is the revealed composition; holdMs leaves space afterward.' },
   { id: 'hold', purpose: 'Remove narration and independently thin picture/ambient sound; allow contrast and recovery.' },
   { id: 'reply', purpose: 'Invite a contextual first-person inner answer; preview its exact text in pink before the answer and protect listening input.' },
   { id: 'challenge', purpose: 'Playfully negotiate a requested scene: give a contextual condition and pink response phrase, then listen for a REAL answer before judging whether to grant, motivate another attempt, or resume the original journey.' },
@@ -45,6 +46,7 @@ export function availableModules(pool:RegiePool, phase:SessionPhase) {
     if (phase==='awakening' && !['guide','hold','recall'].includes(c.id)) return false;
     if (c.id==='hold') return true;
     if (!pool.mainVoice) return false;
+    if(c.id==='reveal'&&!pool.visuals)return false;
     if(c.id==='challenge'&&!pool.playfulRequests)return false;
     if(c.id==='breath'&&!pool.breathing)return false;
     if (['reply','repeat'].includes(c.id) && !pool.innerVoice) return false;

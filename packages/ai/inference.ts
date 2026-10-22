@@ -4,7 +4,7 @@
 
 import type {LLMBackend,Message} from './index';
 import type {SamplingProfile} from '../../config/sampling';
-import {spokenWordCount} from './response';
+import {spokenWordCount,spokenPassageText,incompleteSpeechMarker} from './response';
 
 type Ticket={priority:number;signal:AbortSignal;resolve:(release:()=>void)=>void;reject:(error:unknown)=>void;abort:()=>void};
 /** One GPU slot. Listening decisions take the next turn before ordinary continuations. */
@@ -39,11 +39,23 @@ export class InferenceResources {
  forBackend(backend:Pick<LLMBackend,'name'>){return backend.name==='cloud'?this.remote:this.local;}
 }
 
-/** Exact assistant prefill allows suspension even at a word boundary without a new reply. */
+/** Suspend only after a complete sentence so buffered speech keeps its ending. */
 export function speechBatchBoundary(text:string){
- if(text.lastIndexOf('[')>text.lastIndexOf(']')||text.lastIndexOf('<action>')>text.lastIndexOf('</action>'))return false;
- const visible=text.replace(/\[[^\]]*\]/g,'');
+ if(incompleteSpeechMarker(text)||text.lastIndexOf('<action>')>text.lastIndexOf('</action>'))return false;
+ const visible=spokenPassageText(text);
  const sentences=(visible.match(/[.!?。！？](?:["”']?)(?:\s|$)/gu)??[]).length;
- return (sentences>=3&&/[.!?。！？]["”']?(?:\s|\[[^\]]*\])*$/u.test(text))
-  ||(spokenWordCount(visible)>=48&&/\s$/.test(text));
+ return (sentences>=3||spokenWordCount(visible)>=48)
+  &&/[.!?。！？]["”']?\s*$/u.test(visible);
+}
+
+/** Bound active generation without completed speech, including marker-only loops.
+ * No wall-clock timeout: explicit Pause and playback backpressure may last. */
+export class SpeechProgressGuard {
+ static readonly maxPendingCharacters=2400;
+ private unspokenCharacters=0;
+ get pendingCharacters(){return this.unspokenCharacters;}
+ observe(characters:number,completedPhrase:boolean,pendingCharacters:number){
+  this.unspokenCharacters=Math.max(pendingCharacters,completedPhrase?pendingCharacters:this.unspokenCharacters+characters);
+  return this.unspokenCharacters>SpeechProgressGuard.maxPendingCharacters;
+ }
 }

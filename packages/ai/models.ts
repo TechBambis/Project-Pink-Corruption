@@ -14,6 +14,11 @@ export const communityGemma = 'bambi-gemma4-e4b-hauhau:q4_k_m';
 export const communityQwen36 = 'bambi-qwen36-35b-hauhau:iq3_m';
 export const defiantFable = 'bambi-qwen35-9b-defiant-fable:iq4_xs';
 export const roleplayQwen = 'bambi-qwen35-9b-rp:q4_k_m';
+export const darkRoast = 'bambi-qwen35-9b-dark-roast:iq4_xs';
+export const darkRoastMtp = 'bambi-qwen35-9b-dark-roast-mtp-on:iq4_xs';
+export const roleplayQwenIQ4 = 'bambi-qwen35-9b-rp:iq4_xs';
+export const defiantFableMtpBaseline = 'bambi-qwen35-9b-defiant-fable-mtp:iq3_m';
+export const defiantFableMtp = 'bambi-qwen35-9b-defiant-fable-mtp-on:iq3_m';
 /** Ollama's Q4_K_M build of L3-8B-Stheno-v3.2 (8K context). */
 export const sthenoV32 = 'fluffy/l3-8b-stheno-v3.2:latest';
 /** Ollama's Q4_K_M import of TheDrummer's Anubis Mini 8B v1. */
@@ -22,14 +27,14 @@ export const ANUBIS_CONTEXT=65536;
 export const ANUBIS_TRAINING_CONTEXT=131072;
 /** Ollama's Q8_0 build of Moophlo's MistralRP-Noromaid 7B. */
 export const mistralRpNoromaid7B = 'moophlo/MistralRP-Noromaid-uncensored-Mistral-7B-GGUF:latest';
-export const nativeSamplingModels = [communityQwen, communityQwen4B, communityQwen2B, liquidSmall, communityQwen4BMtp, communityQwen4BMtpBaseline, communityQwen36, defiantFable, roleplayQwen, anubisMiniV1];
+export const nativeSamplingModels = [communityQwen, communityQwen4B, communityQwen2B, liquidSmall, communityQwen4BMtp, communityQwen4BMtpBaseline, communityQwen36, defiantFable, roleplayQwen, darkRoast, darkRoastMtp, roleplayQwenIQ4, defiantFableMtpBaseline, defiantFableMtp, anubisMiniV1];
 export function nativeCheckpointModel(model:string){return [communityQwen2B,liquidSmall,communityQwen4B,communityQwen4BMtp,communityQwen4BMtpBaseline].includes(model)||/-9b(?:-|:)/i.test(model);}
 /** Context capacity follows the authored prompt, independently of speech latency. */
 export function modelContext(model:string,promptId:string){
  if(model===sthenoV32)return 8192;
  if(model===anubisMiniV1)return ANUBIS_CONTEXT;
  if(model===mistralRpNoromaid7B)return NATIVE_CONTEXT;
- if(nativeSamplingModels.includes(model))return nativeContextForModel(model);
+ if(nativeSamplingModels.includes(model))return catalogModel(model)?.context??nativeContextForModel(model);
  return promptId==='bambisleep-classic'?NATIVE_CONTEXT:4096;
 }
 
@@ -46,6 +51,11 @@ export function modelLabel(model: string, labels: Record<string,string> = {}): s
   if (model === communityQwen36) return 'Qwen3.6 35B-A3B · HauhauCS · IQ3_M';
   if (model === defiantFable) return 'Qwen3.5 9B · Defiant Fable NEO · IQ4_XS';
   if (model === roleplayQwen) return 'Qwen3.5 9B · NSFW-RP · Q4_K_M';
+  if (model === darkRoast) return 'Qwen3.5 9B · DARK ROAST · IQ4_XS · 24K';
+  if (model === darkRoastMtp) return 'Qwen3.5 9B · DARK ROAST · IQ4_XS · MTP on · 24K';
+  if (model === roleplayQwenIQ4) return 'Qwen3.5 9B · NSFW-RP · IQ4_XS · 24K';
+  if (model === defiantFableMtpBaseline) return 'Qwen3.5 9B · Defiant Fable NEO · IQ3_M · MTP off · 24K';
+  if (model === defiantFableMtp) return 'Qwen3.5 9B · Defiant Fable NEO · IQ3_M · MTP on · 24K';
   if (model === sthenoV32) return 'Llama 3.1 8B · Stheno v3.2 · Q4_K_M';
   if (model === anubisMiniV1) return 'Anubis Mini 8B v1 · TheDrummer · Q4_K_M';
   if (model === mistralRpNoromaid7B) return 'MistralRP Noromaid 7B · Moophlo · Q8_0';
@@ -54,8 +64,8 @@ export function modelLabel(model: string, labels: Record<string,string> = {}): s
 
 export function modelForPerformance(models: string[], quality: boolean): string | undefined {
   const order = quality
-    ? [communityQwen, defiantFable, 'qwen3.5:9b', communityGemma, 'qwen3.5:4b']
-    : ['qwen3.5:4b', communityGemma, communityQwen, 'qwen3.5:9b'];
+    ? [darkRoast, communityQwen, defiantFable, roleplayQwenIQ4, defiantFableMtpBaseline, 'qwen3.5:9b', communityGemma, 'qwen3.5:4b']
+    : ['qwen3.5:4b', communityGemma, communityQwen, defiantFableMtpBaseline, darkRoast, roleplayQwenIQ4, 'qwen3.5:9b'];
   return order.find(model => models.includes(model)) ?? models[0];
 }
 
@@ -82,6 +92,7 @@ export function nativeModelSampling(model:string,profile:SamplingProfile='creati
 }
 
 export function modelRuntimeInfo(model:string){
+ if([darkRoast,darkRoastMtp,roleplayQwenIQ4,defiantFableMtpBaseline,defiantFableMtp].includes(model)){const mtp=[darkRoastMtp,defiantFableMtp].includes(model);return {context:catalogModel(model)!.context,cacheType:'f16',flashAttention:true,mtp,draftTokens:mtp?3:0};}
  if([communityQwen4BMtp,communityQwen4BMtpBaseline].includes(model))return {context:NATIVE_CONTEXT,cacheType:'f16',flashAttention:true,mtp:model===communityQwen4BMtp,draftTokens:model===communityQwen4BMtp?3:0};
  return model===anubisMiniV1?{context:ANUBIS_CONTEXT,trainingContext:ANUBIS_TRAINING_CONTEXT,cacheType:ANUBIS_CONTEXT>32768?'q4_0':'q8_0',flashAttention:true}:undefined;
 }

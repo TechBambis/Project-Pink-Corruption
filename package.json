@@ -45,7 +45,11 @@
     "desktop:macos-check": "node scripts/desktop-macos-check.mjs",
     "desktop:macos-ai-check": "node scripts/desktop-macos-ai-check.mjs",
     "pretest:profiles": "npm run build",
-    "test:profiles": "node --import tsx scripts/profiles-browser-check.mjs"
+    "test:profiles": "node --import tsx scripts/profiles-browser-check.mjs",
+    "pretest:react-player": "npm run build",
+    "test:react-player": "node scripts/react-player-browser-check.mjs",
+    "pretest:regie": "npm run build",
+    "test:regie": "node scripts/regie-browser-check.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "4.3.0",
@@ -53,7 +57,10 @@
     "express": "5.1.0",
     "onnxruntime-web": "1.22.0",
     "ws": "8.22.0",
-    "zod": "3.25.76"
+    "zod": "3.25.76",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "@tanstack/react-router": "1.170.44"
   },
   "devDependencies": {
     "@types/express": "5.0.3",
@@ -66,7 +73,10 @@
     "playwright": "1.56.0",
     "tsx": "4.20.6",
     "typescript": "5.9.3",
-    "vite": "7.3.6"
+    "vite": "7.3.7",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "5.1.4"
   },
   "license": "AGPL-3.0-only"
 }

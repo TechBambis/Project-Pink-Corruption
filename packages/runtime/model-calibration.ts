@@ -12,6 +12,7 @@ import {DialogueDisplayStream} from '../ai/dialogue';
 import {SituationalTurnStream} from '../ai/situational';
 import {ScriptDisplayStream} from '../speech/script';
 import {buildFixedReplyPrompt,buildReplyPrompt} from '../ai/prompt';
+import type {LanguageStyle} from '../ai/language-style';
 import type {SamplingProfile} from '../../config/sampling';
 import type {ConversationTopic} from '../content/conversation';
 import {inferenceThreads,cudaVersion,type AcceleratorDevice} from './accelerator-policy';
@@ -79,7 +80,7 @@ export class CalibrationProfiles {
   try{await writeFile(temporary,JSON.stringify(profiles),{flag:'wx',mode:0o600});signal.throwIfAborted();await rename(temporary,this.path);}finally{await rm(temporary,{force:true});}
  }
 }
-export interface CalibrationInput {model:string;context:number;base:string;sampling:SamplingProfile;interaction:'reactive'|'situational';conversationTopic:ConversationTopic;key:string;cpuThreads:number;batchSize:number;microBatchSize:number;speech:boolean;acceleration?:'auto'|'cpu'}
+export interface CalibrationInput extends LanguageStyle {model:string;context:number;base:string;sampling:SamplingProfile;interaction:'reactive'|'situational';conversationTopic:ConversationTopic;key:string;cpuThreads:number;batchSize:number;microBatchSize:number;speech:boolean;acceleration?:'auto'|'cpu'}
 export interface CalibrationOperations {
  exclusive<T>(work:()=>Promise<T>,signal:AbortSignal):Promise<T>;
  prepare(tuning:RuntimeTuning,signal:AbortSignal):Promise<void>;
@@ -144,8 +145,8 @@ export class ModelCalibration {
         if(memoryError)throw memoryError;configurationSignal.throwIfAborted();turnController=new AbortController();
         const turnSignal=AbortSignal.any([configurationSignal,turnController.signal,AbortSignal.timeout(240000)]),started=performance.now();
         this.state={...this.state,turn:turn+1,stage:turn===0?'processing-full-prompt':'measuring-follow-up'};
-        const system=buildReplyPrompt(input.base,request,false,'Device control is disabled.',undefined,'',true,false,input.interaction,'',false,input.conversationTopic);
-        const plan=await fitContext(system,history,request,messages=>operations.backend.countTokens!(messages,turnSignal),input.context,96,256,96,'',{fastPlanning:true,checkpointPrefix:buildFixedReplyPrompt(input.base,input.interaction)});
+        const system=buildReplyPrompt(input.base,request,false,'Device control is disabled.',undefined,'',true,false,input.interaction,'',false,input.conversationTopic,input);
+        const plan=await fitContext(system,history,request,messages=>operations.backend.countTokens!(messages,turnSignal),input.context,96,256,96,'',{fastPlanning:true,checkpointPrefix:buildFixedReplyPrompt(input.base,input.interaction,input)});
         let firstTextMs:number|null=null,firstAudioMs:number|null=null,speechError:string|undefined,text='',stats:any,speech:Promise<void>|undefined;
         const dialogue=new DialogueDisplayStream(),actions=new ActionStream(),display=new ScriptDisplayStream(false,false,false),turnDisplay=input.interaction==='situational'?new SituationalTurnStream():undefined;
         const observeVisible=(visible:string)=>{
@@ -181,7 +182,7 @@ export class ModelCalibration {
       if(score(repeated)<=Math.max(score(results[provisionalWinner])*1.5,score(results[provisionalWinner])+1000))winner=results.length-1;
      }
     }
-    const profile:CalibrationProfile={schema:1,key:input.key,model:input.model,createdAt:Date.now(),context:input.context,promptHash:calibrationHash(buildFixedReplyPrompt(input.base,input.interaction)),results,winner,quality:'unreviewed',speechTested:input.speech};
+    const profile:CalibrationProfile={schema:1,key:input.key,model:input.model,createdAt:Date.now(),context:input.context,promptHash:calibrationHash(buildFixedReplyPrompt(input.base,input.interaction,input)),results,winner,quality:'unreviewed',speechTested:input.speech};
     if(winner===null){this.state={...this.state,phase:'failed',stage:'complete',error:'No configuration passed both the comparison and repeat test with sufficient memory. Verified files are kept.',profile};return;}
     this.state={...this.state,stage:'applying-measured-settings'};await operations.prepare(results[winner].tuning,signal);signal.throwIfAborted();await operations.save(profile,signal);signal.throwIfAborted();keepReady=true;
     this.state={...this.state,phase:'complete',stage:'complete',profile};

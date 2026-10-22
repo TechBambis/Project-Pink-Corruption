@@ -10,6 +10,7 @@ import {Store} from '../packages/storage';
 import {settingsDefaults,settingsRegistry,validateSettings,migrateStoredSettings,runtimeSettingsInventory,type Settings} from '../packages/settings';
 import {createSettingsFile,parseSettingsFile,selectedFileSettings,settingsFileLimit,ImportSettingsSchema} from '../packages/settings/transfer';
 import {SettingsPersistence,mergeSettingsDraft,type SettingsSnapshot} from '../apps/web/src/settings-persistence';
+import {journeyIds} from '../packages/session-director/journeys';
 const sectionNames=['audio','visuals','triggers','session','personal','machine'] as const;
 const defaults=settingsDefaults();
 const storage=()=>{const values=new Map<string,string>();return {getItem:(key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>{values.set(key,value);},removeItem:(key:string)=>{values.delete(key);}};};
@@ -33,6 +34,28 @@ test('settings validation rejects ranges, unknown fields, invalid structured set
  assert.deepEqual(validateSettings({master:.5}),{master:'0.5'});assert.equal(validateSettings({model:'hf.co/example/model:q4'}).model,'hf.co/example/model:q4');
  const migrated=migrateStoredSettings({duration:'1200',persona:'Prior text','spiral-complexity':'2.2',master:'0.4','device-enabled':true});
  assert.equal(migrated.duration,'unlimited');assert.equal(migrated['guided-style'],'Prior text');assert.equal(migrated['spiral-complexity'],'1.5');assert.ok(!('device-enabled' in migrated));
+});
+
+test('all selectable characters survive saving, file transfer and profile restart',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'bambi-character-settings-')),path=join(directory,'profile.sqlite');
+ let store=new Store(path);
+ try{
+  for(const character of ['bambisleep-classic','gentle-induction','english-conversation','bambi-companion','custom']){
+   const settings=validateSettings({...defaults,'prompt-template':character});
+   const file=createSettingsFile(settings,'settings','Character settings',['session']);
+   const restored=selectedFileSettings(parseSettingsFile(JSON.stringify(file)),['session']);
+   const saved=store.saveSettings(store.settingsSnapshot().revision,restored);
+   assert.equal(saved.conflict,false);store.db.close();store=new Store(path);
+   assert.equal(store.settingsSnapshot().settings['prompt-template'],character);
+  }
+ }finally{store.db.close();rmSync(directory,{recursive:true,force:true});}
+});
+
+test('built-in journeys retain their selection in portable settings',()=>{
+ for(const journey of ['custom',...journeyIds]){
+  const file=createSettingsFile({...defaults,'session-journey':journey},'preset','Journey',['session']);
+  assert.equal(selectedFileSettings(parseSettingsFile(JSON.stringify(file)),['session'])['session-journey'],journey);
+ }
 });
 
 test('personal settings roundtrip every supported setting; presets exclude machine fields and personal text by default',()=>{

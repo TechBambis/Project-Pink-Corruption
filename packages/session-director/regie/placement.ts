@@ -4,6 +4,24 @@
 
 import type { PresentationState } from '../events/contract';
 import type { CompiledScene } from './compiler';
+import {compileEvent} from '../events/runtime';
+import {eventDurationMs} from '../events/contract';
+
+/** Bind section receipts to the admitted events before committing any playback.
+ * A response cannot omit one of an exchange's required output slots. */
+export function validateSceneSections(scene:Pick<CompiledScene,'plan'|'sections'|'events'|'atMs'|'endMs'>){
+  if(!Array.isArray(scene.sections)||scene.sections.length!==scene.plan.sections.length)throw Error('Invalid compiled section evidence');
+  let cursor=scene.atMs;
+  for(const [index,section] of scene.sections.entries()){
+    if(section.id!==scene.plan.sections[index].id||section.fromMs!==cursor||!Number.isFinite(section.toMs)||section.toMs<=cursor||section.toMs>scene.endMs||!Array.isArray(section.speechIds))throw Error('Invalid compiled section evidence');
+    const events=scene.events.filter(e=>e.atMs>=section.fromMs&&e.atMs<section.toMs);
+    if(!events.length||events.some(e=>e.atMs+eventDurationMs(e)>section.toMs))throw Error('Compiled section crosses its event boundary');
+    const expected=events.flatMap(e=>compileEvent(e).speech.map(s=>s.id));
+    if(expected.length!==section.speechIds.length||expected.some((id,i)=>section.speechIds[i]!==id))throw Error('Compiled section must retain every required speech slot');
+    cursor=section.toMs;
+  }
+  if(cursor!==scene.endMs||scene.events.some(e=>e.atMs<scene.atMs||e.atMs+eventDurationMs(e)>scene.endMs))throw Error('Compiled section does not cover its scene');
+}
 
 /** Only an uncommitted scene may move. Translate the whole measured composition;
  * never reschedule an expired cue or mutate already playing events. */

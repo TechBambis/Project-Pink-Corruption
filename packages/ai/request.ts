@@ -25,6 +25,8 @@ export const ChatRequestSchema = z.object({
   playbackBuffer:z.boolean().optional(),
   sceneHeardText:z.string().max(6000).optional(),
   dualVoice:z.boolean().default(false),
+  // Compatibility flags for older clients; language freedom is unconditional.
+  nsfw:z.boolean().default(false), rawRoleplay:z.boolean().default(false),
   adaptiveDelivery: z.boolean().default(false),
   adaptiveVisuals: z.boolean().default(false),
   soundDesign: z.boolean().default(false), dialogue: z.boolean().default(true),
@@ -33,7 +35,8 @@ export const ChatRequestSchema = z.object({
   voice: z.string().regex(/^[a-z0-9_+():. -]{1,150}$/).default('bambi_classic'),
   preset: audioPresetSchema.default('bambi_local_clean'), speed: z.number().min(.5).max(1.5).default(.78),
   speak: z.boolean().default(true), persona: z.string().max(500).default('Soft, playful, dreamy and affectionate'),
-  promptId: z.enum(['bambisleep-classic', 'gentle-induction', 'english-conversation', 'custom']).default('bambisleep-classic'),
+  promptId: z.enum(['bambisleep-classic', 'gentle-induction', 'english-conversation', 'bambi-companion', 'custom']).default('bambisleep-classic'),
+  narrationStyle:z.string().max(300).optional(),
   username: z.string().max(50).default('Bambi'), selectedTriggers: z.array(z.string().max(100)).max(100).default([]),
   collar: z.boolean().default(false), collarName: z.string().max(4000).default(''),
   context: z.number().int().min(2048).max(131072).default(NATIVE_CONTEXT),

@@ -3,39 +3,66 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import {dualVoiceDirection} from '../content/dual-voice';
-import {scriptFormatDirection,scriptSoundDirection,scriptCommandDirection} from '../content/script-direction';
 import {appendSoundDirection} from '../content/sound-direction';
 import {appendPhasePrompt} from '../content/phases';
 import {appendSessionState,type SessionState} from './session-state';
 import {buildCharacterPrefix} from './character';
-import {narrationLengthDirection,replyTaskDirection,replyTaskContract} from './response';
+import {replyWordBudget,replyBlockBudget,replyTaskDirection,replyTaskContract} from './response';
 import {situationalVoiceDirection} from '../content/situational';
 import {situationalReplyDirection} from './situational';
 import type {Interaction} from './request';
 import {conversationDirection,type ConversationTopic} from '../content/conversation';
+import {languageStyleDirection,type LanguageStyle} from './language-style';
+import {narratorIdentityReminder} from '../content/voice';
+import {breathDirection} from '../speech/breath';
+import {deliveryDirection,type DeliveryMode} from '../session-director/delivery';
+import {spokenBlockProtocol} from './spoken-blocks';
 
-/** Flags belong after this prefix: changing them must not invalidate its recurrent state. */
-export function buildFixedReplyPrompt(base:string,interaction:Interaction='reactive'){
- return [buildCharacterPrefix(base),scriptFormatDirection,...(interaction==='situational'?[situationalVoiceDirection]:[replyTaskContract])].join('\n\n');
+type ReplyStyle=LanguageStyle&{narrationStyle?:string};
+export interface ReplyDelivery {mode:DeliveryMode;words:number;visuals?:boolean}
+const focused=(base:string)=>base.startsWith('=== BAMBI COMPANION ===');
+/** The prompt and native grammar share the same current marker capabilities. */
+export function replyControlPrefixes(request:string,narration:boolean,dialogue:boolean,interaction:Interaction,soundDesign=false,delivery=false,devices=false){
+ if(delivery)return [];
+ const prefixes=['pause'];
+ if(narration||/\b(?:breath(?:e|ing|s)?|inhale|exhale)\b/i.test(request))prefixes.push('breath');
+ if(narration&&!dialogue&&interaction==='reactive'){
+  if(soundDesign)prefixes.push('SFX','sound','tick');
+  if(devices)prefixes.push('vib','rot','both');
+ }
+ return prefixes;
+}
+/** The reusable prefix contains no phase-specific budget or transport marker examples. */
+export function buildFixedReplyPrompt(base:string,interaction:Interaction='reactive',languageStyle:ReplyStyle={}){
+ return [buildCharacterPrefix(base,languageStyle.narrationStyle),replyTaskContract,spokenBlockProtocol,
+  interaction==='situational'?situationalVoiceDirection:'',languageStyleDirection(languageStyle),
+ ].filter(Boolean).join('\n\n');
 }
 
-/** Keep the full fixed instructions before changing state so inference can reuse its prefix. */
-export function buildReplyPrompt(base:string,request:string,soundDesign:boolean,deviceDirection:string,session?:SessionState,playbackContext='',dialogue=false,narration=!dialogue,interaction:Interaction='reactive',conversationContext='',dualVoice=false,conversationTopic:ConversationTopic='general'){
- const fixed=buildFixedReplyPrompt(base,interaction);
- if(interaction==='situational')return [fixed,
-  'Use only the single turn header and supported pause or breath markers, plus voice markers when Dual Voice is enabled. Sound, tick and device commands and actions are disabled in situational conversation.',
-  playbackContext,situationalReplyDirection(request,narration,session,conversationContext),dualVoiceDirection(dualVoice&&narration&&!dialogue,session?.phase),
-  dualVoice&&narration?'In situational mode, use two voices only for [turn:guide] or [turn:close]. For [turn:ask] or [turn:respond], use Owner alone. Background feelings are fictional imagery within the chosen passage, never factual observations about the listener.':'',
-  !narration?conversationDirection(conversationTopic):'',
+/** One current output contract, one current task/budget and one session state. */
+export function buildReplyPrompt(base:string,request:string,soundDesign:boolean,deviceDirection:string,session?:SessionState,playbackContext='',dialogue=false,narration=!dialogue,interaction:Interaction='reactive',conversationContext='',dualVoice=false,conversationTopic:ConversationTopic='general',languageStyle:ReplyStyle={},delivery?:ReplyDelivery){
+ const fixed=buildFixedReplyPrompt(base,interaction,languageStyle);
+ const words=replyWordBudget(request,narration,{phase:session?.phase,focused:focused(base),interaction,engineWords:delivery?.words});
+ const blocks=replyBlockBudget(request,narration,words);
+ const controls=narration&&!dialogue&&interaction==='reactive'&&!delivery;
+ const output=[
+  '=== CHAT OUTPUT CONTRACT ===',
+  'Use the SPOKEN BLOCK FORMAT above. Only the private metadata admitted below may accompany the spoken words. This output contract overrides conflicting character-format examples.',
+  `Use ${blocks.min}-${blocks.max} complete spoken lines total. Stop when the answer is complete; do not fill unused lines.`,
+  dualVoiceDirection(dualVoice&&narration&&!dialogue,session?.phase),
+  interaction==='situational'&&dualVoice&&narration?'Use INNER only for [turn:guide] or [turn:close]; [turn:ask] and [turn:respond] use Owner alone.':'',
+  delivery?deliveryDirection(delivery.mode,delivery.visuals,delivery.words,false):[
+   'Supported pauses: [pause:normal], [pause:medium], [pause:long], [pause:transition]. Never speak private markers.',
+   replyControlPrefixes(request,narration,dialogue,interaction).includes('breath')?breathDirection:'No breath cues in this response.',
+   controls&&soundDesign?appendSoundDirection('',true):'Sound and tick metadata are disabled. No sound, SFX or tick markers.',
+   controls?deviceDirection:'No device commands.',
+   interaction==='reactive'&&!narration&&base.startsWith('You are Bambi Local,')?'The selected custom character may append its validated <action> scene metadata only for an explicitly requested visible scene change.':'No presentation actions.',
+  ].filter(Boolean).join('\n\n'),
  ].filter(Boolean).join('\n\n');
- return [fixed,deviceDirection,dualVoiceDirection(dualVoice&&narration&&!dialogue,session?.phase),
-  soundDesign&&!dialogue?appendSoundDirection(scriptSoundDirection,true):'',
-  soundDesign&&!dialogue?'Current response: sound and tick metadata are enabled when appropriate.':'Current response: sound and tick metadata are disabled. Do not add sound, SFX or tick markers.',
-  (narration?appendPhasePrompt('',session):appendSessionState('',session)).trim(),scriptCommandDirection(request),playbackContext,
-  dialogue?'Live conversation alongside a running session: media, background sounds, visuals and session time continue independently. Do not include device, sound or tick control markers. For guided breathing requested by the user, [breath:in] and [breath:out] are allowed as the only playback metadata in conversation. Listen to the latest user input and adapt to corrections. An interrupted response is unfinished: do not assume its unplayed ending was heard. Do not speak playback metadata or interruption markers.':'',
-  narration?narrationLengthDirection+'\nCurrent response is a complete session passage. A simple greeting to the selected session companion is an entry into the current phase, not a request for a generic chatbot greeting. Begin Induction with comfortable body support, contact with the chair or bed, feet and breathing. Never open an induction with Hello or Hi. Do not claim to see the listener or know their posture. If their position is unknown, invite them to notice where their body is supported.':
-   'Current response is a conversation or interjection. Use short, clear sentences; this describes each sentence, not the total answer length. Give the latest input as much explanation as it needs, and honor any requested response length. The full-session word targets do not force a long script in response to a question or correction. Stay with the latest input.',
-  replyTaskDirection(request,narration,false),
-  !narration?conversationDirection(conversationTopic):'',
+ return [fixed,output,
+  narration?appendPhasePrompt('',session):appendSessionState('',session),
+  playbackContext,interaction==='situational'?situationalReplyDirection(request,narration,session,conversationContext):'',
+  replyTaskDirection(request,narration,false,words),!narration?conversationDirection(conversationTopic):'',
+  narratorIdentityReminder,
  ].filter(Boolean).join('\n\n');
 }

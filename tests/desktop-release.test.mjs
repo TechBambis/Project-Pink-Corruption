@@ -59,21 +59,25 @@ test('shared source snapshots retain notices and have equal application identity
  put('.gitignore','/scripts/*\n!/scripts/public-check.mjs\n');put('scripts/public-check.mjs','public CI fixture\n');put('scripts/local-benchmark.mjs','local authoring fixture\n');
  for(const path of ['apps/desktop/AppRun','apps/desktop/AppRun.alpha','CLA.md','docs/anubis-model.json','docs/community-models.json'])put(path,'public fixture\n');
  const fixtureConfiguration={...configuration,features:{},windowsRequired:[],macosRequired:[]};put('config/desktop-release.json',JSON.stringify(fixtureConfiguration));
- put('apps/test.ts','public\nsource\n');put('docs/licenses/vendor.txt','Original notice\r\n');put('packages/speech/models/private.json','private');put('apps/web/public/vad/model.json','generated');put('scripts/reports/private.json','private');put('docs/internal/private.md','private');
+ put('apps/web/test.ts','public\nsource\n');put('docs/licenses/vendor.txt','Original notice\r\n');put('packages/speech/models/private.json','private');put('apps/web/public/vad/model.json','generated');put('scripts/reports/private.json','private');put('docs/internal/private.md','private');
+ put('apps/experimental/source.ts','private application fixture');put('packages/runtime/experimental/source.ts','private runtime fixture');
+ put('apps/web/component.tsx','export const control = <button>Play</button>;\n');
  const first=join(folder,'first'),a=await stageDesktopSource(source,first,spec.version);writeSourceManifest(first,a);
  assert(!existsSync(join(first,'packages/speech/models/private.json')));assert(!existsSync(join(first,'apps/web/public/vad/model.json')));assert(!existsSync(join(first,'scripts/reports/private.json')));assert(!existsSync(join(first,'docs/internal/private.md')));
  assert(existsSync(join(first,'scripts/public-check.mjs')));assert(!existsSync(join(first,'scripts/local-benchmark.mjs')));
+ assert(!existsSync(join(first,'apps/experimental/source.ts')));assert(!existsSync(join(first,'packages/runtime/experimental/source.ts')));
+ assert.equal(readFileSync(join(first,'apps/web/component.tsx'),'utf8'),'export const control = <button>Play</button>;\n');
  assert.equal(readFileSync(join(first,'docs/licenses/vendor.txt'),'utf8'),'Original notice\r\n');
  assert(existsSync(join(first,'apps/desktop/AppRun')));assert(existsSync(join(first,'CLA.md')));assert(existsSync(join(first,'docs/anubis-model.json')));
- put('apps/test.ts','public\r\nsource\r\n');const b=await stageDesktopSource(source,join(folder,'second'),spec.version);
+ put('apps/web/test.ts','public\r\nsource\r\n');const b=await stageDesktopSource(source,join(folder,'second'),spec.version);
  assert.equal(a.applicationDigest,b.applicationDigest);assert.notEqual(a.sourceDigest,b.sourceDigest);
  const prepared={...fixtureConfiguration,version:spec.version,phase:'alpha',applicationDigest:a.applicationDigest,sourceDigest:a.sourceDigest};
  writeFileSync(join(first,'RELEASE-SPEC.json'),JSON.stringify(prepared));
  assert.equal((await releaseIdentity(first,a)).snapshot,'prepared');await verifySnapshot(first);
  writeFileSync(join(first,'RELEASE-SPEC.json'),JSON.stringify({...prepared,gates:{alpha:[]}}));await assert.rejects(verifySnapshot(first),/contract changed/);
  writeFileSync(join(first,'RELEASE-SPEC.json'),JSON.stringify(prepared));
- writeFileSync(join(first,'apps/new.ts'),'unexpected');await assert.rejects(verifySnapshot(first),/inventory changed/);
- rmSync(join(first,'apps/new.ts'));writeFileSync(join(first,'apps/test.ts'),'edited');await assert.rejects(verifySnapshot(first),/Snapshot changed/);
+ writeFileSync(join(first,'apps/web/new.ts'),'unexpected');await assert.rejects(verifySnapshot(first),/inventory changed/);
+ rmSync(join(first,'apps/web/new.ts'));writeFileSync(join(first,'apps/web/test.ts'),'edited');await assert.rejects(verifySnapshot(first),/Snapshot changed/);
 });
 
 test('qualification is invalidated when the tested installer bytes change',async t=>{

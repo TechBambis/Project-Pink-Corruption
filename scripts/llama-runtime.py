@@ -241,7 +241,7 @@ def main():
         command += ['--cache-type-k', cache, '--cache-type-v', cache]
         if model.get('resource_plan'):
             command += ['--chat-template-kwargs', '{"enable_thinking":false}', '--verbosity', '4']
-        if args.require_empty_slot or tuning or args.model.startswith('bambi-qwen35-4b-hauhau'):
+        if args.require_empty_slot or tuning or args.model.startswith('bambi-qwen35-4b-hauhau') or args.model.startswith('bambi-qwen35-9b-'):
             # Upstream level 3 omits model offload evidence; retain the measured
             # GPU configuration and report actual layers instead of guessing.
             # Explicit research admission needs this evidence for any model.

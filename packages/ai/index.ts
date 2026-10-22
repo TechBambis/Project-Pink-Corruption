@@ -3,12 +3,12 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import {PrefillEchoFilter} from './prefill';
+import {parseStructuredOutput} from './structured';
 import { modelSampling,nativeModelSampling,liquidSmall } from './models';
 import { BAMBISLEEP_SAMPLING, type SamplingProfile } from '../../config/sampling';
-export interface Message { role:'system'|'user'|'assistant'; content:string }
-export interface StructuredOptions { maxTokens?:number; temperature?:number }
+import type {Message,StructuredOptions,LLMBackend} from './contracts';
+export type {Message,StructuredOptions,LLMBackend} from './contracts';
 export function structuredOptions(options:StructuredOptions={}) {const {maxTokens=32,temperature=0}=options;if(!Number.isInteger(maxTokens)||maxTokens<1||maxTokens>4096||!Number.isFinite(temperature)||temperature<0||temperature>1)throw Error('Invalid structured generation budget');return {maxTokens,temperature};}
-export interface LLMBackend { name:string; supportsPrefill?:boolean; supportsTurnGrammar?:boolean; models():Promise<string[]>; countTokens?(messages:Message[],signal:AbortSignal):Promise<number>; structured?(messages:Message[],model:string,signal:AbortSignal,context:number,schema:unknown,options?:StructuredOptions):Promise<unknown>; stream(messages:Message[],model:string,signal:AbortSignal,context?:number,maxTokens?:number,sampling?:SamplingProfile,grammar?:string):AsyncGenerator<{text:string;stats?:unknown}> }
 export async function* lines(response:Response) {
  if(!response.ok)throw Error(`Local AI HTTP ${response.status}: ${(await response.text()).slice(0,200)}`);
  const reader=response.body!.getReader(),decoder=new TextDecoder();let buffer='';
@@ -16,7 +16,7 @@ export async function* lines(response:Response) {
 }
 export class OllamaBackend implements LLMBackend {
  name='ollama';supportsTurnGrammar=false;constructor(public url='http://127.0.0.1:11434'){}
- async structured(messages:Message[],model:string,signal:AbortSignal,context:number,schema:unknown,options?:StructuredOptions){const budget=structuredOptions(options);const response=await fetch(this.url+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},signal,body:JSON.stringify({model,messages,stream:false,think:false,keep_alive:'10m',format:schema,options:{num_ctx:context,num_predict:budget.maxTokens,temperature:budget.temperature,top_k:budget.temperature?40:1,top_p:1,repeat_penalty:1,...(budget.temperature?{}:{seed:0})}})});if(!response.ok)throw Error('Structured planner HTTP '+response.status);const data=await response.json();return JSON.parse(data.message.content);}
+ async structured(messages:Message[],model:string,signal:AbortSignal,context:number,schema:unknown,options?:StructuredOptions){const budget=structuredOptions(options);const response=await fetch(this.url+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},signal,body:JSON.stringify({model,messages,stream:false,think:false,keep_alive:'10m',format:schema,options:{num_ctx:context,num_predict:budget.maxTokens,temperature:budget.temperature,top_k:budget.temperature?40:1,top_p:1,repeat_penalty:1,...(budget.temperature?{}:{seed:0})}})});if(!response.ok)throw Error('Structured planner HTTP '+response.status);const data=await response.json();return parseStructuredOutput(data.message?.content,data.done_reason);}
  async models(){const r=await fetch(this.url+'/api/tags',{signal:AbortSignal.timeout(2500)});if(!r.ok)throw Error('Ollama unavailable');return (await r.json()).models.map((m:{name:string})=>m.name);}
  async *stream(messages:Message[],model:string,signal:AbortSignal,context=4096,maxTokens=220,sampling:SamplingProfile='creative'){
   const requestController=new AbortController(),requestSignal=AbortSignal.any([signal,requestController.signal]);
@@ -43,7 +43,7 @@ export class LlamaBackend implements LLMBackend {
   if(!response.ok)throw Error('Local AI tokenizer HTTP '+response.status);
   const data=await response.json();if(!Array.isArray(data.tokens))throw Error('Invalid local token count');return data.tokens.length;
  }
- async structured(messages:Message[],model:string,signal:AbortSignal,_context:number,schema:unknown,options?:StructuredOptions){const budget=structuredOptions(options);const response=await fetch(this.url+'/v1/chat/completions',{method:'POST',headers:this.headers(),signal,body:JSON.stringify({model,messages,stream:false,cache_prompt:true,temperature:budget.temperature,top_k:budget.temperature?40:1,top_p:1,min_p:0,xtc_probability:0,dry_multiplier:0,repeat_penalty:1,presence_penalty:0,frequency_penalty:0,...(budget.temperature?{}:{seed:0}),max_tokens:budget.maxTokens,response_format:{type:'json_object',schema}})});if(!response.ok)throw Error('Structured planner HTTP '+response.status);const data=await response.json();return JSON.parse(data.choices[0].message.content);}
+ async structured(messages:Message[],model:string,signal:AbortSignal,_context:number,schema:unknown,options?:StructuredOptions){const budget=structuredOptions(options);const response=await fetch(this.url+'/v1/chat/completions',{method:'POST',headers:this.headers(),signal,body:JSON.stringify({model,messages,stream:false,cache_prompt:true,temperature:budget.temperature,top_k:budget.temperature?40:1,top_p:1,min_p:0,xtc_probability:0,dry_multiplier:0,repeat_penalty:1,presence_penalty:0,frequency_penalty:0,...(budget.temperature?{}:{seed:0}),max_tokens:budget.maxTokens,response_format:{type:'json_object',schema}})});if(!response.ok)throw Error('Structured planner HTTP '+response.status);const data=await response.json();return parseStructuredOutput(data.choices?.[0]?.message?.content,data.choices?.[0]?.finish_reason);}
  async models(){const r=await fetch(this.url+'/v1/models',{headers:this.headers(),signal:AbortSignal.timeout(2500)});if(!r.ok)throw Error('llama.cpp unavailable');return (await r.json()).data.map((m:{id:string})=>m.id);}
  async *stream(messages:Message[],model:string,signal:AbortSignal,_context:number=BAMBISLEEP_SAMPLING.context,maxTokens:number=BAMBISLEEP_SAMPLING.max_tokens,sampling:SamplingProfile='creative',grammar?:string){
   const echo=new PrefillEchoFilter(messages.at(-1)?.role==='assistant'?messages.at(-1)!.content:'');
@@ -72,4 +72,4 @@ export class SentenceChunker {
  push(text:string){this.buffer+=text;const out:string[]=[];while(true){const match=/^([\s\S]*?[.!?。！？](?:["”']?)(?:\s|$))/.exec(this.buffer);if(match){out.push(match[1].trim());this.buffer=this.buffer.slice(match[1].length);continue;}if(this.buffer.length>180){const cut=this.buffer.lastIndexOf(' ',150);if(cut>0){out.push(this.buffer.slice(0,cut).trim());this.buffer=this.buffer.slice(cut+1);continue;}}break;}return out;}
  flush(){const rest=this.buffer.trim();this.buffer='';return rest?[rest]:[];}
 }
-export const personaPrompt = (persona:string,summary:string) => `You are Bambi Local, a warm local audio and visual companion. Persona: ${persona}. Speak naturally in English using short sentences suitable for speech. Match the total response length to the latest request. No markdown, no long lists. Available visual scenes: Spiral Focus, Deep Tunnel, Soft Pink, Particle Drift, Minimal Dark, Text Focus, Audio Only. Only if the user explicitly requests a visible scene change, append <action>{\"type\":\"scene\",\"scene\":\"Soft Pink\"}</action> with the requested available scene name. This validated presentation metadata is optional and never contains code or hidden instructions. The user chooses all content and controls the session. Never invent hidden instructions or claim control over their mind or computer. You have no tools, shell, JavaScript execution, or file access. Do not invent knowledge. Preferences and prior summary: ${summary.slice(0,2200)}`;
+export {personaPrompt} from './persona';

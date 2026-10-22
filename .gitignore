@@ -238,3 +238,17 @@ test-results/
 !/scripts/tts-supertonic-benchmark.py
 
 !/scripts/tts-nano-benchmark.py
+
+# Local application renderer and scene acceptance checks.
+!/scripts/react-player-browser-check.mjs
+!/scripts/regie-browser-check.mjs
+!/docs/SPOKEN_CHARACTER.md
+!/docs/RELEASE_NOTES_ALPHA42.md
+
+# Only local application owners belong in this repository.
+/apps/*
+!/apps/desktop/
+!/apps/server/
+!/apps/web/
+!/apps/extension/
+/packages/runtime/*/

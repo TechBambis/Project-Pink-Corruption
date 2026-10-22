@@ -1,0 +1,15 @@
+/* SPDX-FileCopyrightText: 2026 BambiOS
+ * SPDX-License-Identifier: AGPL-3.0-only */
+
+/* Structural migration styles; the visual direction will be chosen separately. */
+.react-navigation-host { display: contents; }
+.react-owned-host { display: contents; }
+.react-player-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.react-player-controls #panic { min-height: 44px; padding: 10px 12px; }
+.react-player-controls button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.react-global-stop { position: fixed; right: 16px; bottom: 16px; z-index: 40; min-height: 44px; padding: 10px 16px; }
+.react-global-stop:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+@media (max-width: 600px) {
+ .react-player-controls { gap: 4px; }
+ .react-player-controls #panic { padding: 8px; }
+}

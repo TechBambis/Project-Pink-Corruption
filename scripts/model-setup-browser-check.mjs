@@ -37,7 +37,7 @@ const server=spawn(process.execPath,['--import',join(root,'node_modules/tsx/dist
 let logs='',browser,smokeServer;server.stdout.on('data',chunk=>logs+=chunk);server.stderr.on('data',chunk=>logs+=chunk);
 try{
  for(let attempt=0;attempt<100;attempt++){if(server.exitCode!==null)throw Error('Fixture startup failed: '+logs);try{if((await fetch(base+'/api/health')).ok)break;}catch{}await new Promise(resolve=>setTimeout(resolve,100));}
- const catalog=await(await fetch(base+'/api/models/catalog')).json();assert.equal(catalog.alternatives.length,11);assert.equal(catalog.hardware.ramTotal,32*1024**3);
+ const catalog=await(await fetch(base+'/api/models/catalog')).json();assert.equal(catalog.alternatives.length,JSON.parse(readFileSync(join(root,'config/local-model-catalog.json'),'utf8')).length);assert.equal(catalog.hardware.ramTotal,32*1024**3);
  const blocked=await fetch(base+'/api/models/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'https://example.invalid/model'})});assert.equal(blocked.status,400);
  const unconfirmed=await fetch(base+'/api/models/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'bambi-qwen35-9b-defiant-fable:iq4_xs'})});assert.equal(unconfirmed.status,400);
  assert.equal((await(await fetch(base+'/api/models/setup')).json()).model,'bambi-qwen35-9b-hauhau:q4_k_m');
@@ -65,8 +65,8 @@ try{
  await privacy.locator('[name=modelDownloads]').check();await privacy.locator('[name=localClock]').check();await privacy.getByRole('button',{name:'Save and continue',exact:true}).click();await privacy.waitFor({state:'hidden'});
  const dialog=page.locator('#model-onboarding');await dialog.waitFor({state:'visible'});await dialog.locator('.model-loading').waitFor({state:'visible'});assert(await dialog.locator('[data-next]').isDisabled());assert(await dialog.locator('[data-finish]').isDisabled());assert.equal(downloadRequests,0);releaseCatalog();await dialog.locator('.model-loading').waitFor({state:'hidden'});
  assert(await dialog.locator('[data-quick-setup]').isEnabled());await dialog.locator('[data-quick-setup]').click();assert(await dialog.locator('[data-pane="2"]').isVisible());assert.equal(downloadRequests,0,'Reviewing the recommended download never starts a transfer');await page.getByRole('button',{name:'1. Your computer',exact:true}).click();
- await page.getByRole('button',{name:'Choose a model',exact:true}).click();await page.locator('.model-choice').last().waitFor();assert.equal(await page.locator('.model-choice').count(),11);assert.equal(downloadRequests,0);
- await page.locator('.model-choice').filter({hasText:'Defiant Fable'}).click();await page.getByRole('button',{name:'Review download'}).click();
+ await page.getByRole('button',{name:'Choose a model',exact:true}).click();await page.locator('.model-choice').last().waitFor();assert.equal(await page.locator('.model-choice').count(),catalog.alternatives.length);assert.equal(downloadRequests,0);
+ await page.locator('.model-choice').filter({has:page.locator('input[value="bambi-qwen35-9b-defiant-fable:iq4_xs"]')}).click();await page.getByRole('button',{name:'Review download'}).click();
  const download=page.getByRole('button',{name:'Download and verify',exact:true});assert(await download.isDisabled());
  await page.locator('.model-blocked').filter({hasText:'experimental model confirmation'}).waitFor({state:'visible'});
  await page.getByRole('checkbox',{name:/I want to try/}).check();assert(await download.isEnabled());await Promise.all([page.waitForResponse(response=>response.url()===base+'/api/models/setup/install'),download.click()]);
@@ -111,7 +111,7 @@ try{
  await page.locator('#device-scan').click();await privacy.waitFor({state:'visible'});await privacy.getByRole('button',{name:'Keep optional access off',exact:true}).click();await privacy.waitFor({state:'hidden'});
  assert(Object.values((await(await fetch(base+'/api/access')).json()).choices).every(value=>value===false));assert.equal(deviceRequests,0);
  await page.reload();await page.locator('#privacy-access-open').waitFor({state:'attached'});assert(!(await privacy.isVisible()));
- await page.goto(base+'/setup');await page.getByRole('button',{name:'Choose a model',exact:true}).click();await page.locator('.model-choice').last().waitFor();assert.equal(await page.locator('.model-choice').count(),11);
+ await page.goto(base+'/setup');await page.getByRole('button',{name:'Choose a model',exact:true}).click();await page.locator('.model-choice').last().waitFor();assert.equal(await page.locator('.model-choice').count(),catalog.alternatives.length);
  await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));await page.screenshot({path:join(root,'.runtime/model-setup-preview.png'),fullPage:true});
  compactHost=true;await page.goto(base+'/setup');await page.locator('.model-hardware').filter({hasText:'shared RAM limit'}).waitFor();
  assert(await page.locator('.model-hardware').getByText('AI processing',{exact:true}).isVisible());

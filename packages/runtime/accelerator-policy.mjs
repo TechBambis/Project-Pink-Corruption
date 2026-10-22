@@ -57,7 +57,10 @@ export function acceleratorArguments(device,context){
   '--fit',device?'on':'off','--fit-ctx',String(context),'--fit-target',String(desktopMemoryReserveMiB)];
 }
 export function offloadEvidence(log){
- const matches=[...log.matchAll(/offloaded\s+(\d+)\s*\/\s*(\d+)\s+layers to GPU/gi)],last=matches.at(-1);
+ // An embedded MTP head logs its smaller model after the target model.
+ // Report the target's allocation, retaining the latest match on equal sizes.
+ const matches=[...log.matchAll(/offloaded\s+(\d+)\s*\/\s*(\d+)\s+layers to GPU/gi)];
+ const last=matches.reduce((target,match)=>!target||Number(match[2])>=Number(target[2])?match:target,null);
  if(!last)return null;
  const offloadedLayers=Number(last[1]),totalLayers=Number(last[2]);
  return Number.isSafeInteger(totalLayers)&&totalLayers>0&&Number.isSafeInteger(offloadedLayers)&&offloadedLayers<=totalLayers?{offloadedLayers,totalLayers}:null;

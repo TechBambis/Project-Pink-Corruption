@@ -14,6 +14,24 @@ test('native reference capabilities exclude blending and fabricated word times',
  assert.equal(mossCapabilities.wordTimings,false);assert.equal(mossCapabilities.voiceBlending,false);
 });
 
+test('long replies respect both native and ordinary renderer limits without losing their ending',async()=>{
+ const original=globalThis.fetch;
+ const text=('Every fucking word belongs here. ').repeat(160)+'This is the final sentence.';
+ try{
+  for(const voice of ['moss_doll_q8','af_heart']){
+   const requests:string[]=[];
+   globalThis.fetch=async(_url,init)=>{
+    const body=JSON.parse(String(init?.body));requests.push(body.input);
+    assert.ok(body.input.length<=(voice==='moss_doll_q8'?1000:3000));
+    return new Response(JSON.stringify({audio:'whole',audio_format:'wav',timestamps:[],text:body.input,history_mode:'complete'})+'\n');
+   };
+   const spoken:string[]=[];
+   for await(const chunk of new Kokoro().speak(text,voice,1,new AbortController().signal))spoken.push(chunk.text??'');
+   assert.ok(requests.length>1);assert.equal(spoken.join(' '),text);assert.equal(requests.join(' '),text);
+  }
+ }finally{globalThis.fetch=original;}
+});
+
 test('completed-utterance history never estimates partially heard MOSS words',()=>{
  const playback=new SpeechPlayback();playback.schedule(0,'',1,.08,[],'complete');
  playback.schedule(1,'We can decide together.',1.08,.24,[],'complete');

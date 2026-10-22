@@ -54,6 +54,15 @@ class AudioTests(unittest.TestCase):
         self.assertEqual(provider.spoken, ['Breathe in.', 'And out.', 'Rest.'])
         self.assertEqual([p['text'] for p in report['timeline']], provider.spoken)
 
+    def test_quotation_tails_never_become_extra_spoken_phrases(self):
+        provider = FakeProvider()
+        text = '\"Listen, Bambi.\" \u201cDon\u2019t rush, doll.\u201d'
+        chunks = list(Renderer(provider).chunks(text, load_preset('bambi_voice_test')))
+        self.assertEqual(provider.spoken, ['Listen, Bambi.', 'Don\u2019t rush, doll.'])
+        self.assertEqual(len(chunks), 2)
+        self.assertEqual(phrases('\" \u201c \u201d'), [])
+        self.assertEqual(spoken_input('Say \"hello\". Don\'t whisper.'), "Say hello. Don't whisper.")
+
     def test_missing_article_alignment_preserves_other_measured_words(self):
         tokenizer = SimpleNamespace(phonemize=lambda word, lang: {'A':'x','quiet':'kw','giggle':'gl'}[word])
         timings = [SimpleNamespace(phoneme=c,start=.2+i*.1,end=.3+i*.1) for i,c in enumerate('kwgl')]
@@ -160,6 +169,25 @@ class AudioTests(unittest.TestCase):
         self.assertEqual(provider.spoken,['First.'])
         generator.close()
         self.assertEqual(provider.spoken,['First.'])
+
+    def test_live_address_commas_keep_context_without_extra_pause_chunks(self):
+        provider = FakeProvider()
+        config = load_preset('bambi_classic', {
+            'drone': {'enabled': False}, 'noise': {'enabled': False},
+        })
+        text = 'Stay here, Bambi, and listen; I have something to say.'
+        chunks = list(Renderer(provider).chunks(text, config))
+        self.assertEqual(provider.spoken, [text])
+        self.assertEqual([chunk['pauseMs'] for chunk in chunks], [350])
+        provider.spoken.clear()
+        chunks = list(Renderer(provider).chunks(
+            'Listen, Bambi. [pause:900] Stay here, and listen. [pause:0]', config,
+        ))
+        self.assertEqual(provider.spoken, ['Listen, Bambi.', 'Stay here, and listen.'])
+        self.assertEqual([chunk['pauseMs'] for chunk in chunks], [900, 0])
+        provider.spoken.clear()
+        list(Renderer(provider).chunks('Stay here, Bambi, and listen; ' * 20, config))
+        self.assertTrue(all(len(phrase) <= 180 for phrase in provider.spoken))
 
     def test_pause_only_chunks_with_classic_processing_and_pitch_remain_silent(self):
         for pitch in [-2, 0, 2]:
@@ -269,7 +297,7 @@ class AudioTests(unittest.TestCase):
         self.assertEqual(report['durationSeconds'],.8)
 
 class SupertonicLabTests(unittest.TestCase):
-    def test_sentence_delivery_preserves_native_tags_and_explicit_silence_without_changing_default_stream(self):
+    def test_sentence_delivery_and_live_stream_preserve_tags_commas_and_explicit_silence(self):
         text = 'Oh, darling; nice try! [pause:900] <laugh> Try again, sweetie.'
         provider = FakeProvider()
         _, report = Renderer(provider, split_clauses=False).render(text, load_preset('bambi_local_clean'))
@@ -277,7 +305,7 @@ class SupertonicLabTests(unittest.TestCase):
         self.assertEqual(report['timeline'][0]['pauseMs'], 900)
         provider.spoken.clear()
         list(Renderer(provider, split_clauses=False).chunks(text, load_preset('bambi_local_clean')))
-        self.assertEqual(provider.spoken, ['Oh,', 'darling;', 'nice try!', '<laugh> Try again,', 'sweetie.'])
+        self.assertEqual(provider.spoken, ['Oh, darling; nice try!', '<laugh> Try again, sweetie.'])
         self.assertTrue(all(len(p.text) <= 180 for p in phrases('word, ' * 300, split_clauses=False)))
         with self.assertRaises(InterruptedError):
             Renderer(provider, split_clauses=False).render(text, load_preset('bambi_local_clean'), cancel=lambda: True)

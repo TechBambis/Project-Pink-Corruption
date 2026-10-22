@@ -80,11 +80,13 @@ export class SpeechRenderAhead {
   if(report.queuedSeconds>=this.highSeconds)this.held=true;
   return true;
  }
- allows(seconds=0,bytes=0){
+ allows(seconds=0,bytes=0,parallelInner=false){
   if(!Number.isFinite(seconds)||seconds<0||seconds>SpeechRenderAhead.maxSeconds||bytes>SpeechRenderAhead.maxBytes)throw Error('Voice unit exceeds the live audio limit');
   const pending=[...this.pending.values()];
   const unscheduled=[...this.pending.keys()].some(seq=>!this.report.seqs.includes(seq));
-  return !this.held&&this.report.running&&!unscheduled&&pending.reduce((n,p)=>n+p.bytes,bytes)<=SpeechRenderAhead.maxBytes&&pending.reduce((n,p)=>n+p.seconds,seconds)<=SpeechRenderAhead.maxSeconds;
+  // The inner track must reach the browser before its already queued Owner
+  // finishes. Keep pause, acknowledgement and hard memory/time bounds intact.
+  return (!this.held||parallelInner)&&this.report.running&&!unscheduled&&pending.reduce((n,p)=>n+p.bytes,bytes)<=SpeechRenderAhead.maxBytes&&pending.reduce((n,p)=>n+p.seconds,seconds)<=SpeechRenderAhead.maxSeconds;
  }
- get snapshot(){return {sample:this.report.sample,queuedSeconds:this.report.queuedSeconds,speechSeconds:this.report.speechSeconds,authoredSilenceSeconds:Math.max(0,this.report.queuedSeconds-this.report.speechSeconds),queuedBytes:this.report.queuedBytes,lowSeconds:this.lowSeconds,highSeconds:this.highSeconds,held:this.held,pending:this.pending.size};}
+ get snapshot(){return {sample:this.report.sample,running:this.report.running,queuedSeconds:this.report.queuedSeconds,speechSeconds:this.report.speechSeconds,authoredSilenceSeconds:Math.max(0,this.report.queuedSeconds-this.report.speechSeconds),queuedBytes:this.report.queuedBytes,lowSeconds:this.lowSeconds,highSeconds:this.highSeconds,held:this.held,pending:this.pending.size};}
 }

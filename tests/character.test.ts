@@ -19,6 +19,24 @@ import {EventSpeechRequestSchema,renderEventSpeech} from '../packages/session-di
 import {resolveReplyIntent} from '../packages/ai/intent';
 import {replyTaskContract,replyTaskDirection} from '../packages/ai/response';
 
+test('every template keeps an external female narrator separate from the imagined inner voice',()=>{
+ for(const promptId of ['bambisleep-classic','gentle-induction','english-conversation','custom'] as const){
+  const request=ChatRequestSchema.parse({type:'chat',text:'Who are you?',promptId,persona:'A feminine storyteller.',dualVoice:true});
+  const authored=buildCharacterDocument(request).core;
+  const prompts=[buildCharacterPrefix(authored),buildFixedReplyPrompt(authored),buildEventNarrationPrefix(request)];
+  for(const interaction of ['reactive','situational'] as const)for(const narration of [false,true])prompts.push(buildReplyPrompt(authored,request.text,false,'',undefined,'',!narration,narration,interaction,'',true));
+  for(const prompt of prompts){
+   assert.ok(prompt.startsWith(authored),'Keep the complete authored character');
+   assert.match(prompt,/main narrator is an external adult female hypnotist/);
+   assert.match(prompt,/Maintain her identity as a woman/);
+   assert.match(prompt,/internal feminine self-narrator/);
+   assert.match(prompt,/not literally the listener, their subconscious/);
+   assert.match(prompt,/Inner speech is authored narration, not a real user answer/);
+   assert.equal(prompt.split('=== NARRATOR IDENTITY & INNER VOICE ===').length-1,1);
+  }
+ }
+});
+
 test('unchanged reply rules are cached once while current task and evidence follow heard history',()=>{
  const input=ChatRequestSchema.parse({type:'chat',text:'Explain the difference.',collar:true,collarName:'Chosen collar wording',selectedTriggers:['BAMBI SLEEP']});
  const base=buildCharacterDocument(input).core,prefix=buildFixedReplyPrompt(base);
@@ -36,6 +54,7 @@ test('unchanged reply rules are cached once while current task and evidence foll
   assert.ok(messages[0].content.includes(replyTaskContract));
   assert.ok(messages.at(-2)!.content.includes('Current quoted evidence.'));
   assert.ok(messages.at(-2)!.content.includes(replyTaskDirection(request,narration,false)));
+  assert.match(messages.at(-2)!.content,/CURRENT SPEAKER: Owner.*older replies got them wrong/);
   assert.equal(messages.at(-1)!.content,request);
  }
 });
@@ -78,9 +97,9 @@ test('Classic keeps its complete authored character while real recall and limits
   const base=mode==='situational'?buildSituationalBase(request,authored):authored;
   const prompt=buildReplyPrompt(base,request.text,false,'Devices off',undefined,'',true,false,mode);
   assert.ok(prompt.includes(authored));assert.ok(prompt.indexOf(interactionDirection)>prompt.indexOf(authored));
-  assert.match(prompt,/Fictional scene memories may belong to that story/);
-  assert.match(prompt,/never present them as actual past listener statements, visits, promises, consent or confirmed preferences/);
-  assert.match(prompt,/Use actual recorded conversation evidence for factual recall/);
+  assert.match(prompt,/Treat character claims about identity, memory and control as fiction/);
+  assert.match(prompt,/Never present them as actual past listener statements, visits, promises, consent or confirmed preferences/);
+  assert.match(prompt,/use supplied matching facts for recall/);
   assert.match(prompt,/latest real listener request or correction.*take precedence/);
  }
 });
@@ -136,8 +155,40 @@ test('event character and delivery preference cannot bypass text and cue validat
  let attempts=0,renders=0;
  await assert.rejects(renderEventSpeech(input,{
   knownTriggers:['Unplanned Cue'],
-  generate:async instruction=>{attempts++;assert.match(instruction,/Narration delivery preference/);assert.match(instruction,/FINAL OUTPUT CONTRACT/);assert.doesNotMatch(instruction,/Persona: "Fixture narrator"/);return 'Unplanned Cue.';},
+  generate:async instruction=>{attempts++;assert.ok(eventNarrationMessages(input,instruction)[0].content.includes(input.narrationStyle!));assert.match(instruction,/FINAL OUTPUT CONTRACT/);assert.doesNotMatch(instruction,/Persona: "Fixture narrator"/);return 'Unplanned Cue.';},
   render:async()=>{renders++;throw Error('Invalid speech must not reach the renderer');},
  },new AbortController().signal),/Unscheduled trigger/);
  assert.equal(attempts,2);assert.equal(renders,0);
+});
+
+test('focused character stays separate from full Classic and shares one style across every route',()=>{
+ const input=ChatRequestSchema.parse({type:'chat',text:'Hi',promptId:'bambi-companion',narrationStyle:'Quiet, precise and playful.',persona:'INACTIVE CUSTOM TEXT'});
+ const document=buildCharacterDocument(input),classic=buildCharacterDocument({...input,promptId:'bambisleep-classic'});
+ assert.ok(document.core.length<classic.core.length/5);assert.ok(classic.core.length>35000);
+ assert.ok(!buildSituationalBase(input,document.core).includes(input.persona));
+ const chat=buildReplyPrompt(document.core,'Hi',false,'',undefined,'',true,false,'situational','',false,'general',input);
+ const events=eventNarrationMessages(input,'One short thought.')[0].content;
+ for(const text of [chat,events]){assert.ok(text.includes(input.narrationStyle!));assert.ok(text.includes(document.core));}
+ assert.ok(!chat.includes('300-400 spoken words'));
+});
+
+test('shared character and event prefixes contain no chat breath or pause protocol',()=>{
+ const input=ChatRequestSchema.parse({type:'chat',text:'Guide one breath.',promptId:'bambi-companion'});
+ const core=buildCharacterDocument(input).core;
+ for(const prompt of [buildCharacterPrefix(core),buildFixedReplyPrompt(core),buildEventNarrationPrefix(input)])assert.doesNotMatch(prompt,/BREATHING PROTOCOL|\[breath:in\]|\[pause:long\]/);
+ const chat=buildReplyPrompt(core,input.text,false,'',undefined,'',true,false);
+ assert.match(chat,/\[breath:in\] In\./);
+ assert.equal(chat.split('=== NARRATOR IDENTITY & INNER VOICE ===').length-1,1);
+ assert.equal(chat.split('=== SPOKEN BLOCK FORMAT ===').length-1,1,'The transport framing contract appears only once');
+ assert.ok(chat.length-core.length<6000,'Shared reply contracts add bounded overhead to the complete selected character');
+ assert.doesNotMatch(buildReplyPrompt(core,'Explain the setting.',false,'',undefined,'',true,false),/BREATHING PROTOCOL|\[breath:in\]/,'Unrelated conversation receives no breathing examples');
+});
+
+test('custom reactive conversation retains its explicitly requested validated scene action',()=>{
+ const input=ChatRequestSchema.parse({type:'chat',text:'Change the scene to Soft Pink.',promptId:'custom'});
+ const core=buildCharacterDocument(input).core;
+ const chat=buildReplyPrompt(core,input.text,false,'',undefined,'',true,false);
+ assert.match(chat,/may append its validated <action> scene metadata only for an explicitly requested visible scene change/);
+ assert.doesNotMatch(chat,/No presentation actions/);
+ assert.match(buildReplyPrompt(core,input.text,false,'',undefined,'',true,false,'situational'),/No presentation actions/);
 });

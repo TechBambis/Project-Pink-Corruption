@@ -16,6 +16,7 @@
 .event-text{position:absolute;left:12%;right:12%;top:61%;text-align:center;font-size:clamp(18px,3vw,36px);line-height:1.3;color:#ffd8f0;text-shadow:0 2px 8px #000;z-index:7;pointer-events:none}
 .event-black[hidden],.event-wash[hidden],.event-motif[hidden],.event-text[hidden],.event-blink-cue[hidden]{display:none}
 .event-scanner[hidden]{display:none}
+.stage.breathing .event-motif,.stage.breathing .event-wash,.stage.breathing .event-text{visibility:hidden}
 .event-figure{position:absolute;left:50%;top:50%;width:min(76cqh,76cqw);aspect-ratio:1;transform:translate(-50%,-50%);transform-style:preserve-3d}
 .event-figure svg{display:block;width:100%;height:100%}
 .event-figure[hidden],.event-motif[data-form="heart"]>.event-orb,.event-motif[data-form="gears"]>.event-orb{display:none}

@@ -26,6 +26,18 @@ from accelerator_bridge import runtime_policy
 
 
 class NativeRuntimeTests(unittest.TestCase):
+    def test_9b_mtp_profiles_are_explicit_and_keep_baseline_decoding_separate(self):
+        root = Path(__file__).resolve().parents[1]
+        pins = json.loads((root / 'docs/comparison-models.json').read_text())
+        for alias in ['bambi-qwen35-9b-dark-roast-mtp-on:iq4_xs', 'bambi-qwen35-9b-defiant-fable-mtp-on:iq3_m']:
+            pin = next(pin for pin in pins if pin['alias'] == alias)
+            self.assertEqual(ownership.speculative_options(pin), ['--spec-type', 'draft-mtp', '--spec-draft-n-max', '3'])
+            self.assertEqual(ownership.model_contexts(pin), [16384, 24576])
+            baseline = {**pin, 'runtime': {'cache_type': 'f16'}}
+            self.assertEqual(ownership.speculative_options(baseline), [])
+            with self.assertRaisesRegex(RuntimeError, 'Unsupported pinned speculative'):
+                ownership.speculative_options({**pin, 'alias': 'unreviewed-model'})
+
     def test_anubis_context_cache_policy_and_registry(self):
         root = Path(__file__).resolve().parents[1]
         pin = json.loads((root / 'docs/anubis-model.json').read_text())
@@ -125,12 +137,12 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
             self.pins[0]['runtime']['speculative'] = {'type': 'draft-mtp', 'draft_tokens': 3}
         (self.root / 'docs/community-models.json').write_text(json.dumps(self.pins))
 
-    def test_registry_enables_calibration_for_all_six_supported_models_only(self):
+    def test_registry_enables_calibration_for_supported_catalog_models_only(self):
         root = Path(__file__).resolve().parents[1]
         catalog = json.loads((root / 'config/local-model-catalog.json').read_text())
         expected = {pin['alias'] for pin in catalog if pin.get('desktopSupported') and pin.get('license') in ['apache-2.0', 'lfm1.0']}
         actual = {pin['alias'] for pin in ownership.registry(root) if pin.get('calibration_supported')}
-        self.assertEqual(len(expected), 6)
+        self.assertEqual(len(expected), 9)
         self.assertEqual(actual, expected)
 
     def test_alternate_port_requires_explicit_matching_expectation_and_exact_owner(self):
@@ -583,7 +595,9 @@ http.server.HTTPServer(('127.0.0.1',a.test_port),Handler).serve_forever()
         root = Path(__file__).resolve().parents[1]
         probe = self.root / 'hung_probe.py'
         record = self.root / 'probe_pid'
-        probe.write_text("import os,signal,time\nfrom pathlib import Path\nPath(os.environ['FIXTURE_PID']).write_text(str(os.getpid()))\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\ntime.sleep(60)\n")
+        # Publish readiness atomically after the intended signal behavior is
+        # installed. Merely creating the file can expose an empty PID to readers.
+        probe.write_text("import os,signal,time\nfrom pathlib import Path\nsignal.signal(signal.SIGTERM,signal.SIG_IGN)\nrecord=Path(os.environ['FIXTURE_PID'])\nstaged=record.with_suffix('.tmp')\nstaged.write_text(str(os.getpid()))\nos.replace(staged,record)\ntime.sleep(60)\n")
         source = """import signal,sys
 from pathlib import Path
 from accelerator_bridge import runtime_policy

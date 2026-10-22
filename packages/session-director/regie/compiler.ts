@@ -5,21 +5,45 @@
 import { ProgramSchema, EventSchema, eventDurationMs, type BambiProgram, type BambiEvent, type PresentationState, type SpeechSpec } from '../events/contract';
 import { compileEvent } from '../events/runtime';
 import { wavDurationMs, validateEventText, type RenderedEventSpeech } from '../events/speech';
-import { validateScenePlan, type ScenePlan, type PlanningContext, type SceneLook, type SceneAction } from './plan';
+import { validateScenePlan, sceneCuePhrases, type ScenePlan, type PlanningContext, type SceneLook, type SceneAction } from './plan';
 import type {ChallengeWindow} from './interaction';
 
 export interface SynthesisArc { id:string; text:string; delivery:SceneAction['delivery']; inner:boolean; cue?:string }
 export interface MeasuredSceneArc { id:string; bytes:Uint8Array; words:{word:string;atMs:number;endMs?:number}[] }
+const normalizeAnchor=(text:string)=>text.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
+function measuredPhraseOffsets(phrase:string,words:MeasuredSceneArc['words']){
+  const target=normalizeAnchor(phrase),matches:number[]=[];if(!target)return matches;
+  for(let i=0;i<words.length;i++){
+    let span='';for(let j=i;j<words.length&&span.length<target.length;j++){
+      span+=normalizeAnchor(words[j].word);if(span===target){matches.push(words[i].atMs);break;}
+    }
+  }
+  return matches;
+}
+/** A repair can choose only a unique measured subphrase of the original anchor.
+ * No text, PCM or timing is invented, and no other scene field is editable. */
+export class RevealAlignmentError extends Error {
+  readonly candidates:string[];
+  constructor(readonly actionId:string,readonly anchor:string,words:MeasuredSceneArc['words']){
+    super('Reveal requires one unambiguous measured phrase');this.name='RevealAlignmentError';
+    const tokens=anchor.trim().split(/\s+/),candidates:string[]=[];
+    for(let length=Math.min(4,tokens.length);length>=1;length--)for(let start=0;start+length<=tokens.length;start++){
+      const phrase=tokens.slice(start,start+length).join(' ');
+      if(measuredPhraseOffsets(phrase,words).length===1)candidates.push(phrase);
+    }
+    this.candidates=[...new Set(candidates)].slice(0,24);
+  }
+}
 export interface CompiledScene {
   plan:ScenePlan; events:BambiEvent[]; motifs:BambiProgram['motifs'];
   responseWindows:NonNullable<BambiProgram['responseWindows']>; responsePrompts:NonNullable<BambiProgram['responsePrompts']>;
   payloads:RenderedEventSpeech[]; atMs:number; endMs:number;
-  sections:{id:string;purpose:string;fromMs:number;toMs:number}[];
+  sections:{id:string;purpose:string;fromMs:number;toMs:number;speechIds:string[]}[];
   challenges:ChallengeWindow[];
 }
 export function synthesisArcs(raw:ScenePlan):SynthesisArc[] {
   return raw.sections.flatMap(s=>s.actions.flatMap(a=>{
-    const make=(suffix:string,text:string,inner=false,cue?:SynthesisArc['cue']):SynthesisArc=>({id:a.id+suffix,text,delivery:a.delivery,inner,...(cue?{cue}:{})});
+    const make=(suffix:string,text:string,inner=false,cue?:SynthesisArc['cue']):SynthesisArc=>({id:a.id+suffix,text,delivery:suffix==='-return'?'return':inner?'hold':a.delivery,inner,...(cue?{cue}:{})});
     switch(a.kind){
       case 'hold':return [];
       case 'reply':case 'repeat':return [make('-invite',a.invitation),make('-answer',a.text,true)];
@@ -50,23 +74,37 @@ export function compileScene(raw:ScenePlan,context:PlanningContext,measured:Meas
   const events:BambiEvent[]=[],payloads:RenderedEventSpeech[]=[],motifs:BambiProgram['motifs']=[],responseWindows:CompiledScene['responseWindows']=[],responsePrompts:CompiledScene['responsePrompts']=[],sections:CompiledScene['sections']=[];
   const instant={kind:'hard_cut' as const,durationMs:0,subtitle:'clear' as const};
   const challenges:ChallengeWindow[]=[];
+  const reservedMotifs=[...context.knownMotifs,...context.committedMotifs??[]];
   let cursor=options.atMs, serial=0;
+  const motionByMotif=new Map<string,NonNullable<PresentationState['motifMotion']>>();
+  if(context.currentLook?.motifId&&context.currentMotifMotion)motionByMotif.set(context.currentLook.motifId,context.currentMotifMotion);
+  const motion=(look:SceneLook)=>{
+    if(!look.motifId||!look.motif||look.motion===0&&look.motif!=='heart')return {};
+    if(look.motion===0&&motionByMotif.has(look.motifId))return {motifMotion:motionByMotif.get(look.motifId)!};
+    const kind=look.motif==='heart'?'heart_turn' as const:'coin_scan' as const,periodMs=6000/Math.max(.2,look.motion),previous=motionByMotif.get(look.motifId);
+    // Preserve phase even when the next composition changes the rotation rate.
+    const startMs=previous?.kind===kind?(previous.periodMs===periodMs?previous.startMs:cursor-((cursor-previous.startMs)/previous.periodMs%1)*periodMs):cursor;
+    // At the very beginning a slower period may need a negative origin, which
+    // the presentation contract forbids. Retain the existing motion in that case.
+    const next=startMs<0&&previous?previous:{kind,startMs,periodMs,strength:1};motionByMotif.set(look.motifId,next);
+    return {motifMotion:next};
+  };
   const state=(look:SceneLook,voice:boolean,inner=false,black=false):PresentationState=>({
     activeLayers:[...(voice?[inner?'left_voice' as const:'main_voice' as const]:[]),...(look.ambient>0?['drone' as const]:[]),...(look.effects>0?['transition_sfx' as const]:[]),...(!black&&context.pool.visuals?['base_visual' as const,...(look.motif?['motif_visual' as const]:[]),...(look.style?['spiral' as const]:[])]:[])],
     foreground:voice?(inner?'left_voice':'main_voice'):null,
     density:{intensity:context.intensity,effectDensity:look.effects,speechDensity:voice?1:0,audioDensity:look.ambient,visualDensity:black?0:look.visualDensity},
     visualState:black?'black':look.motif?'motif':look.visualDensity<.15?'sparse':'normal',narrationState:voice?'speaking':'paused',ambientState:look.ambient>0?'reduced':'silent',scene:look.scene,
     ...(look.style?{spiralStyle:look.style}:{}),...(look.motif?{motifId:look.motifId!,motifForm:look.motif}:{}),
-    ...(look.motif&&(look.motif==='heart'||look.motion>0)?{motifMotion:{kind:look.motif==='heart'?'heart_turn' as const:'coin_scan' as const,startMs:options.atMs,periodMs:6000/Math.max(.2,look.motion),strength:1}}:{}),
+    ...motion(look),
   });
   const silent:SpeechSpec={mode:'silent',targetMs:0,instruction:''};
-  const make=(a:SceneAction,look:SceneLook,ms:number,arcId?:string,extra:Partial<BambiEvent>={},inner=false,black=false)=>{
+  const make=(_action:SceneAction,look:SceneLook,ms:number,arcId?:string,extra:Partial<BambiEvent>={},inner=false,black=false)=>{
     const m=arcId?audio.get(arcId)!:undefined;
-    const speech:SpeechSpec=m?{mode:'narrate',targetMs:m.duration+150,instruction:'Prepared complete thought from the validated scene plan.',delivery:a.delivery,...(inner?{voiceTrack:{speaker:'bambi' as const,gainDb:-8,pan:-.2,reverbMs:70,reverbDb:-24}}:{})}:silent;
-    const e=EventSchema.parse({id:(options.instanceId??plan.id)+'-'+(++serial),type:m?'layer_shift':'silence',phase:context.phase,atMs:cursor,timing:{prepMs:0,activeMs:ms,returnMs:0},state:state(look,!!m,inner,black),baseline:options.baseline,speech,audio:[{offsetMs:0,bus:'drone',gain:look.ambient,durationMs:0},{offsetMs:0,bus:'EFFECTS',gain:look.effects,durationMs:0}],visual:[{offsetMs:0,motion:look.motion,durationMs:0}],haptics:[],entry:instant,exit:instant,...extra});
+    const speech:SpeechSpec=m?{mode:'narrate',targetMs:m.duration+150,instruction:'Prepared complete thought from the validated scene plan.',delivery:m.arc.delivery,...(inner?{voiceTrack:{speaker:'bambi' as const,gainDb:-8,pan:-.2,reverbMs:70,reverbDb:-24}}:{})}:silent;
+    const e=EventSchema.parse({id:(options.instanceId??plan.id)+'-'+(++serial),type:m?'layer_shift':'silence',phase:context.phase,atMs:cursor,timing:{prepMs:0,activeMs:ms,returnMs:0},state:state(look,!!m,inner,black),baseline:options.baseline,speech,audio:[{offsetMs:0,bus:'drone',gain:look.ambient*(m?(inner?.45:.65):1),durationMs:m?Math.min(250,m.duration/3):0},...(m&&ms>m.duration?[{offsetMs:m.duration,bus:'drone',gain:look.ambient,durationMs:Math.min(400,ms-m.duration)}]:[]),{offsetMs:0,bus:'EFFECTS',gain:look.effects,durationMs:0}],visual:[{offsetMs:0,motion:look.motion,durationMs:0}],haptics:[],entry:instant,exit:instant,...extra});
     const slots=compileEvent(e).speech;
     if(m){
-      const reserved=options.reservedTriggers??context.pool.triggers;
+      const reserved=sceneCuePhrases(options.reservedTriggers??context.pool.triggers);
       if(!m.arc.cue)validateEventText(m.arc.text,e,undefined,[...reserved,'Blink']);
       for(const slot of slots){if(payloads.some(p=>p.payloadId===slot.payloadId))continue;
         payloads.push({payloadId:slot.payloadId,text:m.arc.text,audio:Buffer.from(m.bytes).toString('base64'),durationMs:m.duration,targetMs:slot.speech.targetMs,textAttempts:0,words:m.words});
@@ -80,12 +118,24 @@ export function compileScene(raw:ScenePlan,context:PlanningContext,measured:Meas
     for(let i=0;i<m.words.length;i++)if(tokens.every((t,j)=>m.words[i+j]?.word.replace(/[^a-z]/gi,'').toLowerCase()===t))matches.push(m.words[i].atMs);
     if(matches.length!==1)throw Error('Cue requires an unambiguous measured phrase');return matches[0];
   };
+  const revealOffset=(id:string,phrase:string)=>{
+    // Alignment may split a written hyphenated word into multiple measured
+    // words. Match complete word spans, preserving their measured first onset.
+    const words=audio.get(id)!.words,matches=measuredPhraseOffsets(phrase,words);
+    if(matches.length!==1)throw new RevealAlignmentError(id.slice(0,-5),phrase,words);
+    return matches[0];
+  };
   for(const s of plan.sections) {
     const fromMs=cursor;
     for(const a of s.actions) {
-      if(a.look.motifId&&!context.knownMotifs.some(m=>m.id===a.look.motifId)&&!motifs.some(m=>m.id===a.look.motifId))motifs.push({id:a.look.motifId,visualPreset:a.look.scene,textAnchor:s.purpose.slice(0,200),firstIntroducedAtMs:cursor});
+      if(a.look.motifId&&!reservedMotifs.some(m=>m.id===a.look.motifId)&&!motifs.some(m=>m.id===a.look.motifId))motifs.push({id:a.look.motifId,visualPreset:a.look.scene,textAnchor:s.purpose.slice(0,200),firstIntroducedAtMs:cursor+(a.kind==='reveal'&&!a.before.motifId?revealOffset(a.id+'-main',a.anchor):0)});
       switch(a.kind){
         case 'hold':make(a,a.look,a.durationMs+a.pauseAfterMs);break;
+        case 'reveal':{
+          const id=a.id+'-main',m=audio.get(id)!,offsetMs=revealOffset(id,a.anchor),endMs=m.duration+150;
+          make(a,a.before,endMs+a.holdMs+a.pauseAfterMs,id,{type:'soft_return',softReturn:{final:false,steps:[...(offsetMs>0?[{offsetMs:0,state:state(a.before,true)}]:[]),{offsetMs,state:state(a.look,true)},{offsetMs:endMs,state:state(a.look,false)}]},audio:[{offsetMs:0,bus:'drone',gain:a.before.ambient*.65,durationMs:0},{offsetMs,bus:'drone',gain:a.look.ambient*.65,durationMs:Math.min(250,m.duration-offsetMs)},{offsetMs:endMs,bus:'drone',gain:a.look.ambient,durationMs:Math.min(400,a.holdMs)},{offsetMs:0,bus:'EFFECTS',gain:a.before.effects,durationMs:0},{offsetMs,bus:'EFFECTS',gain:a.look.effects,durationMs:0}],visual:[{offsetMs:0,motion:a.before.motion,durationMs:0},{offsetMs,motion:a.look.motion,durationMs:0}]});
+          break;
+        }
         case 'challenge':{
           const invitation=spoken(a,'-invite'),fromMs=cursor;
           const listening=make(a,a.look,a.responseMs);
@@ -159,10 +209,10 @@ export function compileScene(raw:ScenePlan,context:PlanningContext,measured:Meas
         default:spoken(a,'-main');
       }
     }
-    sections.push({id:s.id,purpose:s.purpose,fromMs,toMs:cursor});
+    sections.push({id:s.id,purpose:s.purpose,fromMs,toMs:cursor,speechIds:events.filter(e=>e.atMs>=fromMs&&e.atMs<cursor).flatMap(e=>compileEvent(e).speech.map(slot=>slot.id))});
   }
   if(cursor-options.atMs>context.windowMs)throw Error('Measured scene audio overflow; regenerate or use the owned fallback, never clip');
-  const known=context.knownMotifs.map(m=>({id:m.id,visualPreset:options.baseline.scene,textAnchor:m.meaning,firstIntroducedAtMs:0}));
+  const known=[...new Map(reservedMotifs.map(m=>[m.id,m])).values()].map(m=>({id:m.id,visualPreset:options.baseline.scene,textAnchor:m.meaning,firstIntroducedAtMs:0}));
   ProgramSchema.parse({version:1,durationMs:options.durationMs,baseline:options.baseline,continuous:options.continuous,motifs:[...known,...motifs],events,responseWindows,responsePrompts});
   return {plan,events,motifs,responseWindows,responsePrompts,payloads,atMs:options.atMs,endMs:cursor,sections,challenges};
 }

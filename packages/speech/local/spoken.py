@@ -29,7 +29,12 @@ def strip_speech_formatting(text):
     return re.sub(r'(?<![^\W_])_+|_+(?![^\W_])', '', text)
 
 def spoken_input(text):
-    return strip_speech_formatting(strip_vocal_fillers(strip_speech_controls(text))).strip()
+    text = strip_speech_formatting(strip_vocal_fillers(strip_speech_controls(text)))
+    # A trailing double quote otherwise survives punctuation splitting as a
+    # quote-only phrase. Keep every quoted word and apostrophes in contractions.
+    text = re.sub(r'["“”]', ' ', text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    return re.sub(r' +([,.;:!?])', r'\1', text).strip()
 
 def pronunciation_input(text):
     """TTS-only initialism expansion. Display text and trigger identities stay intact."""

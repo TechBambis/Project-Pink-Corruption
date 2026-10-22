@@ -86,7 +86,7 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
    if(child.exitCode!==null||Date.now()>deadline)throw Error('Isolated app startup failed: '+output);
    await new Promise(done=>setTimeout(done,25));
   }
-  for(const path of ['/api/preferences','/api/diagnostics/replies']){
+  for(const path of ['/api/preferences','/api/diagnostics/replies','/api/diagnostics/scenes']){
    assert.equal((await probe(path,{Host:`attacker.example:${port}`})).status,403);
    assert.equal((await probe(path,{Origin:'https://attacker.example'})).status,403);
    assert.equal((await probe(path,{Origin:'chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'})).status,403);

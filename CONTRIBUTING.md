@@ -63,4 +63,4 @@ Maintainer verification uses the current CLA hash and exact PR head. Preserve as
 CLA-VERIFIED v1 sha256=<CLA SHA-256> head=<full PR head SHA>
 ```
 
-A changed head or CLA needs re-verification. Require application checks, secret scanning and `cla/verified` before merging. On private GitHub Free, the maintainer checks these manually because branch-protection enforcement is unavailable.
+A changed head or CLA needs re-verification. Require application checks, secret scanning and `cla/verified` before merging. The public repository enforces these checks through its active main-branch ruleset.

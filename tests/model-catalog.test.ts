@@ -11,15 +11,15 @@ import {modelInventory} from '../packages/ai/model-inventory';
 import {recommendModels} from '../packages/ai/recommendation';
 import {baseHardwareProfile} from '../packages/hardware';
 import {DesktopSetup,alphaModels} from '../packages/runtime/desktop-setup';
-import {communityQwen,communityQwen2B,liquidSmall,communityQwen4B,communityQwen4BMtp,communityQwen4BMtpBaseline,communityQwen36,defiantFable,anubisMiniV1,nativeCheckpointModel,modelContext,nativeModelSampling,modelRuntimeInfo} from '../packages/ai/models';
+import {communityQwen,communityQwen2B,liquidSmall,communityQwen4B,communityQwen4BMtp,communityQwen4BMtpBaseline,communityQwen36,defiantFable,darkRoast,darkRoastMtp,roleplayQwenIQ4,defiantFableMtpBaseline,defiantFableMtp,anubisMiniV1,nativeCheckpointModel,modelContext,nativeModelSampling,modelRuntimeInfo} from '../packages/ai/models';
 import {modelConnection,buildChatRequest} from '../packages/ai/request';
 const GiB=2**30;
 
 test('catalog includes pinned comparison models and preserves the qualified default asset',()=>{
  const models=modelInventory({models:[]},{desktop:true,verified:false});
- assert.equal(models.length,11);assert(models.some(model=>model.id===anubisMiniV1));
+ assert.equal(models.length,16);assert(models.some(model=>model.id===anubisMiniV1));
  assert.deepEqual(modelAsset(communityQwen),alphaModels.assets[0]);
- for(const model of localModelCatalog)if(model.desktopSupported){assert.equal(model.context,24576);assert(canDownloadModel(model));assert(['apache-2.0','lfm1.0'].includes(downloadableModel(model.alias).license!));}
+ for(const model of localModelCatalog)if(model.desktopSupported){assert([16384,24576].includes(model.context));assert(canDownloadModel(model));assert(['apache-2.0','lfm1.0'].includes(downloadableModel(model.alias).license!));}
  assert.throws(()=>modelAsset('https://example.invalid/arbitrary-model'));
  assert.throws(()=>modelAsset(anubisMiniV1));
 });
@@ -102,10 +102,10 @@ test('the retained LiquidAI license is the exact pinned upstream notice',async()
  assert.equal(bytes.length,asset.bytes);assert.equal(createHash('sha256').update(bytes).digest('hex'),asset.sha256);
 });
 
-test('all comparable catalog models have the same complete native context, while discovered files remain unverified',async()=>{
+test('catalog comparison models retain their configured context, while discovered files remain unverified',async()=>{
  const root=await mkdtemp(join(tmpdir(),'bambi-comparison-files-'));
  try{
-  const eligible=localModelCatalog.filter(canDownloadModel);assert.equal(eligible.length,6);
+  const eligible=localModelCatalog.filter(canDownloadModel);assert.equal(eligible.length,9);
   for(const pin of eligible)assert.equal(modelContext(pin.alias,'bambisleep-classic'),pin.context);
   const pin=downloadableModel(communityQwen36);await mkdir(join(root,'community'));const path=join(root,'community',pin.file),file=await open(path,'w');try{await file.truncate(pin.bytes);}finally{await file.close();}
   const entry=modelInventory({models:[]},{desktop:true,directory:root,verified:false}).find(item=>item.id===pin.alias)!;
@@ -114,3 +114,23 @@ test('all comparable catalog models have the same complete native context, while
   assert.equal(modelInventory({models:[]},{desktop:true,directory:root}).find(item=>item.id===pin.alias)?.availableForComparison,false);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('9B app context retains full narration while 16K benchmarks and MTP variants share verified weights and sampling',async()=>{
+ const pins=JSON.parse(await readFile('docs/comparison-models.json','utf8'));
+ for(const alias of [darkRoast,roleplayQwenIQ4,defiantFableMtpBaseline,darkRoastMtp,defiantFableMtp]){
+  assert.equal(modelContext(alias,'bambisleep-classic'),24576);
+  assert.equal(buildChatRequest({type:'chat',text:'Synthetic test',model:alias}).context,24576);
+  assert(modelInventory({models:[]},{directory:'/nonexistent-fixture'}).find(model=>model.id===alias)?.promptCompatible);
+  assert.deepEqual(nativeModelSampling(alias,'qwen'),nativeModelSampling(communityQwen,'qwen'));
+ }
+ for(const [off,on] of [[darkRoast,darkRoastMtp],[defiantFableMtpBaseline,defiantFableMtp]]){
+  const baseline=catalogModelForTest(off),accelerated=catalogModelForTest(on);
+  for(const key of ['file','bytes','sha256','revision'] as const)assert.equal(baseline[key],accelerated[key]);
+  assert(canDownloadModel(baseline));assert.equal(accelerated.desktopSupported,false);
+  assert.equal(modelRuntimeInfo(off)?.mtp,false);assert.equal(modelRuntimeInfo(on)?.mtp,true);
+  assert.deepEqual(pins.find((pin:any)=>pin.alias===on).runtime.speculative,{type:'draft-mtp',draft_tokens:3});
+  assert.deepEqual(pins.find((pin:any)=>pin.alias===off).allowed_contexts,[16384,24576]);
+ }
+ assert(canDownloadModel(catalogModelForTest(roleplayQwenIQ4)));
+});
+function catalogModelForTest(alias:string){return localModelCatalog.find(model=>model.alias===alias)!;}

@@ -3,6 +3,7 @@
 // Separate commercial permissions: see LICENSING.md.
 
 import { eventDelivery } from '../../../packages/session-director/delivery';
+import {requestedBreathCycles} from '../../../packages/speech/breath';
 import { ProgramSchema, parentPhaseMs, type BambiProgram } from '../../../packages/session-director/events/contract';
 import {ResponsePresentation} from './trigger-presentation';
 import { withHapticMappings, withProgramTriggers } from '../../../packages/session-director/events/program';
@@ -27,10 +28,10 @@ import { RegieMemory } from '../../../packages/session-director/regie/planner';
 import { directionPool } from '../../../packages/session-director/regie/registry';
 import { validateScenePlan, type PlanningContext } from '../../../packages/session-director/regie/plan';
 import type { CompiledScene } from '../../../packages/session-director/regie/compiler';
-import { placePreparedScene } from '../../../packages/session-director/regie/placement';
+import { placePreparedScene,validateSceneSections } from '../../../packages/session-director/regie/placement';
 import {PlayfulInteraction,ChallengeWindowSchema} from '../../../packages/session-director/regie/interaction';
 
-type Settings = Omit<EventSpeechRequest, 'event' | 'payloadId' | 'motif'>;
+type Settings = Omit<EventSpeechRequest, 'event' | 'payloadId' | 'motif' | 'nsfw' | 'rawRoleplay'> & Partial<Pick<EventSpeechRequest, 'nsfw' | 'rawRoleplay'>>;
 interface CachedPayload { response: RenderedEventSpeech; buffer: AudioBuffer }
 interface Hooks {
   audio: () => AudioEngine;
@@ -122,11 +123,14 @@ export class SessionEvents {
     for (const node of [this.layer, this.motif, this.wash, this.text, this.blinkCue]) { node.hidden = true; node.setAttribute('aria-hidden', 'true'); stage.append(node); }
   }
   get active() { return this.started && this.runtime !== null; }
+  get usesScenePreferences(){return !!this.regieDirection?.regie?.enabled;}
   get snapshot() { return this.lastSnapshot; }
   get program() { return this.runtime?.program; }
   get outputEvidence() { return this.evidence.snapshot(); }
   get decisions() { return this.adaptive?.decisions ?? []; }
   get scenePlans(){return [...this.regiePlans];}
+  private sceneFailures:{requestId:string;atMs:number;stage:string;reason:string}[]=[];
+  get sceneDiagnostics(){return this.sceneFailures.map(failure=>({...failure}));}
   private get regieEnabled(){return !!this.regieDirection?.regie?.enabled&&this.hooks.allowSpeech();}
   get acceptsRegieInput(){return this.active&&this.regieEnabled&&this.regieDirection?.regie?.interactive!==false&&this.adaptive?.phaseAt(this.nowMs).phase!=='awakening';}
   get interactionContext(){return this.playfulInteraction.context;}
@@ -355,13 +359,15 @@ export class SessionEvents {
   private advancePlan(atMs: number, busy: boolean) {
     if (!this.started || !this.adaptive || !this.runtime || busy || this.hooks.paused() || this.adaptive.complete(atMs)) return;
     if(this.adaptive.phaseAt(atMs).phase==='awakening')this.playfulInteraction.clear();
-    if(this.regieEnabled&&this.adaptive.phaseAt(atMs).phase!=='awakening'){
+    if(this.regieEnabled&&(this.adaptive.phaseAt(atMs).phase!=='awakening'||this.regieDirection?.regie?.journey==='pink-cinema')){
       const heardMs=Math.max(0,atMs-(this.hooks.audio().context.currentTime-this.hooks.audio().outputTime)*1000);
-      this.regieMemory.observe(heardMs,this.heardNarration());
+      const heard=this.heardNarration();
+      const completed=this.evidence.snapshot().filter(p=>p.elapsedMs>=p.durationMs).map(p=>p.occurrenceId.slice(0,p.occurrenceId.lastIndexOf(':')));
+      this.regieMemory.observe(heardMs,heard,completed);
       this.playfulInteraction.expire(heardMs);
       if(this.playfulInteraction.unresolved)return;
       const end=this.runtime.compiled.at(-1),nextMs=Math.max(atMs+700,end?end.event.atMs+eventDurationMs(end.event):atMs+700);
-      if(!this.request&&atMs>=this.regieRetryAtMs&&nextMs<atMs+45000&&atMs>=this.overrideUntilMs)void this.prepareScene(nextMs);
+      if(!this.request&&this.regieMemory.canPrepare&&atMs>=this.regieRetryAtMs&&nextMs<atMs+45000&&atMs>=this.overrideUntilMs)void this.prepareScene(nextMs);
       return;
     }
     const playing = this.runtime.compiled.find(c => c.event.atMs <= atMs && atMs < c.event.atMs + eventDurationMs(c.event));
@@ -393,21 +399,34 @@ export class SessionEvents {
     const options=this.directorOptions(atMs),settings=this.hooks.settings();
     const sounds=this.hooks.regieSounds?.()??{wiper:this.hooks.allowTriggerSound(),snap:this.hooks.allowTriggerSound(),rhythm:this.hooks.allowTriggerSound()};
     const context:PlanningContext={phase,windowMs,intensity:this.adaptive.intensity,participation:this.regieDirection.regie?.interactive===false?'uninterrupted':'interactive',journey:this.regieDirection.regie?.journey??'custom',userContext:this.regieDirection.regie?.intent??'',...this.regieMemory.context(),interaction:this.playfulInteraction.context,
-      knownMotifs:runtime.program.motifs.filter(m=>m.firstIntroducedAtMs<atMs).map(m=>({id:m.id,meaning:m.textAnchor||'An established visual motif.'})),
       pool:directionPool(this.regieDirection,{mainVoice:options.speech,innerVoice:!!this.regieDirection.regie?.innerResponses,visuals:options.visuals,reducedMotion:options.reducedMotion,sounds,playfulRequests:this.regieDirection.regie?.playfulRequests!==false,breathing:!!this.hooks.regieBreathing?.(),
         triggers:this.hooks.allowTriggers()?[...new Set([...options.triggers,...(this.regieDirection.mechanisms.includes('blink')?['Blink']:[])])]:[]})};
+    // Entry lies on the exclusive end of the preceding event. Sampling exactly
+    // there would return the baseline and lose the motif's established phase.
+    const preceding=runtime.compiled.filter(c=>c.event.atMs+eventDurationMs(c.event)<=atMs+.001).at(-1);
+    const visible=runtime.snapshot(preceding?Math.max(preceding.event.atMs,preceding.event.atMs+eventDurationMs(preceding.event)-.001):atMs).state;
+    context.committedMotifs=runtime.program.motifs.filter(m=>m.firstIntroducedAtMs<atMs&&!context.knownMotifs.some(known=>known.id===m.id)).slice(-32).map(m=>({id:m.id,meaning:m.textAnchor||'A prepared visual motif.',form:runtime.compiled.flatMap(c=>c.frames).find(f=>f.state.motifId===m.id)?.state.motifForm??null}));
+    if(context.pool.visuals&&visible.motifId&&visible.motifForm&&context.pool.motifs.includes(visible.motifForm)&&context.pool.scenes.includes(visible.scene))context.currentLook={
+      scene:visible.scene,motif:visible.motifForm,motifId:visible.motifId,style:visible.spiralStyle&&context.pool.styles.includes(visible.spiralStyle)?visible.spiralStyle:null,
+      visualDensity:Math.min(visible.density.visualDensity,.3+context.intensity),motion:context.pool.reducedMotion?0:visible.motifMotion?Math.min(1,6000/visible.motifMotion.periodMs):0,ambient:visible.density.audioDensity,effects:Math.min(visible.density.effectDensity,.3+context.intensity),
+    };
+    if(context.currentLook&&visible.motifMotion)context.currentMotifMotion=visible.motifMotion;
     const requestId=crypto.randomUUID();
     const {allowedTriggers,precedingNarration,presentationPreferences,...requestSettings}=settings;
+    let stage='request';
     try{
       const response=await fetch('/api/director/scene',{method:'POST',headers:{'Content-Type':'application/json'},signal,body:JSON.stringify({...requestSettings,selectedTriggers:[...new Set([...settings.selectedTriggers,...context.pool.triggers.filter(t=>t!=='Blink')])],requestId,localContext:localContextRequest(),planningContext:context,atMs,durationMs:runtime.program.durationMs,continuous:!!runtime.program.continuous,baseline:runtime.program.baseline})});
       let scene:CompiledScene&{requestId:string;error?:string}=await response.json();
       if(!response.ok)throw Error(scene.error??'Scene preparation failed');
+      stage='validate';
       signal.throwIfAborted();if(epoch!==this.epoch||runtime!==this.runtime||generation!==this.regieMemory.generation)return;
       if(scene.requestId!==requestId||scene.atMs!==atMs)throw Error('Stale scene response');
       validateScenePlan(scene.plan,context);
       const checked=ProgramSchema.parse({version:1,durationMs:runtime.program.durationMs,continuous:runtime.program.continuous,baseline:runtime.program.baseline,motifs:[...runtime.program.motifs,...scene.motifs],events:scene.events,responseWindows:scene.responseWindows,responsePrompts:scene.responsePrompts});
+      validateSceneSections({...scene,events:checked.events});
       if(scene.endMs>bound||scene.endMs<=scene.atMs||scene.endMs-scene.atMs>windowMs||scene.events.some(e=>e.haptics.length)||scene.payloads.length>64||scene.payloads.reduce((n,p)=>n+p.audio.length,0)>32000000)throw Error('Scene exceeds its preparation contract');
       // Commit only complete, decoded audio; no speculative scene reaches playback.
+      stage='decode-audio';
       const decoded=new Map<string,CachedPayload>(),slots=checked.events.flatMap(e=>compileEvent(e).speech);
       for(const data of scene.payloads){
         const slot=slots.find(s=>s.payloadId===data.payloadId);if(!slot||decoded.has(data.payloadId))throw Error('Invalid scene payload');
@@ -418,6 +437,7 @@ export class SessionEvents {
       }
       if(slots.some(s=>!decoded.has(s.payloadId)))throw Error('Scene has unprepared speech');
       if(epoch!==this.epoch||runtime!==this.runtime||generation!==this.regieMemory.generation)return;
+      stage='place-scene';
       if(!initial&&scene.atMs<this.nowMs+150)scene=placePreparedScene(scene,this.nowMs+700,bound-500);
       const challenges=(scene.challenges??[]).map(w=>ChallengeWindowSchema.parse(w));
       if(challenges.length>1)throw Error('One real response may be awaited at a time');
@@ -425,15 +445,23 @@ export class SessionEvents {
         const invitation=scene.events.find(e=>e.id===w.invitationEventId),listen=scene.events.find(e=>e.id===w.responseEventId);
         if(!invitation||!listen||listen.type!=='silence'||listen.atMs!==w.fromMs||listen.atMs+eventDurationMs(listen)!==w.toMs||w.context.attempt> w.context.maxAttempts||scene.responseWindows.some(r=>r.fromMs<w.toMs&&r.toMs>w.fromMs))throw Error('Invalid real listening window');
       }
+      stage='commit';
+      // Device accents are assigned locally after rejecting server-authored
+      // commands, using the same opt-in and playback-bound mapping as other events.
+      if(this.hooks.haptics())scene.events=withHapticMappings({...checked,motifs:[...runtime.program.motifs,...scene.motifs],events:scene.events,responseWindows:scene.responseWindows,responsePrompts:scene.responsePrompts}).events;
       runtime.appendScene(scene);
       for(const [id,value]of decoded)this.payloads.set(id,value);
-      this.regieMemory.accept(scene.plan,scene.sections,generation);
+      this.regieMemory.accept(scene.plan,scene.sections,generation,requestedBreathCycles(context.feedback||context.userContext)!==undefined);
       if(scene.plan.resolution){const resolved=this.playfulInteraction.context;if(resolved)this.regieMemory.settleRequest(resolved.request,scene.plan.resolution);this.playfulInteraction.resolve(scene.plan);}
       if(challenges[0])this.playfulInteraction.schedule(challenges[0]);
       this.regiePlans.push({id:scene.plan.id,strategy:scene.plan.strategy,rationale:scene.plan.rationale,fromMs:scene.atMs,toMs:scene.endMs});if(this.regiePlans.length>32)this.regiePlans.shift();
     }catch(error){
+      if(epoch===this.epoch&&!signal.aborted){
+        const reason=(error instanceof Error?error.message:String(error)).slice(0,2000);
+        this.sceneFailures.push({requestId,atMs:this.nowMs,stage,reason});if(this.sceneFailures.length>32)this.sceneFailures.shift();
+      }
       if(initial)throw error;
-      if(epoch===this.epoch&&!signal.aborted){this.regieRetryAtMs=this.nowMs+5000;this.hooks.notice('The next scene was not ready. Your session continues while Bambi tries again.');}
+      if(epoch===this.epoch&&!signal.aborted){this.regieRetryAtMs=this.nowMs+5000;this.hooks.notice('The next scene was not ready. Your session continues while Bambi tries again. Reason: '+(error instanceof Error?error.message:String(error)).slice(0,300));}
     }finally{if(this.request===controller)this.request=null;}
   }
   private speak(slot: SpeechSlot, atMs: number) {

@@ -1,7 +1,10 @@
 [
   {
     "alias": "bambi-qwen35-9b-hauhau:q4_k_m",
-    "resourceProfile": {"promptCacheMinimumMiB": 2048, "minimumCheckpoints": 8},
+    "resourceProfile": {
+      "promptCacheMinimumMiB": 2048,
+      "minimumCheckpoints": 8
+    },
     "repo": "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
     "revision": "0a41c68809d375475f954be12ba7c40efa56c2a9",
     "file": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
@@ -21,7 +24,13 @@
     "revision": "c09cdbcdb1fefad6d335809d445621b5f5ba0c6e",
     "file": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
     "bytes": 2707513696,
-    "memoryProfile": {"kvBytesPerToken": 32768, "recurrentStateMiB": 50.25, "weightsOverheadRatio": 0.2, "minimumCheckpoints": 8, "promptCacheMinimumMiB": 1536},
+    "memoryProfile": {
+      "kvBytesPerToken": 32768,
+      "recurrentStateMiB": 50.25,
+      "weightsOverheadRatio": 0.2,
+      "minimumCheckpoints": 8,
+      "promptCacheMinimumMiB": 1536
+    },
     "sha256": "79e28ecacf84e75b6056cf4059636d435aa9eb67795780f7b7dbc7d32a962741",
     "license": "apache-2.0",
     "context": 24576,
@@ -32,7 +41,15 @@
   },
   {
     "alias": "bambi-qwen35-2b-hauhau:q4_k_m",
-    "samplingProfile": {"temperature": 0.7, "top_p": 0.8, "top_k": 20, "min_p": 0, "repeat_penalty": 1.1, "creativeTemperature": 0.8, "creativeTopP": 0.9},
+    "samplingProfile": {
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "top_k": 20,
+      "min_p": 0,
+      "repeat_penalty": 1.1,
+      "creativeTemperature": 0.8,
+      "creativeTopP": 0.9
+    },
     "repo": "HauhauCS/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive",
     "revision": "2bcf35c1ebf62c837c12c1aa90b578ff4717e831",
     "file": "Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
@@ -40,7 +57,15 @@
     "sha256": "be3ccca13a9d1bc8b67165ea80bd103cd6151a37ad131183cc7ca388f78d9517",
     "license": "apache-2.0",
     "context": 24576,
-    "memoryProfile": {"kvBytesPerToken": 12288, "recurrentStateMiB": 19.265625, "weightsOverheadRatio": 0.7, "promptCacheMinimumMiB": 512, "minimumCheckpoints": 8, "compactBatchSize": 512, "compactMicroBatchSize": 128},
+    "memoryProfile": {
+      "kvBytesPerToken": 12288,
+      "recurrentStateMiB": 19.265625,
+      "weightsOverheadRatio": 0.7,
+      "promptCacheMinimumMiB": 512,
+      "minimumCheckpoints": 8,
+      "compactBatchSize": 512,
+      "compactMicroBatchSize": 128
+    },
     "preferredFor": "compact",
     "desktopSupported": true,
     "qualification": "experimental",
@@ -49,16 +74,37 @@
   },
   {
     "alias": "bambi-lfm25-1.2b:Q4_K_M",
-    "samplingProfile": {"temperature": 0.1, "top_p": 1, "top_k": 50, "min_p": 0, "repeat_penalty": 1.05, "creativeTemperature": 0.4, "creativeTopP": 1},
+    "samplingProfile": {
+      "temperature": 0.1,
+      "top_p": 1,
+      "top_k": 50,
+      "min_p": 0,
+      "repeat_penalty": 1.05,
+      "creativeTemperature": 0.4,
+      "creativeTopP": 1
+    },
     "repo": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
     "revision": "8ed288026e23958ad9dfa92d53ed773a8eee7125",
     "file": "LFM2.5-1.2B-Instruct-Q4_K_M.gguf",
     "bytes": 730895168,
     "sha256": "b1b3de114215d9507409a662a501a631095a479a419584e8a2ded6304b19b4f5",
     "license": "lfm1.0",
-    "licenseNotice": {"file": "LICENSE", "path": "community/LFM2.5-LICENSE.txt", "bytes": 10596, "sha256": "5188f2b355da20647257a3156db5834c794e5fb5e6d8dc4d4cdbb3180e75b85b"},
+    "licenseNotice": {
+      "file": "LICENSE",
+      "path": "community/LFM2.5-LICENSE.txt",
+      "bytes": 10596,
+      "sha256": "5188f2b355da20647257a3156db5834c794e5fb5e6d8dc4d4cdbb3180e75b85b"
+    },
     "context": 24576,
-    "memoryProfile": {"kvBytesPerToken": 12288, "recurrentStateMiB": 0.234375, "weightsOverheadRatio": 0.7, "promptCacheMinimumMiB": 512, "minimumCheckpoints": 8, "compactBatchSize": 512, "compactMicroBatchSize": 128},
+    "memoryProfile": {
+      "kvBytesPerToken": 12288,
+      "recurrentStateMiB": 0.234375,
+      "weightsOverheadRatio": 0.7,
+      "promptCacheMinimumMiB": 512,
+      "minimumCheckpoints": 8,
+      "compactBatchSize": 512,
+      "compactMicroBatchSize": 128
+    },
     "desktopSupported": true,
     "qualification": "experimental",
     "priority": 35,
@@ -161,5 +207,75 @@
     "qualification": "development-only",
     "priority": -100,
     "description": "Linux test option: the same community 4B MTP export with acceleration off. Retains the selected character; compare both variants. Faster first speech is not established."
+  },
+  {
+    "alias": "bambi-qwen35-9b-dark-roast:iq4_xs",
+    "repo": "mradermacher/Qwen3.5-9B-The-Defiant-Fable-DARK-ROAST-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-i1-GGUF",
+    "revision": "ad376a5c5343273577a89f5c708eb62b1f39ab07",
+    "file": "Qwen3.5-9B-The-Defiant-Fable-DARK-ROAST-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP.i1-IQ4_XS.gguf",
+    "bytes": 5326418656,
+    "sha256": "d05d0096560d2b7ee562e8855605566eddd14c91ef03e7bd76fe66bc0b10ef17",
+    "license": "apache-2.0",
+    "context": 24576,
+    "desktopSupported": true,
+    "qualification": "experimental",
+    "priority": 95,
+    "description": "DARK ROAST IQ4_XS quality comparison at 24K app context (16K benchmark). Local performance must be measured."
+  },
+  {
+    "alias": "bambi-qwen35-9b-rp:iq4_xs",
+    "repo": "mradermacher/Qwen3.5-text-9B-NSFW-RP-RolePlay-i1-GGUF",
+    "revision": "07e5b2a936dc9b485082b4118d975362d08f0134",
+    "file": "Qwen3.5-text-9B-NSFW-RP-RolePlay.i1-IQ4_XS.gguf",
+    "bytes": 5196439840,
+    "sha256": "b13bb3ec1b49b56b9162356af1db1fb0a98810ac369991f2a6b881972df34b3e",
+    "license": "apache-2.0",
+    "context": 24576,
+    "desktopSupported": true,
+    "qualification": "experimental",
+    "priority": 75,
+    "description": "NSFW-RP IQ4_XS character consistency comparison at 24K app context (16K benchmark)."
+  },
+  {
+    "alias": "bambi-qwen35-9b-defiant-fable-mtp:iq3_m",
+    "repo": "DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF",
+    "revision": "1c3de241dd3b10890b96d163dbb05375a294be62",
+    "file": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-MTP-IQ3_M.gguf",
+    "bytes": 5722667232,
+    "sha256": "726ad4c6c41906e314052e69a294ae3372310c8d11c2e78d4e97784d5beec110",
+    "license": "apache-2.0",
+    "context": 24576,
+    "desktopSupported": true,
+    "qualification": "experimental",
+    "priority": 85,
+    "description": "NEO IQ3_M export with embedded MTP head. Baseline decoding; compare the Linux MTP-on option on the same file."
+  },
+  {
+    "alias": "bambi-qwen35-9b-defiant-fable-mtp-on:iq3_m",
+    "repo": "DavidAU/Qwen3.5-9B-The-Defiant-Fable-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-GGUF",
+    "revision": "1c3de241dd3b10890b96d163dbb05375a294be62",
+    "file": "Qwen3.5-9B-The-Defiant-Fable-Uncnr-Heretic-NEO-MAX-MTP-IQ3_M.gguf",
+    "bytes": 5722667232,
+    "sha256": "726ad4c6c41906e314052e69a294ae3372310c8d11c2e78d4e97784d5beec110",
+    "license": "apache-2.0",
+    "context": 24576,
+    "desktopSupported": false,
+    "qualification": "development-only",
+    "priority": -100,
+    "description": "Linux MTP-on comparison using the identical NEO IQ3_M export and 24K app context (16K benchmark). No speed advantage is assumed."
+  },
+  {
+    "alias": "bambi-qwen35-9b-dark-roast-mtp-on:iq4_xs",
+    "repo": "mradermacher/Qwen3.5-9B-The-Defiant-Fable-DARK-ROAST-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP-i1-GGUF",
+    "revision": "ad376a5c5343273577a89f5c708eb62b1f39ab07",
+    "file": "Qwen3.5-9B-The-Defiant-Fable-DARK-ROAST-Uncensored-Heretic-NEO-IMATRIX-MAX-MTP.i1-IQ4_XS.gguf",
+    "bytes": 5326418656,
+    "sha256": "d05d0096560d2b7ee562e8855605566eddd14c91ef03e7bd76fe66bc0b10ef17",
+    "license": "apache-2.0",
+    "context": 24576,
+    "desktopSupported": false,
+    "qualification": "development-only",
+    "priority": -100,
+    "description": "Linux MTP-on comparison using the identical DARK ROAST IQ4_XS export at 24K app context; the comparison benchmark used 16K. Its embedded head was inspected locally; speed must be measured."
   }
 ]

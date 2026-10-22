@@ -37,17 +37,18 @@ export function voiceTagEnd(text:string){
 
 /** Incremental role parser. Incomplete metadata never reaches the sentence parser. */
 export class VoiceSentenceChunker {
- private buffer='';private role:VoiceRole='owner';private background='';
- private owner:TriggerSentenceChunker;
- constructor(names:string[]=[],private enabled=false,conversation=false,reserveLow:()=>boolean=()=>true,earlyClauses=true){this.owner=new TriggerSentenceChunker(names,conversation,reserveLow,earlyClauses);}
+ private buffer='';private role:VoiceRole='owner';
+ private owner:TriggerSentenceChunker;private inner:TriggerSentenceChunker;
+ constructor(names:string[]=[],private enabled=false,conversation=false,reserveLow:()=>boolean=()=>true,earlyClauses=true){this.owner=new TriggerSentenceChunker(names,conversation,reserveLow,earlyClauses);this.inner=new TriggerSentenceChunker(names);}
+ get pendingCharacters(){return this.buffer.length+this.owner.pendingCharacters+this.inner.pendingCharacters;}
  private ownerText(text:string){return this.owner.push(text);}
  private finishRole(){
   if(this.role==='owner')return this.owner.flush();
-  const text=this.background.trim();this.background='';return this.enabled&&text?[`[bambi]${text}`]:[];
+  return this.inner.flush().flatMap(text=>this.enabled?[`[bambi]${text}`]:[]);
  }
  push(text:string):string[]{
   this.buffer+=text;const out:string[]=[];
-  const consume=(part:string)=>{if(this.role==='owner')out.push(...this.ownerText(part));else this.background+=part;};
+  const consume=(part:string)=>{if(this.role==='owner')out.push(...this.ownerText(part));else if(this.enabled)out.push(...this.inner.push(part).map(text=>`[bambi]${text}`));};
   while(this.buffer){
    const at=this.buffer.indexOf('[');
    if(at<0){consume(this.buffer);this.buffer='';break;}
@@ -69,7 +70,7 @@ export class VoiceSentenceChunker {
   const out:string[]=[];
   // Discard unfinished controls, rather than pronouncing a partial role marker.
   if(this.buffer&&!this.buffer.startsWith('[')){
-   if(this.role==='owner')out.push(...this.ownerText(this.buffer));else this.background+=this.buffer;
+   if(this.role==='owner')out.push(...this.ownerText(this.buffer));else if(this.enabled)out.push(...this.inner.push(this.buffer).map(text=>`[bambi]${text}`));
   }
   this.buffer='';out.push(...this.finishRole());return out;
  }
@@ -78,8 +79,11 @@ export class VoiceSentenceChunker {
 /** Full scripts share exactly the streaming role semantics. */
 export function voiceScriptRuns(text:string,enabled=false){
  const stream=new VoiceSentenceChunker([],enabled);
- return [...stream.push(text),...stream.flush()].map(part=>{
+ const runs=[...stream.push(text),...stream.flush()].map(part=>{
   const match=/^\[bambi\]([\s\S]*)$/i.exec(part);
   return {speaker:match?'bambi' as const:'owner' as const,text:match?match[1]:part};
  });
+ // Full-script callers retain each authored inner block as one run. Streaming
+ // callers above receive completed thoughts without waiting for a role change.
+ return runs.reduce<typeof runs>((out,run)=>{const last=out.at(-1);if(run.speaker==='bambi'&&last?.speaker==='bambi')last.text+=' '+run.text;else out.push(run);return out;},[]);
 }

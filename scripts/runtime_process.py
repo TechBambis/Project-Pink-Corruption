@@ -26,7 +26,10 @@ def speculative_options(pin):
     setting = pin.get('runtime', {}).get('speculative')
     if setting is None:
         return []
-    if setting != {'type': 'draft-mtp', 'draft_tokens': 3} or pin['alias'] != 'bambi-qwen35-4b-hauhau-mtp-experiment:q4_k_m':
+    if setting != {'type': 'draft-mtp', 'draft_tokens': 3} or pin['alias'] not in {
+            'bambi-qwen35-4b-hauhau-mtp-experiment:q4_k_m',
+            'bambi-qwen35-9b-dark-roast-mtp-on:iq4_xs',
+            'bambi-qwen35-9b-defiant-fable-mtp-on:iq3_m'}:
         raise RuntimeError('Unsupported pinned speculative profile.')
     return ['--spec-type', 'draft-mtp', '--spec-draft-n-max', '3']
 

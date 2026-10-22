@@ -23,6 +23,7 @@
 .breath-ring{stroke:none;fill:none;width:min(68%,58vh,480px);height:auto;overflow:visible;transform-origin:center;will-change:transform,opacity}
 .breath-label{position:absolute;inset:0;display:grid;place-items:center;font-family:Georgia,serif;font-size:clamp(20px,3vw,32px);color:#f5e3f0;text-shadow:0 2px 18px #140c1d}
 .stage.breathing .word{visibility:hidden}
+.stage.breathing #visual{visibility:hidden!important}
 .stage.breathing .caption{z-index:7}
 @media(prefers-reduced-motion:reduce){.breath-ring{will-change:auto}}
 

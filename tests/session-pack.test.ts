@@ -46,6 +46,13 @@ test('reply timing aggregates are bounded per stage and snapshots cannot change 
  snapshot[0].timings.tokenization.totalMs=999;assert.equal(traces.snapshot()[0].timings.tokenization.totalMs,20);
 });
 
+test('scene diagnostics retain the failed stage and a bounded reason',()=>{
+ let now=0;const traces=new ReplyTraces(()=>now);traces.begin('scene','local','fixture');
+ now=50;traces.mark('scene','context-ready');now=100;traces.fail('scene','Preparation deadline exceeded.');
+ const trace=traces.snapshot()[0];assert.equal(trace.status,'error');assert.equal(trace.stages['context-ready'],50);assert.equal(trace.stages.error,100);assert.equal(trace.error,'Preparation deadline exceeded.');
+ traces.fail('scene','x'.repeat(3000));assert.equal(traces.snapshot()[0].error!.length,2000);
+});
+
 test('presentation pressure has hysteresis and does not trigger on one isolated frame',()=>{
  const governor=new PresentationGovernor();assert.equal(governor.observe(90,100,true),false);assert.equal(governor.observe(90,200,true),false);assert.equal(governor.observe(90,300,true),true);assert.equal(governor.observe(16,400,true),true);assert.equal(governor.observe(16,6000,true),false);
 });

@@ -77,11 +77,18 @@ export async function inventory(root){
  for(const path of files(root))result.push({path:logicalPath(relative(root,path)),bytes:lstatSync(path).size,sha256:await hashFile(path)});
  return result;
 }
+/** Only application owners used by the local runtime enter distributed source. */
+export function localSourceArea(path){
+ path=logicalPath(path);
+ if(path.startsWith('apps/'))return /^apps\/(?:desktop|server|web|extension)\//.test(path);
+ if(path.startsWith('packages/runtime/'))return !path.slice('packages/runtime/'.length).includes('/');
+ return true;
+}
 export function sourcePathAllowed(path){
  path=logicalPath(path);
- return !/(?:^|\/)(?:\.git|\.runtime|node_modules|internal|reports|models|recordings|imported-sounds|__pycache__)(?:\/|$)/.test(path)
+ return localSourceArea(path)&&!/(?:^|\/)(?:\.git|\.runtime|node_modules|internal|reports|models|recordings|imported-sounds|__pycache__)(?:\/|$)/.test(path)
   &&!path.startsWith('apps/web/public/vad/')
-  &&/\.(?:ts|mts|mjs|cjs|json|py|lock|md|html|css|js|svg|wav|spec|cs|txt|cmd|ps1|yml|manifest|plist)$/.test(path);
+  &&/\.(?:ts|tsx|mts|mjs|cjs|json|py|lock|md|html|css|js|svg|wav|spec|cs|txt|cmd|ps1|yml|manifest|plist)$/.test(path);
 }
 export function assertWindowsX64(path){
  const bytes=readFileSync(path);

@@ -4,9 +4,9 @@
 
 import type {VoiceTrack} from '../speech/dual-voice';
 
-/** Fill the reserved gap; extend it when the complete fragment needs more time. */
-export function backgroundVoiceWindow(now:number,queueEnd:number,gapStart:number|undefined,spokenSeconds:number,pauseSeconds:number,tailSeconds=.2){
- const start=Math.max(now+.035,gapStart??queueEnd);
+/** Echo the current Owner on an independent inner track, never in the past. */
+export function backgroundVoiceWindow(now:number,innerEnd:number,ownerStart:number|undefined,spokenSeconds:number,pauseSeconds:number,tailSeconds=.2){
+ const start=Math.max(now+.035,innerEnd,(ownerStart??now)+.15);
  const duration=Math.max(.001,spokenSeconds+tailSeconds,pauseSeconds);
  return {start,duration,end:start+duration};
 }

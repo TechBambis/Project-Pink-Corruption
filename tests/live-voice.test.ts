@@ -51,14 +51,30 @@ test('no safe boundary means wait; fragmented control and numeric suffix are nev
  const unsplit=new TriggerSentenceChunker([],true);
  assert.deepEqual(unsplit.push('A long opening without a completed clause '.repeat(20)),[]);
 });
+test('complete sentences stream inside an open quoted or emphasized paragraph without dropping words',()=>{
+ for(const opening of ['"','*','**']){
+  const parser=new VoiceSentenceChunker([],false,true),parts:string[]=[];
+  parts.push(...parser.push(opening+'The first thought is complete. '));
+  assert.equal(parts.length,1,'An outer prose delimiter cannot hold completed speech');
+  for(let i=0;i<50;i++)parts.push(...parser.push('The next thought is complete. '));
+  assert.ok(parser.pendingCharacters<100);
+  parts.push(...parser.push(opening),...parser.flush());
+  assert.equal(parts.join(' '),opening+'The first thought is complete. '+Array(50).fill('The next thought is complete.').join(' ')+' '+opening);
+ }
+});
 test('render-ahead uses observed seconds and bytes, freezes on Pause and rejects stale reports',()=>{
  const reserve=new SpeechRenderAhead();reserve.sent(0,4,1000);
  assert.equal(reserve.allows(),false,'Unscheduled WAV consumes the single ready slot');
+ assert.equal(reserve.allows(.6,1000,true),false,'Parallel speech still waits for the browser scheduling report');
  assert.equal(reserve.observe({sample:0,seqs:[0],queuedSeconds:4,speechSeconds:3,queuedBytes:1000,running:true}),true);
  assert.equal(reserve.snapshot.held,true);assert.equal(reserve.snapshot.authoredSilenceSeconds,1);
  assert.equal(reserve.allows(),false);
+ assert.equal(reserve.allows(.6,1000,true),true,'An inner voice can reach its already scheduled Owner during a soft render hold');
+ assert.equal(reserve.allows(27,1000,true),false,'Parallel voices retain the hard duration cap');
+ assert.equal(reserve.allows(.6,SpeechRenderAhead.maxBytes,true),false,'Parallel voices retain the hard byte cap');
  reserve.observe({sample:1,seqs:[0],queuedSeconds:2,speechSeconds:1,queuedBytes:1000,running:true});assert.equal(reserve.allows(),false,'Hysteresis persists between low and high');
  reserve.observe({sample:2,seqs:[0],queuedSeconds:1,speechSeconds:1,queuedBytes:1000,running:false});assert.equal(reserve.allows(),false,'No server-clock decay while paused');
+ assert.equal(reserve.allows(.6,1000,true),false,'Parallel preparation cannot bypass Pause');
  assert.equal(reserve.observe({sample:1,seqs:[0],queuedSeconds:0,speechSeconds:0,queuedBytes:1000,running:true}),false);
  reserve.observe({sample:3,seqs:[0],queuedSeconds:1,speechSeconds:1,queuedBytes:1000,running:true});assert.equal(reserve.allows(),true);
  assert.equal(reserve.observe({sample:4,seqs:[99],queuedSeconds:0,speechSeconds:0,queuedBytes:0,running:true}),false);

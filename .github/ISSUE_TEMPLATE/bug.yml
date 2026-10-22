@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        This is a development beta. Native setup currently targets Linux; Windows and macOS are not yet verified.
+        This is a development beta. Native alpha packages are available for Windows x64, Linux x64 and Apple Silicon Mac. See the release notes for verified checks and remaining hardware tests.
         Share only the smallest useful example. Remove tokens, private paths, conversations and recordings from logs and screenshots.
         For a security vulnerability, follow [SECURITY.md](https://github.com/TechBambis/Project-Pink-Corruption/blob/main/SECURITY.md) instead.
   - type: input
@@ -21,8 +21,8 @@ body:
       label: Operating system
       options:
         - Linux
-        - Windows (native setup not verified)
-        - macOS (native setup not verified)
+        - Windows x64
+        - macOS Apple Silicon
         - Other
     validations:
       required: true

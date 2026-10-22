@@ -145,14 +145,14 @@ test('profile identity invalidates changed authored content, runner build, voice
 });
 
 test('comparison includes reference 9B, Defiant Fable and 35B, saves separately and restores the user selection',async()=>{
- assert.equal(calibrationModels.length,6);
+ assert.equal(calibrationModels.length,9);
  for(const model of ['bambi-qwen35-9b-hauhau:q4_k_m','bambi-qwen35-9b-defiant-fable:iq4_xs','bambi-qwen36-35b-hauhau:iq3_m'])assert(calibrationModels.includes(model));
  const f=fixture(),calibration=new ModelCalibration();let restored=0;
  const models=calibrationModels.map(model=>({...input,model,key:calibrationHash(model)}));
  calibration.start(models,()=>f.operations,async()=>{assert(!f.held);restored++;});await calibration.settled();
- assert.equal(restored,1);assert.equal(calibration.state.phase,'complete');assert.equal(calibration.state.modelCount,6);assert.equal(f.saved.length,6);
- assert.deepEqual(f.saved.map(profile=>profile.model),calibrationModels);assert.equal(new Set(f.saved.map(profile=>profile.key)).size,6);
- assert.equal(calibration.state.profiles?.length,6);assert.deepEqual(calibration.state.modelErrors,[]);
+ assert.equal(restored,1);assert.equal(calibration.state.phase,'complete');assert.equal(calibration.state.modelCount,9);assert.equal(f.saved.length,9);
+ assert.deepEqual(f.saved.map(profile=>profile.model),calibrationModels);assert.equal(new Set(f.saved.map(profile=>profile.key)).size,9);
+ assert.equal(calibration.state.profiles?.length,9);assert.deepEqual(calibration.state.modelErrors,[]);
 });
 test('comparison records one failed model and continues without marking it as measured',async()=>{
  const good=fixture(),bad=fixture({prepare:async()=>{throw Error('Model cannot load on this PC.');}}),calibration=new ModelCalibration();

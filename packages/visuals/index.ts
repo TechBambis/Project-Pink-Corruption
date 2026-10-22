@@ -115,9 +115,9 @@ export class VisualEngine {
  this.canvas.style.maskImage=focusMask;this.canvas.style.setProperty('-webkit-mask-image',focusMask);
  this.fixationLayer.textContent=this.fixation==='heart'?'♥':'•';this.fixationLayer.style.fontSize=this.fixation==='heart'?'clamp(48px,7vmin,72px)':'30px';
  this.fixationLayer.style.transform=`translate(-50%,-50%) scale(${1+focusReaction*(this.fixation==='heart'?.45:.18)})`;
- // Overlay clocks still advance during a canvas withdrawal. Do not queue
- // invisible background draws that must be flushed when the canvas returns.
- if(this.opacity<=0){this.clearSceneTransition();return;}
+ // Overlay clocks still advance during a canvas withdrawal or opaque breathing
+ // display. Hidden WebGL draws can stall the frame that changes In to Out.
+ if(this.opacity<=0||breathing.active){this.clearSceneTransition();return;}
  if(!this.fallback&&gl.isContextLost())this.useFallback('WebGL context lost');
  if(this.failed)return;
  if(this.fallback){this.fallback.render(this.scene,scene===0?time:t,this.stableSettings,this.reduced,this.density*this.quality,scene===0?combinedPulse:scenePulse,clamp(audio),reaction);return;}

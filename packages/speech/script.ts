@@ -15,10 +15,34 @@ export const scriptCueNames=['SNAP','MOAN','WIPERS','INFLATE','SQUEAK','POP','BE
 export type ScriptCue=typeof scriptCueNames[number];
 export type PlaybackCue=ScriptCue|DeviceCommand;
 export interface ScriptUnit {text:string;trigger?:string;postPause?:boolean;prePause?:boolean;cuesBefore?:PlaybackCue[];cuesAfter?:PlaybackCue[];sounds?:SoundCue[];ticks?:TickCue[];devicesAtWord?:DeviceCommand[];control?:boolean;breath?:BreathCue}
+/** Respect renderer limits without dropping words or replaying word-bound cues. */
+export function boundedSpeechUnits(units:ScriptUnit[],maxCharacters:number,maxWords=Infinity):ScriptUnit[]{
+ return units.flatMap(unit=>{
+  if(unit.control)return [unit];
+  const tokens=[...unit.text.matchAll(/\[[^\]]*\]|\S+/gu)];
+  if(unit.text.length<=maxCharacters&&tokens.length<=maxWords)return [unit];
+  if(unit.trigger)throw Error('A named speech unit exceeds the voice renderer limit.');
+  const parts:string[]=[];
+  for(let start=0;start<tokens.length;){
+   let end=start;
+   while(end<tokens.length&&end-start<maxWords&&tokens[end].index!+tokens[end][0].length-tokens[start].index!<=maxCharacters)end++;
+   if(end===start)throw Error('A single speech word or marker exceeds the voice renderer limit.');
+   // Prefer a complete sentence when the remaining passage needs another request.
+   if(end<tokens.length){for(let at=end-1;at>=start;at--)if(/[.!?。！？]["”']?$/.test(tokens[at][0])){end=at+1;break;}}
+   const last=tokens[end-1];parts.push(unit.text.slice(tokens[start].index,last.index!+last[0].length));start=end;
+  }
+  return parts.map((text,index)=>({...unit,text,
+   ...(index?{cuesBefore:undefined,sounds:undefined,ticks:undefined,devicesAtWord:undefined,breath:undefined,prePause:undefined}:{}),
+   ...(index<parts.length-1?{cuesAfter:undefined,postPause:undefined}:{}),
+  }));
+ });
+}
 const known=new Set<string>(scriptCueNames);
 /** Pure text transformation: metadata is never passed to speech inference. */
 export function normalizeScript(text:string){
- return stripSpeechFormatting(stripVocalFillers(text)).replace(/---\s*END\s*---/gi,'').replace(/\bI-Q\b/gi,'IQ')
+ // Quotation delimiters are not spoken words. In particular a closing quote
+ // arriving after a sentence must never become its own renderer request.
+ return stripSpeechFormatting(stripVocalFillers(text)).replace(/["“”]/g,' ').replace(/[ \t]+/g,' ').replace(/ +([,.;:!?])/g,'$1').replace(/---\s*END\s*---/gi,'').replace(/\bI-Q\b/gi,'IQ')
   .replace(/\[PAUSE\]/gi,'[SFX:PAUSE_10]')
   .replace(/…{2,}|\.{6,}/g,' [pause:5000] ')
   .replace(/…|\.{3}/g,' [pause:2500] ');

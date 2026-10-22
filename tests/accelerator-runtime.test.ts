@@ -8,7 +8,13 @@ import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {runtimeDeviceId} from '../packages/runtime/runtime-tuning.mjs';
 import {acceleratorPlan,acceleratorEnvironment,backendLibraries,backendRuntimeFiles} from '../packages/runtime/accelerator-runtime.mjs';
-import {acceleratorDevices,acceleratorCandidates,acceleratorArguments,deviceKey,cudaVersion,inferenceThreads} from '../packages/runtime/accelerator-policy';
+import {acceleratorDevices,acceleratorCandidates,acceleratorArguments,deviceKey,cudaVersion,inferenceThreads,offloadEvidence} from '../packages/runtime/accelerator-policy';
+
+test('MTP head offloading does not overwrite target GPU evidence',()=>{
+ assert.deepEqual(offloadEvidence('offloaded 30/34 layers to GPU\noffloaded 2/2 layers to GPU'),{offloadedLayers:30,totalLayers:34});
+ assert.deepEqual(offloadEvidence('offloaded 34/34 layers to GPU\noffloaded 30/34 layers to GPU'),{offloadedLayers:30,totalLayers:34});
+ assert.equal(offloadEvidence('No offload evidence'),null);
+});
 
 test('small PCs retain CPU capacity for speech and the shared plan uses the same thread budget',async()=>{
  assert.deepEqual([1,2,4,8,64].map(inferenceThreads),[1,1,2,6,6]);

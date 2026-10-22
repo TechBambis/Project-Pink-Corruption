@@ -44,7 +44,9 @@ export class AudioEngine {
  nativeSpeechOutput(){return this.nativePacketWindows.map(window=>({...window}));}
  private deliveryMix:DeliveryMix;
  setNarrationDelivery(mode?:DeliveryMode,at=this.context.currentTime){this.deliveryMix.set(mode,at);}
- private dualGapStart:number|undefined;
+ private dualOwnerStart:number|undefined;
+ private dualOwnerEnd:number|undefined;
+ private dualInnerEnd=0;
  private dualVoiceCleanup=new Map<AudioBufferSourceNode,()=>void>();
  private eventMode=false;
  private eventGates:Partial<Record<Bus,GainNode>>={};
@@ -326,10 +328,11 @@ export class AudioEngine {
   }
  }
  async playScriptCues(cues:readonly PlaybackCue[],onEnd:()=>void,ticks:readonly TickCue[]=[],onStart?:(start:number,duration:number)=>void){
-  this.dualGapStart=undefined;
+  this.dualOwnerStart=undefined;
   const start=Math.max(this.context.currentTime+.035,this.voicesEnd),duration=Math.max(.002,this.scheduleScriptCues(cues,start));
   this.applyTicks(ticks,start);
   const source=this.context.createBufferSource();source.buffer=this.context.createBuffer(1,Math.ceil(duration*this.context.sampleRate),this.context.sampleRate);source.connect(this.nodes.main_voice);this.voiceSources.add(source);this.voicesEnd=start+duration;
+  if(this.dualOwnerEnd!==undefined)this.dualOwnerEnd=this.voicesEnd;
   source.onended=()=>{this.voiceSources.delete(source);source.disconnect();if(!this.voiceSources.size)this.voicesEnd=this.context.currentTime;onEnd();};onStart?.(start,duration);source.start(start);
  }
  async playVoice(bytes:ArrayBuffer,onStart:(start:number,duration:number,wordTime:number)=>void,onEnd:()=>void,trigger?:TriggerSequenceOptions,script?:{stream?:import('../speech/capabilities').SpeechStreamPacket;voiceTrack?:VoiceTrack;before?:PlaybackCue[];after?:PlaybackCue[];spokenSeconds?:number;sounds?:SoundCue[];ticks?:TickCue[];devicesAtWord?:DeviceCommand[];text?:string;phase?:SessionPhase;wordStart?:number;conversation?:boolean;breath?:BreathCue;words?:{word:string;atMs:number}[]}){
@@ -355,18 +358,17 @@ export class AudioEngine {
   }
   if(script?.voiceTrack?.speaker==='bambi'){
    const spoken=Math.min(decoded.duration,Math.max(0,script.spokenSeconds??decoded.duration));
-   const window=backgroundVoiceWindow(this.context.currentTime,this.voicesEnd,this.dualGapStart,spoken,decoded.duration,script.voiceTrack.reverbMs/1000);
-   this.dualGapStart=undefined;
+   const window=backgroundVoiceWindow(this.context.currentTime,this.dualInnerEnd??0,this.dualOwnerStart,spoken,decoded.duration,script.voiceTrack.reverbMs/1000);
    const mono=this.context.createBuffer(1,Math.ceil(window.duration*decoded.sampleRate),decoded.sampleRate),samples=mono.getChannelData(0);
    for(let ch=0;ch<decoded.numberOfChannels;ch++){const input=decoded.getChannelData(ch);for(let i=0;i<Math.min(input.length,Math.ceil(spoken*decoded.sampleRate));i++)samples[i]+=input[i]/decoded.numberOfChannels;}
    const node=this.context.createBufferSource();node.buffer=mono;
    const cleanup=connectVoiceTrack(this.context,node,this.nodes.main_voice,script.voiceTrack);this.dualVoiceCleanup.set(node,cleanup);
-   this.voiceSources.add(node);this.voicesEnd=window.end;this.foreground.set(node,{start:window.start,end:window.start+spoken,bus:'AI_VOICE'});
+   this.voiceSources.add(node);this.dualInnerEnd=window.end;this.voicesEnd=Math.max(this.voicesEnd,window.end);this.foreground.set(node,{start:window.start,end:window.start+spoken,bus:'AI_VOICE'});
    this.speechDucker.schedule(node,window.start,window.start+spoken,false);
    onStart(window.start,window.duration,window.start+(script.wordStart??0));
    node.onended=()=>{this.foreground.delete(node);this.voiceSources.delete(node);this.speechDucker.forget(node);cleanup();this.dualVoiceCleanup.delete(node);if(!this.voiceSources.size)this.voicesEnd=this.context.currentTime;onEnd();};node.start(window.start);return;
   }
-  this.dualGapStart=undefined;
+  if(!script?.voiceTrack){this.dualOwnerStart=undefined;this.dualOwnerEnd=undefined;this.dualInnerEnd=0;}
   const triggerEnabled=!!trigger&&trigger.sequenceEnabled!==false;
   const design=!script?.breath&&!(trigger&&isSpokenOneShot(trigger.trigger))&&(!script?.conversation||triggerEnabled)&&this.designSettings.enabled&&!!script?.text?.trim();
   const requested=(Array.isArray(script?.sounds)?script.sounds:[]).filter(validSoundCue).slice(0,8);
@@ -376,7 +378,8 @@ export class AudioEngine {
   const wordOffset=Number.isFinite(script?.wordStart)&&script!.wordStart!>=0&&script!.wordStart!<originalSpoken?script!.wordStart!:firstAudibleOffset(decoded,originalSpoken);
   const pauseSeconds=(ms:number|undefined)=>Number.isFinite(ms)?Math.min(10000,Math.max(0,ms!))/1000:0;
   // Consecutive breath instructions reserve word-to-word time, including TTS leading silence.
-  const next=script?.breath&&this.breathNextWord?Math.max(this.voicesEnd-wordOffset,this.breathNextWord-wordOffset):this.voicesEnd;
+  const ownerEnd=script?.voiceTrack?.speaker==='owner'?(this.dualOwnerEnd??this.context.currentTime):this.voicesEnd;
+  const next=script?.breath&&this.breathNextWord?Math.max(ownerEnd-wordOffset,this.breathNextWord-wordOffset):ownerEnd;
   let start=Math.max(this.context.currentTime+.035,next);start+=this.scheduleScriptCues(script?.before??[],start);
   const pre=trigger?pauseSeconds(trigger.prePauseMs):0,post=trigger?pauseSeconds(trigger.postPauseMs):0;
   const spokenStart=start+pre,wordTime=spokenStart+wordOffset,spokenEnd=spokenStart+originalSpoken;
@@ -437,16 +440,16 @@ export class AudioEngine {
   const node=this.context.createBufferSource();node.buffer=audio;
   const cleanup=script?.voiceTrack?connectVoiceTrack(this.context,node,this.nodes.main_voice,script.voiceTrack):()=>node.disconnect();
   if(script?.voiceTrack)this.dualVoiceCleanup.set(node,cleanup);else node.connect(this.nodes.main_voice);
-  this.voicesEnd=start+audio.duration;
-  // Effects and trigger tails finish before the background speaks. Short pauses
-  // remain silent; missing eligible gaps become a new gap after the Owner.
-  if(script?.voiceTrack&&pause>=.9)this.dualGapStart=afterStart+afterDuration;this.voiceSources.add(node);
+  this.voicesEnd=Math.max(this.voicesEnd,start+audio.duration);
+  // Owner retains authored pauses/effects, independently of the inner track.
+  if(script?.voiceTrack?.speaker==='owner'){this.dualOwnerStart=spokenStart;this.dualOwnerEnd=start+audio.duration;}
+  this.voiceSources.add(node);
   this.speechDucker.schedule(node,wordTime,Math.max(spokenEnd,echoEnd),!!trigger);
   this.foreground.set(node,{start:spokenStart,end:spokenEnd,bus:'AI_VOICE'});
   onStart(spokenStart,audio.duration-(spokenStart-start),wordTime);node.onended=()=>{this.foreground.delete(node);this.voiceSources.delete(node);this.speechDucker.forget(node);cleanup();this.dualVoiceCleanup.delete(node);if(!this.voiceSources.size)this.voicesEnd=this.context.currentTime;onEnd();};node.start(start);
  }
 
- stopVoice(fade=true,preserveSession=false){this.nativeVoiceStream=undefined;this.setNarrationDelivery();this.dualGapStart=undefined;this.voiceEchoes.stop();this.breathNextWord=0;this.breathAudio.stop();if(preserveSession)this.clearDesignSilence();else this.stopEffects();if(!preserveSession){this.tickEngine.stop();this.tickDefaultBpm=-1;this.pulseCommand=undefined;}for(const source of this.controlSources){source.onended=null;try{source.stop();}catch{}source.disconnect();}this.controlSources.clear();this.voiceEpoch++;const p=this.nodes.AI_VOICE.gain;p.cancelScheduledValues(this.context.currentTime);p.setTargetAtTime(0,this.context.currentTime,.008);for(const node of this.voiceSources){this.foreground.delete(node);node.onended=null;try{node.stop(this.context.currentTime+(fade?.035:0));}catch{}}this.voiceSources.clear();for(const cleanup of this.dualVoiceCleanup.values())cleanup();this.dualVoiceCleanup.clear();for(const cleanup of this.eventVoiceCleanup.values())cleanup();this.eventVoiceCleanup.clear();this.voicesEnd=this.context.currentTime;this.speechDucker.clear();p.setValueAtTime(this.levels.AI_VOICE,this.context.currentTime+.04);}
+ stopVoice(fade=true,preserveSession=false){this.nativeVoiceStream=undefined;this.setNarrationDelivery();this.dualOwnerStart=undefined;this.dualOwnerEnd=undefined;this.dualInnerEnd=0;this.voiceEchoes.stop();this.breathNextWord=0;this.breathAudio.stop();if(preserveSession)this.clearDesignSilence();else this.stopEffects();if(!preserveSession){this.tickEngine.stop();this.tickDefaultBpm=-1;this.pulseCommand=undefined;}for(const source of this.controlSources){source.onended=null;try{source.stop();}catch{}source.disconnect();}this.controlSources.clear();this.voiceEpoch++;const p=this.nodes.AI_VOICE.gain;p.cancelScheduledValues(this.context.currentTime);p.setTargetAtTime(0,this.context.currentTime,.008);for(const node of this.voiceSources){this.foreground.delete(node);node.onended=null;try{node.stop(this.context.currentTime+(fade?.035:0));}catch{}}this.voiceSources.clear();for(const cleanup of this.dualVoiceCleanup.values())cleanup();this.dualVoiceCleanup.clear();for(const cleanup of this.eventVoiceCleanup.values())cleanup();this.eventVoiceCleanup.clear();this.voicesEnd=this.context.currentTime;this.speechDucker.clear();p.setValueAtTime(this.levels.AI_VOICE,this.context.currentTime+.04);}
  ambience(on:boolean){if(on&&this.ambient)return;if(this.ambient){try{this.ambient.stop();}catch{}this.ambient=null;}if(!on)return;const buffer=this.context.createBuffer(2,this.context.sampleRate*4,this.context.sampleRate);for(let ch=0;ch<2;ch++){const data=buffer.getChannelData(ch);let smooth=0;for(let i=0;i<data.length;i++){smooth=(smooth+(Math.random()*2-1)*.02)/1.02;data[i]=smooth*.35;}}const node=this.context.createBufferSource();node.buffer=buffer;node.loop=true;const low=this.context.createBiquadFilter();low.type='lowpass';low.frequency.value=650;node.connect(low);low.connect(this.nodes.AMBIENCE);node.start();this.ambient=node;}
  private voiceAnalyser!:AnalyserNode;
  private voiceMeter=new Float32Array(512);

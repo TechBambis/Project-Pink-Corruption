@@ -4,7 +4,7 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseBreathMarker,breathInstruction} from '../packages/speech/breath';
+import {breathDirection,parseBreathMarker,breathInstruction,pacedBreathCycle,hasPacedBreathInstruction} from '../packages/speech/breath';
 import {scriptUnits,ScriptDisplayStream} from '../packages/speech/script';
 import {TriggerSentenceChunker} from '../packages/speech/trigger-units';
 import {Kokoro} from '../packages/speech/tts';
@@ -13,9 +13,16 @@ import {breathSamples} from '../packages/audio/breath';
 import {bambiVoiceDirection} from '../packages/content/voice';
 import {buildReplyPrompt} from '../packages/ai/prompt';
 
+test('paired pacing is distinct from mentions of breathing, negation and spatial movement',()=>{
+ assert.deepEqual(pacedBreathCycle('Breathe with me. In... and out. Like a soft ring.'),{before:'Breathe with me.',after:'Like a soft ring.'});
+ assert.deepEqual(pacedBreathCycle('In. And out.'),{before:'',after:''});
+ assert.deepEqual(pacedBreathCycle('Stay comfortable. Inhale gently. Then exhale slowly. Rest.'),{before:'Stay comfortable.',after:'Rest.'});
+ for(const text of ['Move in and out of the room.','The sound fades in and out.','I breathe in and out.','Do not breathe in and out on command.','We can discuss how to inhale.','Notice your comfortable natural breathing.'])assert.equal(pacedBreathCycle(text),undefined,text);
+});
+
 test('shared voice and both reply modes receive one explicit breathing protocol',()=>{
- assert.match(bambiVoiceDirection,/CORRECT: \[breath:in\] In\. \[breath:out\] And out\./);
- assert.match(bambiVoiceDirection,/WRONG: Feel your chest rising and falling\./);
+ assert.match(breathDirection,/\[breath:in\] In\. \[breath:out\] And out\./);
+ assert.doesNotMatch(bambiVoiceDirection,/\[breath:|\[pause:/);
  for(const dialogue of [false,true]){
   const prompt=buildReplyPrompt('Fixture persona','Guide three breaths',false,'',undefined,'',dialogue);
   assert.equal(prompt.split('=== BREATHING PROTOCOL ===').length-1,1);
@@ -88,4 +95,10 @@ test('queued inhale/exhale read the audio clock, preserve phase endpoints and re
 });
 test('original breathing texture is bounded, repeatable and fades in and out without clicks',()=>{
  for(const direction of ['in','out'] as const){const pcm=breathSamples(direction,16000);assert.equal(pcm.length,48000);assert.equal(pcm[0],0);assert.ok(Math.abs(pcm.at(-1)!)<.00001);assert.ok(pcm.every(x=>Number.isFinite(x)&&Math.abs(x)<1));assert.deepEqual(pcm,breathSamples(direction,16000));}
+});
+
+
+test('longer inhale instructions require the paced action while generic breath references remain ordinary prose',()=>{
+ for(const text of ['Breathe in slowly through your nose.','Stay with me. And out.','Inhale a comfortable breath.'])assert.equal(hasPacedBreathInstruction(text),true);
+ for(const text of ['Notice your natural breathing.','Move in and out of the room.','Do not inhale on command.','Breathe with me.'])assert.equal(hasPacedBreathInstruction(text),false);
 });

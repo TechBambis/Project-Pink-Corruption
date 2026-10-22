@@ -130,7 +130,10 @@ export function withHapticMappings(raw: BambiProgram) {
     else if (event.type === 'reset') { offsets = [event.timing.prepMs]; event.state = armed(event.state); }
     else if (event.type === 'mindwipe') { offsets = [event.timing.prepMs + event.timing.activeMs]; event.baseline = armed(event.baseline); }
     const spokenCues = compileEvent(event).speech.filter(slot => slot.speech.requiredTrigger || slot.speech.fixedCue);
-    if (spokenCues.length && event.type === 'motif_recall') event.state = armed(event.state);
+    if (spokenCues.length) {
+      event.state = armed(event.state);
+      if(event.softReturn)for(const step of event.softReturn.steps)step.state=armed(step.state);
+    }
     const command = { type: 'device', channel: 'vib', operation: 'buzz', intensity: .1, durationMs: 150 } as const;
     event.haptics = spokenCues.length
       ? spokenCues.map(slot => ({ offsetMs: slot.atMs - event.atMs + (slot.speech.triggerAtMs ?? slot.speech.cueAtMs!), speechSlotId: slot.id, command }))

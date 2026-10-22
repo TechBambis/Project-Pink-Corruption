@@ -1,15 +1,13 @@
 # Checks and default-branch protection
 
-## Current enforcement limit
+## Current enforcement
 
-This private repository belongs to the TechBambis organization. GitHub Free
-does not enforce its branch rulesets or branch protection. GitHub Team is
-required while the organization repository remains private. The JSON below is
-a prepared configuration, not evidence of active protection.
+This repository is public. The active **Protect main** ruleset (ID `24698466`)
+requires pull requests, resolved review threads, squash merges and the four
+checks below against the current base. It blocks branch deletion and force
+pushes, and has no bypass actors. The checked-in JSON matches this configuration.
 
-Until enforcement is available, review the latest PR checks and verify
-contribution rights manually before merging. Reserve Write access for trusted
-contributors. Read access is sufficient for testers.
+Reserve Write access for trusted contributors; public downloads need no account.
 
 ## Application checks
 
@@ -41,13 +39,13 @@ and select the branch. The workflow must be merged into the default branch befor
 GitHub exposes this button there. To rerun CLA verification, use its separate
 manual workflow with the PR number. Always inspect checks for the latest PR head.
 
-## Activate when the plan supports enforcement
+## Review or restore the ruleset
 
 1. Confirm that `checks (22)`, `checks (24)`, `secrets` and `cla/verified` are being
    published on a PR. Fix failing CI and complete rights verification first.
-2. Open **Settings → Rules → Rulesets → New ruleset → Import a ruleset** and import
-   [protect-main.json](rulesets/protect-main.json).
-3. Review and create the active ruleset. It targets the default branch, blocks
+2. Open **Settings → Rules → Rulesets → Protect main**. Use
+   [protect-main.json](rulesets/protect-main.json) to review or restore the configuration.
+3. Update the existing ruleset rather than creating a duplicate. It targets the default branch, blocks
    deletion and force pushes, requires a PR with resolved review threads, allows
    only squash merges and requires all four checks against the current base.
 4. Verify the active configuration on the repository's `/rules` page and in a
