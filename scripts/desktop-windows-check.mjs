@@ -239,8 +239,14 @@ try{
   });assert(consent,'The public-fixture checker must explicitly grant model downloads.');
   await current.page.goto('http://127.0.0.1:16969/setup');
   await current.page.waitForFunction(()=>document.querySelector('#setup-progress')?.dataset.phase==='not-installed');
-  await current.page.getByRole('button',{name:'3. Install and start',exact:true}).click();
+  await current.page.waitForFunction(()=>document.querySelector('.model-loading')?.hidden===true);
   const expectedModel=JSON.parse(readFileSync(join(root,'config/desktop-alpha-models.json'),'utf8')).alias;
+  // Recommendations on a CPU-only runner may select an experimental smaller
+  // model. This check deliberately retains the full reference model instead.
+  await current.page.getByRole('button',{name:'2. Choose a model',exact:true}).click();
+  await current.page.locator('.model-choice input[value="'+expectedModel+'"]').check();
+  await current.page.getByRole('button',{name:'3. Install and start',exact:true}).click();
+  assert(await current.page.locator('.model-choice input[value="'+expectedModel+'"]').isChecked());
   const setupChecks=await current.page.evaluate(async expectedModel=>{
    const sleep=ms=>new Promise(r=>setTimeout(r,ms)),checks=[];
    for(const attempt of [1,2]){
@@ -248,7 +254,7 @@ try{
     const start=performance.now(),guarded=document.querySelector('#setup-install').disabled;let observed;
     if(guarded){
      const catalog=await(await fetch('/api/models/catalog')).json(),model=catalog.alternatives.find(row=>row.id===expectedModel);
-     if(!model||model.memoryFit==='fits')throw Error('Unexpected disabled setup download on a compatible host.');
+     if(!model||!model.canDownload||!document.querySelector('.model-blocked')?.textContent.includes('memory budget'))throw Error('Unexpected disabled reference-model download: '+document.querySelector('.model-blocked')?.textContent);
      const response=await fetch('/api/desktop/setup/install',{method:'POST'});if(!response.ok)throw Error('Explicit public-fixture download was rejected.');
     }else document.querySelector('#setup-install').click();
     while(performance.now()-start<30000){
