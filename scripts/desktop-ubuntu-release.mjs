@@ -53,7 +53,10 @@ if(mode==='receive'){
  const record=JSON.parse(readFileSync(receipt,'utf8'));
  const reports=readdirSync(evidence).filter(name=>name.startsWith('Linux ü alpha ')).map(name=>JSON.parse(readFileSync(join(evidence,name,'evidence.json'),'utf8')));
  if(record.version!==version||record.head!==head||reports.length!==1||reports[0].errors.length||reports[0].checks.length!==22||reports[0].executable!=='/opt/bambi-local/AppRun'||await hash(deb)!==record.deb.sha256)throw Error('The installed package has not passed its 22 native checks.');
- run('gh',['api','--hostname','uploads.github.com',`${base}/releases/${release.id}/assets?name=${record.deb.name}`,'--method','POST','--header','Content-Type: application/vnd.debian.binary-package','--input',deb]);
+ const upload=new URL(`https://uploads.github.com/${base}/releases/${release.id}/assets`);upload.searchParams.set('name',record.deb.name);
+ const response=await fetch(upload,{method:'POST',redirect:'error',signal:AbortSignal.timeout(10*60*1000),headers:{Authorization:`Bearer ${process.env.GH_TOKEN}`,'Content-Type':'application/vnd.debian.binary-package','Content-Length':String(record.deb.bytes)},body:createReadStream(deb),duplex:'half'});
+ if(!response.ok)throw Error('Ubuntu draft upload failed: HTTP '+response.status);
+ await response.json();
  const uploaded=api(`${base}/releases/${release.id}`).assets.find(asset=>asset.name===record.deb.name);
  if(!uploaded||uploaded.digest!=='sha256:'+record.deb.sha256||uploaded.size!==record.deb.bytes)throw Error('Uploaded Ubuntu installer digest mismatch.');
  writeFileSync(receipt,JSON.stringify({...record,result:'passed',installedChecks:22},null,2)+'\n');
