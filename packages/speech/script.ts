@@ -60,7 +60,7 @@ export function scriptUnits(raw:string,names:string[]=[]):ScriptUnit[]{
   const match=/^\[SFX:([^\]]*)\]$/i.exec(part);
   if(match){const cue=match[1].toUpperCase();if(known.has(cue))pending.push(cue as ScriptCue);continue;}
   if(!part.trim())continue;
-  if((sounds.length||ticks.length||breath)&&/^(?:\s*\[pause:[^\]]+\]\s*)+$/i.test(part)){prefixPause+=part.trim()+' ';continue;}
+  if((sounds.length||ticks.length||breath)&&!part.replace(/\[pause:[^\]]+\]/gi,'').trim()){prefixPause+=part.trim()+' ';continue;}
   const spoken=triggerUnits((prefixPause+part.replace(/\[(?:SFX|sound|tick|vib|rot|both|breath):[^\]]*$/gi,'')).trim(),names);prefixPause='';
   for(const unit of spoken){
    if(!unit.text.trim())continue;

@@ -45,7 +45,7 @@ function dependency(name,parent=root){
  for(const child of Object.keys(pkg.dependencies||{}))dependency(child,path);
  if(name==='esbuild')dependency('@esbuild/darwin-arm64',path);
 }
-for(const name of ['express','ws','zod','tsx'])dependency(name);
+for(const name of ['express','express-rate-limit','ws','zod','tsx'])dependency(name);
 for(const [path] of dependencies)copyTree(path,join(backend,relative(root,path)),file=>!file.split('/').includes('node_modules'));
 const extracted=join(stage,'node-extracted');mkdirSync(extracted);run('/usr/bin/tar',['-xzf',archive,'-C',extracted]);
 const nodeRoot=join(extracted,`node-v${nodeVersion}-darwin-arm64`);

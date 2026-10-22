@@ -82,7 +82,7 @@ export class DesktopSetup {
     signal.throwIfAborted();this.state.asset=asset.path;this.state.assetIndex=index+1;this.state.assetCompleted=0;this.state.assetTotal=asset.bytes;this.state.stage='checking-installed';
     const destination=resolve(this.directory,asset.path);await mkdir(dirname(destination),{recursive:true,mode:0o700});
     const realRoot=await realpath(this.directory),parent=await realpath(dirname(destination));if(parent!==realRoot&&!parent.startsWith(realRoot+sep))throw Error('Model data directory escapes its private root.');
-    const prefix=basename(destination)+'.';for(const name of await readdir(parent))if(name.startsWith(prefix)&&/^[0-9a-f-]{36}\.partial$/.test(name.slice(prefix.length)))await rm(resolve(parent,name),{force:true});
+    const prefix=basename(destination)+'.';for(const name of await readdir(parent))if(name.startsWith(prefix)&&/^[0-9a-f-]{36}\.partial$/.test(name.slice(prefix.length)))await rm(resolve(parent,basename(name)),{force:true});
     try{await this.verify(asset,destination,signal);this.verifiedPaths.add(asset.path);this.state.completed+=asset.bytes;continue;}catch{signal.throwIfAborted();}
     // There is one staged file at a time; old installed bytes and all partials count in statfs.
     const checkDisk=async()=>{const disk=await statfs(this.directory);if(disk.bavail*disk.bsize<asset.bytes+256*2**20)throw Error('Not enough free space for the next staged asset (plus 256 MiB reserve).');};

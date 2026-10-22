@@ -7,10 +7,22 @@ import json
 from pathlib import Path
 import sys
 import unittest
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from packages.speech.local.timing import phrases
 from packages.speech.local.spoken import english_research_input, spoken_input, pronunciation_input
+
+
+class SpeechBoundaryWorkTests(unittest.TestCase):
+    def test_long_emphasis_and_unterminated_phrases_remain_linear(self):
+        started = time.monotonic()
+        self.assertEqual(spoken_input('_' * 100000 + 'Ready.'), 'Ready.')
+        self.assertEqual(spoken_input('word' + '_' * 100000 + 'word'), 'word' + '_' * 100000 + 'word')
+        self.assertEqual(spoken_input(' ' * 100000 + 'Ready , now .'), 'Ready, now.')
+        self.assertEqual([part.text for part in phrases('word ' * 5000 + '\nReady.')][-1], 'Ready.')
+        self.assertLess(time.monotonic() - started, 2)
 
 
 class EnglishResearchInputTests(unittest.TestCase):

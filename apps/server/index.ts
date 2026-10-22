@@ -51,6 +51,7 @@ import {replyTokenBudget,replyWordBudget,narrationPassageComplete} from '../../p
 import {DualVoiceSession} from '../../packages/speech/dual-voice';
 import {triggerAliases} from '../../config/trigger-sequence';
 import express from 'express';
+import {rateLimit} from 'express-rate-limit';
 import { createServer } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { z } from 'zod';
@@ -131,6 +132,9 @@ app.use((req,res,next)=>{
  if(!localRequestAllowed(req.headers,port)){res.status(403).json({error:'Local companion origin required'});return;}next();
 });
 // Only a selected offline restore needs a larger body; ordinary APIs stay bounded.
+// Bound repeated local HTTP work as well as individual payload sizes.
+app.use(rateLimit({windowMs:60_000,limit:1800,standardHeaders:'draft-8',legacyHeaders:false,
+ skip:req=>req.method==='POST'&&req.path==='/api/panic'}));
 app.use('/api/profiles/import',express.json({limit:MAX_BACKUP_BYTES+4096}));
 app.use(express.json({limit:'128kb'}));
 // Enforce optional feature choices for direct HTTP callers as well as UI controls.
@@ -498,17 +502,10 @@ app.post('/api/events/render', async (req, res) => {
  } catch (error) { if (!res.headersSent && !controller.signal.aborted) res.status(signal.aborted ? 504 : 422).json({error:error instanceof Error ? error.message : String(error),...(error instanceof SpeechWindowError?{speechBudget:{wordsPerMs:error.wordsPerMs,durationMs:error.durationMs,targetMs:error.targetMs}}:{})}); }
  finally { eventRenderControllers.delete(controller); }
 });
-if (process.env.BAMBI_NEXT_GEN_COMPARISON === '1') {
- app.get('/api/next-gen-comparison/:artifact', (req,res) => {
-  const name=req.params.artifact;
-  if (!/^(?:manifest|scores|transcripts|current|reference|adaptive|live-bridge)(?:\.bambi)?\.json$/.test(name) && !/^(?:current|reference|adaptive)\.wav$/.test(name)) {res.status(404).end();return;}
-  const path=resolve('runtime/next-gen-comparison',name);
-  if (!existsSync(path)) {res.status(404).json({error:'Build the local comparison first: see docs/NEXT_GEN_COMPARISON.md'});return;}
-  res.setHeader('Cache-Control','no-store');res.sendFile(path);
- });
-}
 app.get('/api/voice-lab/comparison',(_req,res)=>{const path=resolve('runtime/voice-comparison/comparison.json');res.json(existsSync(path)?JSON.parse(readFileSync(path,'utf8')):{candidates:[]});});
-app.get('/api/voice-lab/comparison/:voice', (req,res)=>{if(!/^(af_(heart|bella|sarah|nicole|sky|river|aoede)|bambi_classic)$/.test(req.params.voice)){res.status(400).json({error:'Unknown comparison voice'});return;}const path=resolve('runtime/voice-comparison',req.params.voice+'.wav');if(!existsSync(path)){res.status(404).json({error:'Render comparisons with tools/voice_lab.py compare.'});return;}res.sendFile(path);});
+const comparisonVoices=['af_heart','af_bella','af_sarah','af_nicole','af_sky','af_river','af_aoede','bambi_classic'];
+const comparisonPaths=new Map(comparisonVoices.map(voice=>[voice,resolve('runtime/voice-comparison',voice+'.wav')]));
+app.get('/api/voice-lab/comparison/:voice', (req,res)=>{const path=comparisonPaths.get(req.params.voice);if(!path){res.status(400).json({error:'Unknown comparison voice'});return;}if(!existsSync(path)){res.status(404).json({error:'Render comparisons with tools/voice_lab.py compare.'});return;}res.sendFile(path);});
 app.get('/api/content',(_req,res)=>res.json(contentCatalog()));
 app.get('/api/content/prompts/:id',(req,res)=>{const prompt=prompts.find(p=>p.id===req.params.id);if(!prompt){res.status(404).json({error:'Unknown prompt'});return;}res.json(prompt);});
 app.get('/api/triggers/json',(_req,res)=>res.json(triggerData));
@@ -636,7 +633,7 @@ app.put('/api/memory/facts',(req,res)=>{const parsed=z.object({key:z.string().tr
 app.delete('/api/memory/facts/:id',(req,res)=>{const removed=store.forgetFact(Number(req.params.id));if(removed)publishMemoryChange();res.status(removed?200:404).json({ok:removed});});
 app.post('/api/conversation',(_req,res)=>{for(const ws of wss.clients)cancel(ws);store.beginConversation();res.json({ok:true});});
 app.delete('/api/memory',(_req,res)=>{store.clearMemory();publishMemoryChange();res.json({ok:true});});
-app.get('/api/knowledge',(req,res)=>res.json(knowledge.search(String(req.query.q||'').slice(0,500))));
+app.get('/api/knowledge',(req,res)=>{const query=z.object({q:z.string().max(500).default('')}).strict().safeParse(req.query);if(!query.success){res.status(400).json({error:'Use one text search query'});return;}res.json(knowledge.search(query.data.q));});
 
 app.get('/api/library',(_req,res)=>res.setHeader('ETag',profileTag()).json(store.db.prepare('SELECT data FROM media').all().map((r:any)=>JSON.parse(r.data))));
 const profileTag=()=>`"profile-${Number(store.get('profileImportRevision',0))}"`;
@@ -856,7 +853,7 @@ server.on('upgrade',(req,socket,head)=>{if(!localRequestAllowed(req.headers,port
 wss.on('connection',ws=>{ws.on('error',()=>{});send(ws,{type:'connected',protocolVersion:PROTOCOL_VERSION,replyCorrelation:true,conversationId:store.get('conversationId','legacy')});void health().then(data=>send(ws,{type:'health',data})).catch(()=>{});ws.on('close',()=>{devices.release(ws);cancel(ws,'disconnected');});ws.on('message',raw=>{try{const data=JSON.parse(raw.toString());if(desktopSmoke&&!['interrupt','panic','ack','metric','playback-start'].includes(data.type)){send(ws,{type:'error',requestId:data.requestId,text:'AI, speech and devices are unavailable in this packaging smoke build.'});return;}if(desktopAlpha&&(String(data.type).startsWith('device')||data.model&&data.model!==desktopSetup!.model)){send(ws,{type:'error',requestId:data.requestId,text:'This desktop alpha supports its verified local model; devices are unavailable.'});return;}if((calibration.busy||calibrationAdmission)&&!['interrupt','panic','ack','metric','playback-start','playback-buffer','audio-scheduled','device-stop','device-clear','device-status'].includes(data.type)){send(ws,{type:'error',requestId:data.requestId,text:'Cancel the local AI performance test before starting other work.'});return;}if(handleDeviceMessage(ws,data))return;if(data.type==='feedback-consumed'){consumeFeedback(ws,data);return;}if(data.type==='interrupt'){const report=PlaybackReportSchema.safeParse(data.playback);const current=active.get(ws);if(typeof data.requestId==='string'&&current?.requestId!==data.requestId)return;if(report.success&&report.data.id&&current&&current.id!==report.data.id)return;if(!data.preserveSession||!devices.cancelQueuedPlayback(ws))devices.halt(ws);if(report.success&&current?.id===report.data.id)for(const chunk of report.data.chunks)current.progress.played(chunk.seq,chunk.chars);cancel(ws,'interrupted');return;}if(data.type==='panic'){panic(ws);return;}if(data.type==='ack'){const job=active.get(ws);if(job&&data.id===job.id){if(job.pending.has(data.seq)&&data.played!==false)job.progress.played(data.seq);traces.event(job.id,data.played===false?'audio-discarded':'heard-ack',{seq:data.seq});job.pending.delete(data.seq);job.ahead?.acknowledged(data.seq);job.pendingSentences.delete(data.seq);job.wake();}return;}if(data.type==='playback-buffer'){const job=active.get(ws);const parsed=playbackBufferSchema.safeParse(data);if(job?.ahead&&parsed.success&&job.id===parsed.data.id&&job.requestId===parsed.data.requestId&&job.ahead.observe(parsed.data)){traces.buffer(job.id,job.ahead.snapshot);job.wake();}return;}if(data.type==='audio-scheduled'){const job=active.get(ws);const parsed=audioScheduledSchema.safeParse(data);if(job&&parsed.success&&job.id===parsed.data.id&&job.requestId===parsed.data.requestId&&job.pending.has(parsed.data.seq)){traces.event(job.id,'audio-scheduled',{seq:parsed.data.seq,value:parsed.data.leadSeconds});traces.measure(job.id,'browser-receive-to-schedule',parsed.data.decodeMs);}return;}if(data.type==='playback-start'){const job=active.get(ws);if(job&&job.id===data.id&&job.pending.has(data.seq))traces.mark(job.id,'playback-start');return;}if(data.type==='metric'){store.metric(String(data.name).slice(0,50),data.value);return;}if(data.type==='action'){const action=ActionSchema.safeParse(data.action);if(action.success)send(ws,{type:'action',action:action.data});return;}const parsed=chatSchema.safeParse(data);if(!parsed.success){send(ws,{type:'error',requestId:typeof data.requestId==='string'?data.requestId:undefined,text:'Invalid companion request'});return;}void chat(ws,parsed.data).catch(()=>send(ws,{type:'error',requestId:parsed.data.requestId,text:'The selected inference backend is unavailable.'}));}catch{send(ws,{type:'error',text:'Invalid message'});}});});
 // Unknown API paths must not fall through to Vite's HTML fallback in development.
 app.use('/api',(_req,res)=>res.status(404).json({error:'Not found'}));
-for(const page of ['studio','setup','comparison'])app.get('/'+page,(_req,res)=>res.sendFile(page+'.html',{root:resourcePath(existsSync(resourcePath('dist/web/'+page+'.html'))?'dist/web':'apps/web')}));
+for(const page of ['studio','setup'])app.get('/'+page,(_req,res)=>res.sendFile(page+'.html',{root:resourcePath(existsSync(resourcePath('dist/web/'+page+'.html'))?'dist/web':'apps/web')}));
 if(existsSync(resourcePath('dist/web/index.html')))app.use(express.static(resourcePath('dist/web')));
 else if(desktop)throw Error('Packaged web resources missing');
 else {const {createServer:createVite}=await import('vite');const vite=await createVite({root:resourcePath('apps/web'),server:{middlewareMode:true,host:'127.0.0.1'},appType:'spa'});app.use(vite.middlewares);}

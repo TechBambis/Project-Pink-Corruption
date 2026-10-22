@@ -60,7 +60,7 @@ def main():
             if self.close_connection:
                 self.send_header('Connection', 'close')
             for key, value in (headers or {}).items():
-                self.send_header(key, str(value))
+                self.send_header(key, str(value).replace('\r', '').replace('\n', ''))
             self.end_headers()
             self.wfile.write(data)
 

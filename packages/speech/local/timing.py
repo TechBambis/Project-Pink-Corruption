@@ -36,7 +36,7 @@ def phrases(text, pauses=None, max_chars=180, split_clauses=True, split_sentence
         if '[pause:' in part:
             raise ValueError('Invalid pause marker')
         # Lab sentence mode keeps commas/semicolons inside the model's context.
-        boundaries = r'[^.!?;,\n]+(?:[.!?;,]+|$)' if split_clauses else r'[^.!?\n]+(?:[.!?]+|$)'
+        boundaries = r'[^.!?;,\n]+[.!?;,]*' if split_clauses else r'[^.!?\n]+[.!?]*'
         if not split_sentences:
             boundaries = r'[\s\S]+'
         for segment in re.findall(boundaries, part):

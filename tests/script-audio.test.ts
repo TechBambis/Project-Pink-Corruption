@@ -9,6 +9,13 @@ import {Kokoro} from '../packages/speech/tts';
 import {TriggerSentenceChunker} from '../packages/speech/trigger-units';
 import {appendScriptDirection} from '../packages/content/script-direction';
 
+test('malformed repeated pause tags remain bounded and never acquire a following sound',()=>{
+ const text='[sound:wiper] '+('[pause:\\\\]\t'.repeat(4000))+'[pause:unfinished';
+ const started=performance.now();
+ assert.doesNotThrow(()=>scriptUnits(text));
+ assert(performance.now()-started<1500,'Malformed markers must not cause exponential backtracking');
+});
+
 test('renderer bounds keep every word, pause and cue exactly once across long speech',()=>{
  const text=('This fucking sentence keeps every word and its ending. [pause:0] ').repeat(70).trim();
  const unit={text,cuesBefore:['TICK' as const],cuesAfter:['BELL' as const],sounds:[{type:'sound' as const,name:'wiper' as const}],prePause:true,postPause:true};

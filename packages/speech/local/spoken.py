@@ -26,7 +26,11 @@ def strip_speech_controls(text):
 def strip_speech_formatting(text):
     """Remove emphasis/code delimiters, including pairs split between phrases."""
     text = re.sub(r'[*`]', '', text)
-    return re.sub(r'(?<![^\W_])_+|_+(?![^\W_])', '', text)
+    def underscores(match):
+        before = match.start() > 0 and text[match.start()-1].isalnum()
+        after = match.end() < len(text) and text[match.end()].isalnum()
+        return match[0] if before and after else ''
+    return re.sub(r'_+', underscores, text)
 
 def spoken_input(text):
     text = strip_speech_formatting(strip_vocal_fillers(strip_speech_controls(text)))
@@ -34,7 +38,9 @@ def spoken_input(text):
     # quote-only phrase. Keep every quoted word and apostrophes in contractions.
     text = re.sub(r'["“”]', ' ', text)
     text = re.sub(r'[ \t]+', ' ', text)
-    return re.sub(r' +([,.;:!?])', r'\1', text).strip()
+    for punctuation in ',.;:!?':
+        text = text.replace(' ' + punctuation, punctuation)
+    return text.strip()
 
 def pronunciation_input(text):
     """TTS-only initialism expansion. Display text and trigger identities stay intact."""

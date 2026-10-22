@@ -84,7 +84,7 @@ async function build(){
   for(const child of Object.keys(pkg.dependencies||{}))dependency(child,path);
   if(name==='esbuild')dependency('@esbuild/win32-x64',path);
  }
- for(const name of ['express','ws','zod','tsx'])dependency(name);
+ for(const name of ['express','express-rate-limit','ws','zod','tsx'])dependency(name);
  for(const [path] of dependencies)copyTree(path,join(backend,relative(root,path)),file=>!file.split('/').includes('node_modules'));
  for(const path of ['LICENSE','LICENSING.md','docs/LICENSE.stable2','docs/STABLE_CONTENT.md','docs/LOCAL_AUDIO_LICENSES.md'])copy(resolve(path),join(notices,path));
  await copyCompactLicenses(resolve('docs/licenses'),join(notices,'source-licenses'));

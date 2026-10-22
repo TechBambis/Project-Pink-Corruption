@@ -99,6 +99,8 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
   for(const path of ['/content/stable-2.0/manifest.json','/content/stable-2.0/workers/ollama.js','/api/hardware'])
    assert.equal((await probe(path)).status,404,'Internal/reference files and retired reports are not served: '+path);
   assert.equal((await probe('/api/preferences',{'Content-Type':'application/json'},'PUT','{broken')).status,400);
+  for(const query of ['q=one&q=two','q[key]=value'])assert.equal((await probe('/api/knowledge?'+query)).status,400);
+  assert.equal((await probe('/api/voice-lab/comparison/unknown')).status,400);
   assert.equal((await probe('/api/preferences',{'Content-Type':'application/json'},'PUT',JSON.stringify({test:'x'.repeat(128*1024)}))).status,413);
   assert.equal((await probe('/ws',{Host:`attacker.example:${port}`},'GET',undefined,true)).status,403);
   assert.equal((await probe('/ws',{},'GET',undefined,true)).status,403);
@@ -113,7 +115,10 @@ test('real app routes and WebSocket upgrades share the local access boundary', {
   const closed=once(socket,'close');socket.send('x'.repeat(128*1024+1));
   assert.equal((await closed)[0],1009);
   assert.equal((await probe('/api/diagnostics/replies')).status,200,'Oversized messages must not crash the app');
-  // Stop remains available to the app and the native lifecycle script.
+  // Exhaust repeated file/API work, while retaining the native emergency Stop.
+  const statuses=[];
+  for(let batch=0;batch<19;batch++)statuses.push(...await Promise.all(Array.from({length:100},()=>probe('/api/content').then(response=>response.status))));
+  assert(statuses.includes(200));assert(statuses.includes(429));
   assert.equal((await probe('/api/panic',{},'POST')).status,200);
  }finally{
   child.kill('SIGTERM');

@@ -70,7 +70,7 @@ function dependency(name,parent=root){
  // esbuild's only Linux-x64 optional executable. Other optional platforms stay out.
  if(name==='esbuild')dependency('@esbuild/linux-x64',path);
 }
-for(const name of ['express','ws','zod','tsx'])dependency(name);
+for(const name of ['express','express-rate-limit','ws','zod','tsx'])dependency(name);
 for(const [path] of dependencies)copyTree(path,join(backend,relative(root,path)),file=>!file.split('/').includes('node_modules'));
 const nodeTemp=join(stage,'node-extracted');mkdirSync(nodeTemp);run('tar',['-xf',archive,'-C',nodeTemp]);
 const nodeRoot=join(nodeTemp,`node-v${nodeVersion}-linux-x64`);
