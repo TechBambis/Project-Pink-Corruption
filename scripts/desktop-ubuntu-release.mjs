@@ -12,11 +12,20 @@ const api=path=>JSON.parse(capture('gh',['api',path]));
 const {RELEASE_TAG:tag,GITHUB_REPOSITORY:repository,GITHUB_ACTOR_ID:actor,RUNNER_TEMP:temporary,BAMBI_SMOKE_OUTPUT:evidence}=process.env;
 const version=tag?.slice(1),mode=process.argv[2];
 if(process.platform!=='linux'||actor!=='337824705'||repository!=='TechBambis/Project-Pink-Corruption'||!temporary||!evidence||tag!=='v'+version||!desktopVersion(version,'alpha')||!['receive','upload'].includes(mode))throw Error('Use the authorized native Ubuntu release workflow.');
-const head=capture('git',['rev-parse','HEAD']),base=`repos/${repository}`,release=api(`${base}/releases/tags/${tag}`);
-if(!release.draft)throw Error('Only an unpublished draft can receive this installer.');
+const checkedOutHead=capture('git',['rev-parse','HEAD']),base=`repos/${repository}`;
+// The REST tag lookup only returns published releases. Drafts must be found by
+// listing accessible releases, then all later writes use that immutable ID.
+const release=api(`${base}/releases?per_page=100`).find(value=>value.tag_name===tag);
+if(!release?.draft)throw Error('Only an unpublished draft can receive this installer.');
 let ref=api(`${base}/git/ref/tags/${tag}`).object;
 if(ref.type==='tag')ref=api(`${base}/git/tags/${ref.sha}`).object;
-if(ref.type!=='commit'||ref.sha!==head)throw Error('Draft source tag differs from the checked-out source.');
+if(ref.type!=='commit')throw Error('The release tag must identify a source commit.');
+const head=ref.sha;
+if(head!==checkedOutHead){
+ run('git',['fetch','--depth=1','origin',head]);
+ const changed=capture('git',['diff','--name-only',head,checkedOutHead]).split('\n').filter(Boolean);
+ if(changed.some(path=>path!=='scripts/desktop-ubuntu-release.mjs'))throw Error('Application or qualification source differs from the release tag.');
+}
 const root=join(temporary,'ubuntu-package'),deb=join(temporary,`bambi-local-${version}-linux-amd64.deb`),receipt=join(evidence,'RECEIPT.json');
 const hash=async path=>{const h=createHash('sha256');for await(const chunk of createReadStream(path))h.update(chunk);return h.digest('hex');};
 if(mode==='receive'){
